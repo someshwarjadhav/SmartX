@@ -1,0 +1,76 @@
+const c = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
+export default {
+  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        bg: c('bg'),
+        panel: c('panel'),
+        soft: c('soft'),
+        line: c('line'),
+        ink: c('ink'),
+        mute: c('mute'),
+        brand: c('brand'),
+        'brand-ink': c('brand-ink'),
+        deep: c('deep'),
+        'deep-ink': c('deep-ink'),
+        glow: c('glow'),
+        cow: c('cow'),
+        buffalo: c('buffalo'),
+        mix: c('mix'),
+        goat: c('mix'),
+        cream: c('soft'),
+        danger: c('danger'),
+        ok: c('ok'),
+        warn: c('warn'),
+      },
+      fontFamily: {
+        display: ['Sora', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        lift: '0 1px 2px rgb(var(--ink) / .04), 0 8px 24px -14px rgb(var(--ink) / .18)',
+        card: '0 1px 2px rgb(var(--ink) / .04), 0 8px 24px -14px rgb(var(--ink) / .18)',
+        pop: '0 24px 60px -20px rgb(var(--ink) / .45)',
+      },
+      keyframes: {
+        wave: { to: { transform: 'translateX(-80px)' } },
+        drip: {
+          '0%': { transform: 'translateY(0)', opacity: '0' },
+          '15%': { opacity: '1' },
+          '100%': { transform: 'translateY(46px)', opacity: '0' },
+        },
+        spin360: { to: { transform: 'rotate(360deg)' } },
+        drift: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } },
+        ring: { '0%': { transform: 'scale(.6)', opacity: '.7' }, '100%': { transform: 'scale(2.2)', opacity: '0' } },
+        tile: { '0%,100%': { transform: 'scale(.55) rotate(-8deg)', opacity: '.45' }, '50%': { transform: 'scale(1) rotate(0deg)', opacity: '1' } },
+        drop: { '0%': { transform: 'translateY(-14px) scale(.6)', opacity: '0' }, '40%': { opacity: '1' }, '100%': { transform: 'translateY(16px) scale(1)', opacity: '0' } },
+        pulseDot: {
+          '0%': { transform: 'scale(1)', opacity: '.55' },
+          '100%': { transform: 'scale(2.6)', opacity: '0' },
+        },
+        shimmer: { to: { backgroundPosition: '-200% 0' } },
+        rise: {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        wave: 'wave 4s linear infinite',
+        'wave-slow': 'wave 7s linear infinite reverse',
+        drip: 'drip 1s ease-in infinite',
+        spin360: 'spin360 .6s linear infinite',
+        drift: 'drift 6s ease-in-out infinite',
+        ring: 'ring 2s ease-out infinite',
+        tile: 'tile 1.2s ease-in-out infinite',
+        drop: 'drop 1.8s ease-in infinite',
+        pulseDot: 'pulseDot 1.8s ease-out infinite',
+        shimmer: 'shimmer 1.6s linear infinite',
+        rise: 'rise .35s ease-out both',
+      },
+    },
+  },
+  plugins: [],
+};

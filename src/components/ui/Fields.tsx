@@ -1,0 +1,116 @@
+import type * as React from 'react';
+import { forwardRef, useId } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '../../lib/cn';
+import type { Option } from '../../data/masters';
+
+interface FieldProps {
+  label: string;
+  htmlFor?: string;
+  hint?: string;
+  error?: string;
+  className?: string;
+  children: React.ReactNode;
+}
+
+export const Field: React.FC<FieldProps> = ({ label, htmlFor, hint, error, className, children }) => (
+  <div className={cn('block min-w-0', className)}>
+    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-semibold">{label}</label>
+    {children}
+    {error ? (
+      <p role="alert" className="mt-1.5 text-xs font-semibold text-danger">{error}</p>
+    ) : (
+      hint && <p className="mt-1.5 text-xs text-mute">{hint}</p>
+    )}
+  </div>
+);
+
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  icon?: React.ReactNode;
+}
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(({ icon, className, id, ...rest }, ref) => {
+  const auto = useId();
+  return (
+    <div className="relative">
+      {icon && <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-mute">{icon}</span>}
+      <input
+        ref={ref}
+        id={id ?? auto}
+        className={cn(
+          'h-12 w-full rounded-xl border border-line bg-panel px-3.5 text-base text-ink outline-none transition placeholder:text-mute/70 focus:border-brand focus:ring-4 focus:ring-brand/15 disabled:cursor-not-allowed disabled:bg-soft/60 disabled:opacity-70 aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/10 sm:text-sm',
+          icon ? 'pl-10' : '',
+          className,
+        )}
+        {...rest}
+      />
+    </div>
+  );
+});
+Input.displayName = 'Input';
+
+export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(({ className, ...rest }, ref) => (
+  <textarea
+    ref={ref}
+    className={cn(
+      'min-h-28 w-full resize-y rounded-xl border border-line bg-panel px-3.5 py-3 text-base text-ink outline-none transition placeholder:text-mute/70 focus:border-brand focus:ring-4 focus:ring-brand/15 sm:text-sm',
+      className,
+    )}
+    {...rest}
+  />
+));
+Textarea.displayName = 'Textarea';
+
+interface TextFieldProps extends InputProps {
+  label: string;
+  hint?: string;
+  error?: string;
+  wrapperClassName?: string;
+}
+
+export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(({ label, hint, error, wrapperClassName, className, id, ...rest }, ref) => {
+  const auto = useId();
+  const fieldId = id ?? auto;
+  return (
+    <Field label={label} htmlFor={fieldId} hint={hint} error={error} className={wrapperClassName}>
+      <Input ref={ref} id={fieldId} aria-invalid={error ? true : undefined} className={cn('h-11', className)} {...rest} />
+    </Field>
+  );
+});
+TextField.displayName = 'TextField';
+
+interface SelectFieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Option[];
+  error?: string;
+  hint?: string;
+  disabled?: boolean;
+  wrapperClassName?: string;
+}
+
+export const SelectField: React.FC<SelectFieldProps> = ({ label, value, onChange, options, error, hint, disabled, wrapperClassName }) => {
+  const id = useId();
+  return (
+    <Field label={label} htmlFor={id} hint={hint} error={error} className={wrapperClassName}>
+      <div className="relative">
+        <select
+          id={id}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          aria-invalid={error ? true : undefined}
+          className="h-11 w-full appearance-none rounded-xl border border-line bg-panel pl-3.5 pr-10 text-base text-ink outline-none transition hover:border-brand/50 focus:border-brand focus:ring-4 focus:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger sm:text-sm"
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown size={16} className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-mute" aria-hidden />
+      </div>
+    </Field>
+  );
+};
