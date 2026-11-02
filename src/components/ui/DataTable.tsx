@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '../../lib/cn';
+import { TableLoader } from './TableLoader';
 
 type Align = 'left' | 'right' | 'center';
 type MobileRole = 'title' | 'action' | 'data' | 'hidden';
@@ -27,25 +28,10 @@ interface Props<T> {
 
 const ALIGN: Record<Align, string> = { left: 'text-left', right: 'text-right', center: 'text-center' };
 
-const Skeleton: React.FC = () => (
-  <ul className="divide-y divide-line/70" aria-busy="true" aria-label="Loading">
-    {Array.from({ length: 8 }, (_, i) => (
-      <li key={i} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
-        <span className="skeleton h-10 w-10 shrink-0 rounded-full" />
-        <div className="flex-1 space-y-2">
-          <span className="skeleton block h-3.5 w-1/3 rounded" />
-          <span className="skeleton block h-3 w-1/2 rounded" />
-        </div>
-        <span className="skeleton hidden h-4 w-24 rounded sm:block" />
-      </li>
-    ))}
-  </ul>
-);
-
 const labelOf = <T,>(c: Column<T>): string => c.mobileLabel ?? (typeof c.header === 'string' ? c.header : c.key);
 
 export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false, minWidth = 900, isSelected }: Props<T>) {
-  if (loading) return <Skeleton />;
+  if (loading) return <TableLoader label="Loading data…" />;
 
   const title = columns.find((c) => c.mobile === 'title');
   const action = columns.find((c) => c.mobile === 'action');

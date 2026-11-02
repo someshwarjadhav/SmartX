@@ -5,6 +5,7 @@ import type { CollectionEntry } from '../../data/farmerCollection';
 import { useMilkFarmerEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
+import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -82,26 +83,26 @@ const FarmerwiseFilters: React.FC<FilterProps> = ({ value, plantOptions, centreO
           e.preventDefault();
           onSubmit();
         }}
-        className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-12"
+        className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
       >
-        <SelectField wrapperClassName="lg:col-span-4" label="Plant/MCC Name" value={value.plant} onChange={changePlant} options={plantOptions} />
-        <SelectField wrapperClassName="lg:col-span-4" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId, farmerId: 'all' })} options={centreOptions} />
-        <SelectField wrapperClassName="lg:col-span-4" label="Farmer Name" value={value.farmerId} onChange={(farmerId) => onChange({ farmerId })} options={farmerOptions} />
+        <SelectField wrapperClassName="xl:col-span-4" label="Plant/MCC Name" value={value.plant} onChange={changePlant} options={plantOptions} />
+        <SelectField wrapperClassName="xl:col-span-4" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId, farmerId: 'all' })} options={centreOptions} />
+        <SelectField wrapperClassName="xl:col-span-4" label="Farmer Name" value={value.farmerId} onChange={(farmerId) => onChange({ farmerId })} options={farmerOptions} />
 
-        <Field label="Milk Type" className="lg:col-span-3">
+        <Field label="Milk Type" className="xl:col-span-3">
           <Segmented<KindFilter> label="Milk Type" value={value.milkType} onChange={(milkType) => onChange({ milkType })} options={KIND_FILTER_OPTIONS} className={SEGMENT} />
         </Field>
-        <Field label="Shift" className="lg:col-span-3">
+        <Field label="Shift" className="xl:col-span-3">
           <Segmented<ShiftFilter> label="Shift" value={value.shift} onChange={(shift) => onChange({ shift })} options={SHIFT_FILTER_OPTIONS} className={SEGMENT} />
         </Field>
 
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 sm:col-span-2 lg:col-span-6">
+        <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-6">
           <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
-          <ArrowRight size={16} className="mt-[2.4rem] text-mute" aria-hidden />
+          <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
           <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
         </div>
 
-        <div className="sm:col-span-2 lg:col-span-12">
+        <div className="sm:col-span-2 xl:col-span-12">
           <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
             Submit
           </Button>
@@ -164,9 +165,10 @@ const FarmerwiseCollection: React.FC = () => {
   const plantOptions = useMemo(() => [{ value: 'all', label: 'All MCCs' }, ...Array.from(new Map(centres.map((c) => [c.mccId, c.mccId])).keys()).map((id) => ({ value: id, label: id }))], [centres]);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType });
+  const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType }, submitted);
   const loading = live.loading;
   const centreOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...centres.filter((c) => draft.plant === 'all' || c.mccId === draft.plant).map((c) => ({ value: c.id, label: c.label }))], [centres, draft.plant]);
   const farmerOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...live.rows.filter((r) => draft.vlcId === 'all' || r.stationId === draft.vlcId).map((r) => ({ value: r.farmerId, label: `${r.farmer} | ${r.farmerId}` })).filter((o, i, a) => a.findIndex((x) => x.value === o.value) === i)], [live.rows, draft.vlcId]);
@@ -191,7 +193,9 @@ const FarmerwiseCollection: React.FC = () => {
       return;
     }
     setError(undefined);
+    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
     setApplied(draft);
+    setSubmitted(true);
     pager.reset();
   };
 
@@ -238,6 +242,10 @@ const FarmerwiseCollection: React.FC = () => {
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
 
       <Panel bodyClassName="!p-0">
+        {!submitted ? (
+          <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
+        ) : (
+          <>
         <TableToolbar
           from={pager.from}
           to={pager.to}
@@ -248,7 +256,9 @@ const FarmerwiseCollection: React.FC = () => {
           actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
         />
 
-        {!loading && rows.length === 0 ? (
+        {loading ? (
+          <ReportLoader label="Loading farmerwise collection…" />
+        ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another farmer, date range, shift or milk type." />
         ) : (
           <DataTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmerwise collection" loading={loading} minWidth={1100} />
@@ -256,6 +266,8 @@ const FarmerwiseCollection: React.FC = () => {
 
         {!loading && rows.length > 0 && (
           <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />
+        )}
+          </>
         )}
       </Panel>
 

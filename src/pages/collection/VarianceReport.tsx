@@ -4,6 +4,7 @@ import { ArrowRight, CalendarDays, FileSpreadsheet, FileText, Search, SearchX, S
 import { useMilkFarmerEntries, useMilkVlccEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import type { Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
+import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
@@ -85,17 +86,17 @@ const VarianceFilters: React.FC<FilterProps> = ({ value, vlcOptions, onChange, o
         e.preventDefault();
         onSubmit();
       }}
-      className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-12"
+      className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
     >
-      <SelectField wrapperClassName="lg:col-span-5" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId })} options={vlcOptions} />
+      <SelectField wrapperClassName="xl:col-span-5" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId })} options={vlcOptions} />
 
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 sm:col-span-2 lg:col-span-7">
+      <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-7">
         <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
-        <ArrowRight size={16} className="mt-[2.4rem] text-mute" aria-hidden />
+        <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
         <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
       </div>
 
-      <div className="sm:col-span-2 lg:col-span-12">
+      <div className="sm:col-span-2 xl:col-span-12">
         <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
           Submit
         </Button>
@@ -219,10 +220,11 @@ const VarianceReport: React.FC = () => {
   const vlcOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...centres.map((c) => ({ value: c.id, label: c.label }))], [centres]);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const vendor = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId });
-  const farmer = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId });
+  const vendor = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId }, submitted);
+  const farmer = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId }, submitted);
   const loading = vendor.loading || farmer.loading;
   const rows = useMemo(() => {
     type Agg={id:string;vlccId:string;village:string;date:string;shift:Shift;milkType:MilkKind;qty:number;fat:number;snf:number;amount:number};
@@ -239,7 +241,9 @@ const VarianceReport: React.FC = () => {
       return;
     }
     setError(undefined);
+    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { vendor.retry(); farmer.retry(); }
     setApplied(draft);
+    setSubmitted(true);
     pager.reset();
   };
 
@@ -281,6 +285,10 @@ const VarianceReport: React.FC = () => {
       {(vendor.error || farmer.error) && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{vendor.error || farmer.error} <button className="ml-2 underline" onClick={() => { vendor.retry(); farmer.retry(); }}>Retry</button></div>}
 
       <Panel bodyClassName="!p-0">
+        {!submitted ? (
+          <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
+        ) : (
+          <>
         <TableToolbar
           from={pager.from}
           to={pager.to}
@@ -291,7 +299,9 @@ const VarianceReport: React.FC = () => {
           actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
         />
 
-        {!loading && rows.length === 0 ? (
+        {loading ? (
+          <ReportLoader label="Loading variance report…" />
+        ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No variance found" text="Try another VLC or date range." />
         ) : (
           <VarianceTable rows={pager.visible} all={rows} loading={loading} />
@@ -299,6 +309,8 @@ const VarianceReport: React.FC = () => {
 
         {!loading && rows.length > 0 && (
           <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />
+        )}
+          </>
         )}
       </Panel>
 

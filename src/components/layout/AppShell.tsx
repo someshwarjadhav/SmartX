@@ -60,7 +60,7 @@ const AppShell: React.FC = () => {
 
   return (
     <div className="min-h-dvh overflow-x-clip">
-      <aside className={`fixed inset-y-0 left-0 z-40 hidden transition-[width] duration-300 lg:block ${collapsed ? 'w-[76px]' : 'w-[308px]'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 hidden transition-[width] duration-300 lg:block ${collapsed ? 'w-[76px]' : 'w-[256px]'}`}>
         <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       </aside>
 
@@ -69,7 +69,7 @@ const AppShell: React.FC = () => {
           <motion.div key="drawer" className="fixed inset-0 z-50 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="absolute inset-0 bg-deep/60 backdrop-blur-sm" onClick={() => setDrawer(false)} aria-hidden />
             <motion.div
-              className="absolute inset-y-0 left-0 w-[330px] max-w-[88vw] shadow-pop"
+              className="absolute inset-y-0 left-0 w-[280px] max-w-[86vw] shadow-pop"
               initial={{ x: -300 }}
               animate={{ x: 0 }}
               exit={{ x: -300 }}
@@ -81,7 +81,7 @@ const AppShell: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <div className={`min-w-0 transition-[padding] duration-300 ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[308px]'}`}>
+      <div className={`min-w-0 transition-[padding] duration-300 ${collapsed ? 'lg:pl-[76px]' : 'lg:pl-[256px]'}`}>
         <Navbar onMenu={() => setDrawer(true)} onSearch={() => setPalette(true)} />
         <main className="mx-auto w-full min-w-0 max-w-[1560px] px-3 py-5 sm:px-6 sm:py-6 lg:px-8">
           <Suspense fallback={<PageLoader />}>

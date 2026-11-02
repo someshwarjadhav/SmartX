@@ -12,7 +12,7 @@ import {
 
 export const getMenu = (userid: string): Promise<unknown> =>
   gatewayGet(
-    `/dairy/dairy/Getmilkshellmenu?userid=${encodeURIComponent(userid)}`,
+    `/dairy/dairy/getmenu?userid=${encodeURIComponent(userid)}`,
     0,
   );
 

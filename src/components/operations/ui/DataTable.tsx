@@ -24,9 +24,13 @@ interface Props<T> {
   empty?: ReactNode;
   footerRow?: ReactNode;
   sizeLabel?: string;
+  /** Minimum table width in px before the table scrolls sideways (default 640). */
+  minWidth?: number;
+  /** Extra classes for a row, e.g. to highlight the row being edited. */
+  rowClassName?: (r: T) => string | undefined;
 }
 
-export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SIZE, onRowClick, empty, footerRow }: Props<T>) {
+export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SIZE, onRowClick, empty, footerRow, minWidth, rowClassName }: Props<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
@@ -59,7 +63,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SI
   return (
     <div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
+        <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm" style={minWidth ? { minWidth } : undefined}>
           <thead>
             <tr>
               {columns.map((c) => (
@@ -83,7 +87,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SI
               <tr
                 key={rowKey(r)}
                 onClick={onRowClick ? () => onRowClick(r) : undefined}
-                className={cn('group transition-colors hover:bg-brand/[0.06]', onRowClick && 'cursor-pointer')}
+                className={cn('group transition-colors hover:bg-brand/[0.06]', onRowClick && 'cursor-pointer', rowClassName?.(r))}
               >
                 {columns.map((c) => (
                   <td key={c.key} className={cn('whitespace-nowrap border-b border-line/70 px-4 py-3 tnum', align(c.align), c.className)}>
