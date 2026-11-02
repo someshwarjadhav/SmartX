@@ -14,6 +14,7 @@ import { StatCard } from '../../components/ui/StatCard';
 import { TableToolbar } from '../../components/ui/TableToolbar';
 import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
+import { useReportColumns } from '../../hooks/useSessionData';
 import { useToast } from '../../hooks/useToast';
 import { exportCSV, exportExcel, exportLegacyExcel, exportPDF, type ExportTable } from '../../lib/exporters';
 import { cn } from '../../lib/cn';
@@ -151,6 +152,49 @@ const COLUMNS: Column<CollectionEntry>[] = [
   { key: 'amount', header: 'Amount', align: 'right', cell: (r) => <span className="tnum font-bold">₹{nf(r.amount, 2)}</span> },
 ];
 
+/** Report-access column names (userReportConfig) each table column can be called by. */
+const COLUMN_ALIASES: Record<string, string[]> = {
+  station: ['stationid', 'station'],
+  date: ['date', 'trdate', 'collectiondate'],
+  shift: ['shift'],
+  kind: ['milktype', 'milk'],
+  farmerId: ['farmerid', 'farmercode'],
+  name: ['name', 'farmername'],
+  centre: ['centre', 'centrevlc', 'vlc', 'vlcname', 'villagename'],
+  sample: ['sampleno', 'sample', 'sampleid'],
+  litres: ['liter', 'litre', 'litres', 'qty'],
+  kg: ['kg', 'weight'],
+  fat: ['fat'],
+  snf: ['snf'],
+  clr: ['clr'],
+  water: ['water'],
+  time: ['time'],
+  rate: ['rate', 'rtpl'],
+  amount: ['amount', 'amt'],
+};
+
+/** Export columns, same keys as COLUMNS, so hidden columns are also left out of Excel / PDF / CSV. */
+type ExportCol = { key: string; header: string; type?: 'dec1' | 'money'; value: (r: CollectionEntry) => string | number };
+const EXPORT_COLS: ExportCol[] = [
+  { key: 'station', header: 'Station Id', value: (r) => r.stationId },
+  { key: 'date', header: 'Date', value: (r) => fmtDate(r.date) },
+  { key: 'shift', header: 'Shift', value: (r) => r.shift },
+  { key: 'kind', header: 'Milk Type', value: (r) => r.kind },
+  { key: 'farmerId', header: 'Farmer Id', value: (r) => r.farmerId },
+  { key: 'name', header: 'Name', value: (r) => r.farmer },
+  { key: 'centre', header: 'Centre (VLC)', value: (r) => r.centre },
+  { key: 'sample', header: 'Sample No', value: (r) => r.sampleNo ?? '' },
+  { key: 'litres', header: 'Liter', type: 'dec1', value: (r) => r.litres },
+  { key: 'kg', header: 'Kg', type: 'dec1', value: (r) => r.kg ?? 0 },
+  { key: 'fat', header: 'Fat', type: 'dec1', value: (r) => r.fat },
+  { key: 'snf', header: 'Snf', type: 'dec1', value: (r) => r.snf },
+  { key: 'clr', header: 'CLR', type: 'dec1', value: (r) => r.clr ?? 0 },
+  { key: 'water', header: 'Water', type: 'dec1', value: (r) => r.water ?? 0 },
+  { key: 'time', header: 'Time', value: (r) => r.time },
+  { key: 'rate', header: 'Rate', type: 'money', value: (r) => r.rate },
+  { key: 'amount', header: 'Amount', type: 'money', value: (r) => r.amount },
+];
+
 const FarmerCollection: React.FC = () => {
   const centres = useMilkCenterOptions();
   const plantOptions = useMemo(() => [{ value: 'all', label: 'All MCCs' }, ...Array.from(new Map(centres.map((c) => [c.mccId, c.mccId])).keys()).map((id) => ({ value: id, label: id }))], [centres]);
@@ -162,6 +206,11 @@ const FarmerCollection: React.FC = () => {
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
   const loading = live.loading;
+
+  // userReportConfig -> report[0] = Farmer Collection: only the columns allowed for this login are shown / exported
+  const access = useReportColumns('farmercollection');
+  const columns = useMemo(() => access.arrange(COLUMNS, (c) => c.key, COLUMN_ALIASES), [access]);
+  const shownKeys = useMemo(() => new Set(columns.map((c) => c.key)), [columns]);
 
   const rows = useMemo(() => live.rows.filter((r) =>
     (applied.plant === 'all' || r.plant === applied.plant) &&
@@ -195,17 +244,25 @@ const FarmerCollection: React.FC = () => {
     pager.reset();
   };
 
-  const buildTable = (): ExportTable => ({
-    filename: `farmer-collection-${applied.from}-${applied.to}`,
-    title: 'Farmer collection',
-    subtitle: `${applied.plant}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.kind === 'both' ? 'Cow & Buffalo' : applied.kind}  |  ${fmtDate(applied.from)} to ${fmtDate(applied.to)}`,
-    columns: [
-      { header: 'Station Id' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Milk Type' }, { header: 'Farmer Id' }, { header: 'Name' },
-      { header: 'Centre (VLC)' }, { header: 'Sample No' }, { header: 'Liter', type: 'dec1' }, { header: 'Kg', type: 'dec1' }, { header: 'Fat', type: 'dec1' }, { header: 'Snf', type: 'dec1' }, { header: 'CLR', type: 'dec1' }, { header: 'Water', type: 'dec1' }, { header: 'Time' }, { header: 'Rate', type: 'money' }, { header: 'Amount', type: 'money' },
-    ],
-    rows: rows.map((r) => [r.stationId, fmtDate(r.date), r.shift, r.kind, r.farmerId, r.farmer, r.centre, r.sampleNo ?? '', r.litres, r.kg ?? 0, r.fat, r.snf, r.clr ?? 0, r.water ?? 0, r.time, r.rate, r.amount]),
-    totals: ['Total', '', '', '', '', `${rows.length} entries`, '', '', Math.round(totals.litres * 10) / 10, '', Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, '', '', '', '', Math.round(totals.amount * 100) / 100],
-  });
+  const buildTable = (): ExportTable => {
+    const cols = columns.map((c) => EXPORT_COLS.find((e) => e.key === c.key)).filter((e): e is ExportCol => !!e);
+    const total = (key: string): string | number => {
+      if (key === 'name') return `${rows.length} entries`;
+      if (key === 'litres') return Math.round(totals.litres * 10) / 10;
+      if (key === 'fat') return Math.round(totals.fat * 100) / 100;
+      if (key === 'snf') return Math.round(totals.snf * 100) / 100;
+      if (key === 'amount') return Math.round(totals.amount * 100) / 100;
+      return '';
+    };
+    return {
+      filename: `farmer-collection-${applied.from}-${applied.to}`,
+      title: 'Farmer collection',
+      subtitle: `${applied.plant}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.kind === 'both' ? 'Cow & Buffalo' : applied.kind}  |  ${fmtDate(applied.from)} to ${fmtDate(applied.to)}`,
+      columns: cols.map((c) => (c.type ? { header: c.header, type: c.type } : { header: c.header })),
+      rows: rows.map((r) => cols.map((c) => c.value(r))),
+      totals: cols.map((c, i) => (i === 0 ? 'Total' : total(c.key))),
+    };
+  };
 
   const exportAs = (label: string, run: (t: ExportTable) => void | Promise<void>) => async () => {
     try {
@@ -258,7 +315,7 @@ const FarmerCollection: React.FC = () => {
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range, shift or milk type." />
         ) : (
-          <DataTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection" loading={loading} minWidth={1240} />
+          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection" loading={loading} minWidth={Math.max(520, shownKeys.size * 73)} />
         )}
 
         {!loading && rows.length > 0 && (
