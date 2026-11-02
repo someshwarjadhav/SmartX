@@ -186,7 +186,9 @@ export const ReportBar: React.FC<{
   onExport: (k: ExportKind) => void;
   left?: ReactNode;
   source?: ReactNode;
-}> = ({ count, hideCount, disabled, kinds, onExport, left, source }) => (
+  /** Optional button captions, e.g. { pdf: "Print Bill" }. */
+  labels?: Partial<Record<ExportKind, string>>;
+}> = ({ count, hideCount, disabled, kinds, onExport, left, source, labels }) => (
   <div className="flex flex-col gap-3 border-b border-line bg-soft/50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
     <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
       {left}
@@ -203,7 +205,7 @@ export const ReportBar: React.FC<{
             onClick={() => onExport(k)}
             disabled={disabled}
           >
-            {LABEL[k]}
+            {labels?.[k] ?? LABEL[k]}
           </Button>
         </motion.div>
       ))}

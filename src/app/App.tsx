@@ -32,6 +32,7 @@ const BankPaymentSummary = lazy(() => import('../pages/operations/billing/BankPa
 const StandardDeduction = lazy(() => import('../pages/operations/billing/StandardDeduction'));
 const VlcStandardDeduction = lazy(() => import('../pages/operations/billing/VlcStandardDeduction'));
 const CattleFeedFarmerBill = lazy(() => import('../pages/operations/billing/CattleFeedFarmerBill'));
+const VlcMilkBill = lazy(() => import('../pages/operations/billing/VlcMilkBill'));
 const VlcMaster = lazy(() => import('../pages/operations/masters/VlcMaster'));
 const RateMaster = lazy(() => import('../pages/operations/masters/RateMaster'));
 const RateStatus = lazy(() => import('../pages/operations/masters/RateStatus'));
@@ -81,6 +82,7 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/billing/standard-deduction': StandardDeduction,
   '/billing/vlc-standard-deduction': VlcStandardDeduction,
   '/billing/cattlefeed-farmer-bill': CattleFeedFarmerBill,
+  '/billing/vlc-milk-bill': VlcMilkBill,
   '/settings/dpu-settings': DpuSettings,
   '/settings/mobile-app': MobileAppSettings,
   '/settings/eko-milk-settings': EkoMilkSettings,

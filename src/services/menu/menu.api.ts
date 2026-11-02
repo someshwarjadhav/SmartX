@@ -221,6 +221,10 @@ const ROUTES: Array<{ to: string; aliases: string[] }> = [
     to: "/billing/cattlefeed-farmer-bill",
     aliases: ["farmerbillcattlefeed", "cattlefeedfarmerbill"],
   },
+  {
+    to: "/billing/vlc-milk-bill",
+    aliases: ["vlcmilkbill", "vlccmilkbill"],
+  },
   { to: "/quality", aliases: ["quality", "qualitywatch"] },
   { to: "/pipeline", aliases: ["pipeline", "datapipeline"] },
   {
