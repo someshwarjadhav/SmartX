@@ -145,7 +145,8 @@ const CellInput: React.FC<{
   value: string;
   onChange: (v: string) => void;
   label: string;
-}> = ({ value, onChange, label }) => (
+  autoFocus?: boolean;
+}> = ({ value, onChange, label, autoFocus }) => (
   <Input
     type="number"
     inputMode="decimal"
@@ -154,7 +155,9 @@ const CellInput: React.FC<{
     aria-label={label}
     value={value}
     onChange={(e) => onChange(e.target.value)}
-    className="h-8 w-20 px-2 text-right"
+    autoFocus={autoFocus}
+    onFocus={(e) => e.currentTarget.select()}
+    className="h-9 w-24 min-w-[6rem] px-2.5 text-right text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
   />
 );
 
@@ -395,6 +398,7 @@ const ManageCollection: React.FC = () => {
               return (
                 <CellInput
                   label="Liter"
+                  autoFocus
                   value={draft.qty}
                   onChange={(v) => changeDraft({ qty: v })}
                 />
@@ -423,7 +427,7 @@ const ManageCollection: React.FC = () => {
                   aria-label="Milk type"
                   value={draft.milk}
                   onChange={(e) => changeDraft({ milk: e.target.value })}
-                  className="h-8 w-28 text-xs"
+                  className="h-9 w-32 min-w-[8rem] text-sm"
                 >
                   {MILKS.map((m) => (
                     <option key={m.Id} value={m.Id}>
@@ -626,6 +630,8 @@ const ManageCollection: React.FC = () => {
                 columns={columns}
                 rows={visible}
                 rowKey={(r) => idOf(r) || JSON.stringify(r)}
+                minWidth={1180}
+                rowClassName={(r) => (editId && editId === idOf(r) ? "bg-brand/[0.07]" : undefined)}
                 pageSize={DEFAULT_PAGE_SIZE}
                 pageSizes={[10, 25, 50, 100, 250]}
                 sizeLabel="Result per page"

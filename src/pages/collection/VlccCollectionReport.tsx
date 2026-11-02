@@ -4,6 +4,7 @@ import { ArrowRight, CalendarDays, Droplets, FileSpreadsheet, FileText, FlaskCon
 import { useMilkVlccEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
+import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -87,23 +88,23 @@ const VlccFilters: React.FC<FilterProps & { options: { value: string; label: str
         e.preventDefault();
         onSubmit();
       }}
-      className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-12"
+      className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
     >
-      <SelectField wrapperClassName="lg:col-span-6" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId })} options={options} />
-      <Field label="Milk Type" className="lg:col-span-3">
+      <SelectField wrapperClassName="xl:col-span-6" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId })} options={options} />
+      <Field label="Milk Type" className="xl:col-span-3">
         <Segmented<KindFilter> label="Milk Type" value={value.milkType} onChange={(milkType) => onChange({ milkType })} options={KIND_FILTER_OPTIONS} className={SEGMENT} />
       </Field>
-      <Field label="Shift" className="lg:col-span-3">
+      <Field label="Shift" className="xl:col-span-3">
         <Segmented<ShiftFilter> label="Shift" value={value.shift} onChange={(shift) => onChange({ shift })} options={SHIFT_FILTER_OPTIONS} className={SEGMENT} />
       </Field>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 sm:col-span-2 lg:col-span-6">
+      <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-6">
         <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
-        <ArrowRight size={16} className="mt-[2.4rem] text-mute" aria-hidden />
+        <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
         <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
       </div>
 
-      <div className="flex items-end sm:col-span-2 lg:col-span-6">
+      <div className="flex items-end sm:col-span-2 xl:col-span-6">
         <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
           Submit
         </Button>
@@ -155,9 +156,10 @@ const VlccCollectionReport: React.FC = () => {
   const vlcOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...centres.map((c) => ({ value: c.id, label: c.label }))], [centres]);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId });
+  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId }, submitted);
   const loading = live.loading;
   const rows = useMemo(() => {
     const groups = new Map<string, typeof live.rows>();
@@ -183,7 +185,9 @@ const VlccCollectionReport: React.FC = () => {
       return;
     }
     setError(undefined);
+    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
     setApplied(draft);
+    setSubmitted(true);
     pager.reset();
   };
 
@@ -230,6 +234,10 @@ const VlccCollectionReport: React.FC = () => {
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
 
       <Panel bodyClassName="!p-0">
+        {!submitted ? (
+          <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
+        ) : (
+          <>
         <TableToolbar
           from={pager.from}
           to={pager.to}
@@ -240,7 +248,9 @@ const VlccCollectionReport: React.FC = () => {
           actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
         />
 
-        {!loading && rows.length === 0 ? (
+        {loading ? (
+          <ReportLoader label="Loading VLC collection report…" />
+        ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another VLC, date range, shift or milk type." />
         ) : (
           <DataTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Vlcc collection report" loading={loading} minWidth={900} />
@@ -248,6 +258,8 @@ const VlccCollectionReport: React.FC = () => {
 
         {!loading && rows.length > 0 && (
           <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />
+        )}
+          </>
         )}
       </Panel>
 

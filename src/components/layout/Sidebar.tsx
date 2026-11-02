@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { findNavIn, useNavGroups } from '../../config/nav';
 import { useAuth } from '../../context/AuthContext';
@@ -44,7 +45,7 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
       <div className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-glow/25 blur-3xl" aria-hidden />
 
       <div className={cn('relative flex h-16 shrink-0 items-center gap-3 px-4', rail && 'justify-center px-0')}>
-        <LogoMark size={36} />
+        <LogoMark size={34} />
         {!rail && <Wordmark tone="light" />}
         {mobile && (
           <button onClick={onNavigate} aria-label="Close menu" className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-deep-ink/70 hover:bg-white/10 hover:text-white">
@@ -53,7 +54,7 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
         )}
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1">
+      <div className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-1">
         {NAV.map((group) => {
           const isOpen = rail || open.has(group.id);
           return (
@@ -64,14 +65,23 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
                 <button
                   onClick={() => toggleGroup(group.id)}
                   aria-expanded={isOpen}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-white/85 transition-colors hover:bg-glow/15 hover:text-white"
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-white/85 transition-colors duration-200 hover:bg-glow/15 hover:text-white"
                 >
                   {group.title}
-                  <ChevronDown size={14} className={cn('transition-transform', isOpen ? 'rotate-0' : '-rotate-90')} />
+                  <ChevronDown size={14} className={cn('transition-transform duration-300 ease-out', isOpen ? 'rotate-0' : '-rotate-90')} />
                 </button>
               )}
+              <AnimatePresence initial={false}>
               {isOpen && (
-                <ul className="space-y-0.5">
+                <motion.div
+                  key="items"
+                  initial={rail ? false : { height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ height: { duration: 0.32, ease: [0.22, 1, 0.36, 1] }, opacity: { duration: 0.22 } }}
+                  className="-mx-3 overflow-hidden px-3"
+                >
+                <ul className="space-y-0.5 pb-1">
                   {group.items.map((item) => {
                     const Icon = item.icon;
                     return (
@@ -83,7 +93,7 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
                           onClick={onNavigate}
                           className={({ isActive }) =>
                             cn(
-                              'group relative flex min-h-11 items-center gap-3 rounded-xl py-2 text-[15px] font-medium transition',
+                              'group relative flex min-h-10 items-center gap-3 rounded-xl py-2 text-sm font-medium transition-all duration-200 ease-out',
                               rail ? 'justify-center px-0' : 'px-3',
                               isActive
                                 ? 'bg-brand/30 text-white shadow-sm shadow-glow/20 ring-1 ring-glow/30'
@@ -103,7 +113,9 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
                     );
                   })}
                 </ul>
+                </motion.div>
               )}
+              </AnimatePresence>
             </div>
           );
         })}

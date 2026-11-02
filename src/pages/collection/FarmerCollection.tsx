@@ -20,6 +20,7 @@ import { cn } from '../../lib/cn';
 import { fmtDate, nf, toISO } from '../../lib/format';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
+import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
 import { Segmented } from '../../components/ui/Segmented';
@@ -73,25 +74,25 @@ const FarmerCollectionFilters: React.FC<FilterProps> = ({ value, plantOptions, c
           e.preventDefault();
           onSubmit();
         }}
-        className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-12"
+        className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
       >
-        <SelectField wrapperClassName="lg:col-span-3" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant, centre: 'all' })} options={plantOptions} />
-        <SelectField wrapperClassName="lg:col-span-3" label="VLC Name" value={value.centre} onChange={(centre) => onChange({ centre })} options={centreOptions} />
+        <SelectField wrapperClassName="xl:col-span-3" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant, centre: 'all' })} options={plantOptions} />
+        <SelectField wrapperClassName="xl:col-span-3" label="VLC Name" value={value.centre} onChange={(centre) => onChange({ centre })} options={centreOptions} />
 
-        <Field label="Milk Type" className="lg:col-span-3">
+        <Field label="Milk Type" className="xl:col-span-3">
           <Segmented<KindFilter> label="Milk Type" value={value.kind} onChange={(kind) => onChange({ kind })} options={KIND_FILTER_OPTIONS} className={SEGMENT} />
         </Field>
-        <Field label="Shift" className="lg:col-span-3">
+        <Field label="Shift" className="xl:col-span-3">
           <Segmented<ShiftFilter> label="Shift" value={value.shift} onChange={(shift) => onChange({ shift })} options={SHIFT_FILTER_OPTIONS} className={SEGMENT} />
         </Field>
 
-        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 sm:col-span-2 lg:col-span-6">
+        <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-6">
           <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.from} max={value.to || undefined} onChange={(e) => onChange({ from: e.target.value })} />
-          <ArrowRight size={16} className="mt-[2.4rem] text-mute" aria-hidden />
+          <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
           <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.to} min={value.from || undefined} onChange={(e) => onChange({ to: e.target.value })} error={error} />
         </div>
 
-        <div className="flex items-end sm:col-span-2 lg:col-span-6">
+        <div className="flex items-end sm:col-span-2 xl:col-span-6">
           <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
             Submit
           </Button>
@@ -155,8 +156,9 @@ const FarmerCollection: React.FC = () => {
   const plantOptions = useMemo(() => [{ value: 'all', label: 'All MCCs' }, ...Array.from(new Map(centres.map((c) => [c.mccId, c.mccId])).keys()).map((id) => ({ value: id, label: id }))], [centres]);
   const [draft, setDraft] = useState<CollectionFilters>(defaults);
   const [applied, setApplied] = useState<CollectionFilters>(defaults);
+  const [submitted, setSubmitted] = useState(false);
   const centreOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...centres.filter((c) => draft.plant === 'all' || c.mccId === draft.plant).map((c) => ({ value: c.id, label: c.label }))], [centres, draft.plant]);
-  const live = useMilkFarmerEntries({ from: applied.from, to: applied.to, shift: applied.shift, milk: applied.kind });
+  const live = useMilkFarmerEntries({ from: applied.from, to: applied.to, shift: applied.shift, milk: applied.kind }, submitted);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
   const loading = live.loading;
@@ -187,7 +189,9 @@ const FarmerCollection: React.FC = () => {
       return;
     }
     setError(undefined);
+    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
     setApplied(draft);
+    setSubmitted(true);
     pager.reset();
   };
 
@@ -235,6 +239,10 @@ const FarmerCollection: React.FC = () => {
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
 
       <Panel bodyClassName="!p-0">
+        {!submitted ? (
+          <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
+        ) : (
+          <>
         <TableToolbar
           from={pager.from}
           to={pager.to}
@@ -245,7 +253,9 @@ const FarmerCollection: React.FC = () => {
           actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
         />
 
-        {!loading && rows.length === 0 ? (
+        {loading ? (
+          <ReportLoader label="Loading farmer collection…" />
+        ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range, shift or milk type." />
         ) : (
           <DataTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection" loading={loading} minWidth={1240} />
@@ -253,6 +263,8 @@ const FarmerCollection: React.FC = () => {
 
         {!loading && rows.length > 0 && (
           <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />
+        )}
+          </>
         )}
       </Panel>
 

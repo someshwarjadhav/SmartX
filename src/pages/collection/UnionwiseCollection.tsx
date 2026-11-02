@@ -2,6 +2,7 @@ import type * as React from 'react';
 import { useMemo, useState } from 'react';
 import { ArrowRight, CalendarDays, FileSpreadsheet, FileText, Search, SearchX, SlidersHorizontal } from 'lucide-react';
 import { useMilkFarmerEntries } from '../../hooks/useMilkReportData';
+import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -66,15 +67,15 @@ const UnionwiseFilters: React.FC<FilterProps> = ({ value, onChange, onSubmit, er
         e.preventDefault();
         onSubmit();
       }}
-      className="grid gap-x-4 gap-y-4 p-4 sm:p-5 lg:grid-cols-12"
+      className="grid gap-x-4 gap-y-4 p-4 sm:p-5 xl:grid-cols-12"
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 lg:col-span-6">
+      <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] xl:col-span-6">
         <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
-        <ArrowRight size={16} className="mt-[2.4rem] text-mute" aria-hidden />
+        <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
         <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
       </div>
 
-      <div className="flex items-end lg:col-span-6">
+      <div className="flex items-end xl:col-span-6">
         <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
           Submit
         </Button>
@@ -104,9 +105,10 @@ const COLUMNS: Column<UnionRow>[] = [
 const UnionwiseCollection: React.FC = () => {
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both' });
+  const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both' }, submitted);
   const loading = live.loading;
   const rows = useMemo(() => { const groups = new Map<string, typeof live.rows>(); for (const r of live.rows) { const key = `${r.plant}|${r.stationId}`; groups.set(key, [...(groups.get(key) ?? []), r]); } return [...groups].map(([key, list]) => { const first=list[0]; const qty=list.reduce((a,r)=>a+r.litres,0); const amount=list.reduce((a,r)=>a+r.amount,0); return { id:key, union:first?.plant ?? '', society:first?.centre ?? first?.stationId ?? '', farmer:new Set(list.map((r)=>r.farmerId)).size, qty, avgFat:qty?list.reduce((a,r)=>a+r.fat*r.litres,0)/qty:0, avgSnf:qty?list.reduce((a,r)=>a+r.snf*r.litres,0)/qty:0, avgRate:qty?amount/qty:0, amount }; }); }, [live.rows]);
   const pager = usePagination(rows);
@@ -117,7 +119,9 @@ const UnionwiseCollection: React.FC = () => {
       return;
     }
     setError(undefined);
+    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
     setApplied(draft);
+    setSubmitted(true);
     pager.reset();
   };
 
@@ -160,6 +164,10 @@ const UnionwiseCollection: React.FC = () => {
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
 
       <Panel bodyClassName="!p-0">
+        {!submitted ? (
+          <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
+        ) : (
+          <>
         <TableToolbar
           from={pager.from}
           to={pager.to}
@@ -170,7 +178,9 @@ const UnionwiseCollection: React.FC = () => {
           actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
         />
 
-        {!loading && rows.length === 0 ? (
+        {loading ? (
+          <ReportLoader label="Loading unionwise collection…" />
+        ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range." />
         ) : (
           <DataTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Unionwise collection" loading={loading} minWidth={820} />
@@ -178,6 +188,8 @@ const UnionwiseCollection: React.FC = () => {
 
         {!loading && rows.length > 0 && (
           <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />
+        )}
+          </>
         )}
       </Panel>
 

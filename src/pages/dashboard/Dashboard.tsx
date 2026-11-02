@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Banknote, CalendarDays, Clock, Droplets, FlaskConical, Gauge, type LucideIcon, Milk, Users, Warehouse } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Banknote, CalendarDays, Clock, Droplets, FlaskConical, Gauge, type LucideIcon, Milk, Users, Warehouse } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { greeting, initials, longDate, nf, pct, rupees } from '../../lib/format';
 import { Segmented } from '../../components/ui/Segmented';
@@ -17,6 +18,29 @@ import { ChartTip } from '../../components/charts/ChartTip';
 import { KIND_BG, KIND_LABEL, KindChip } from '../../components/ui/KindChip';
 import { Badge, type Tone } from '../../components/ui/Badge';
 import { useDashboardData } from '../../hooks/useDashboardData';
+import { ALL_CENTRES, useTrendData, type TrendDays } from '../../hooks/useTrendData';
+import { useCentreOptions } from '../../hooks/useCentres';
+import { Select } from '../../components/ui/Select';
+import { hasRoute, useNav } from '../../components/layout/operations/nav';
+
+/* ---------- helpers ---------- */
+
+// Compact y-axis label: 0, 40, 160, 1.5k ... (the old formatter turned everything under 500 L into "0k").
+const litreTick = (v: number) => (v >= 1000 ? `${+(v / 1000).toFixed(1)}k` : String(Math.round(v)));
+
+// First of these pages that the menu API allows for this user, so "View all" never lands on a "not found" page.
+const useFirstAllowedRoute = (candidates: string[]): string | null => {
+  const sections = useNav();
+  return candidates.find((r) => hasRoute(sections, r)) ?? null;
+};
+
+const ViewAll: React.FC<{ to: string | null }> = ({ to }) =>
+  to ? (
+    <Link to={to} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-brand transition hover:bg-brand/10">
+      View all
+      <ArrowRight size={13} aria-hidden />
+    </Link>
+  ) : null;
 
 /* ---------- DashboardHeader ---------- */
 
@@ -205,18 +229,42 @@ const KpiMosaic: React.FC<KpiProps> = ({ summary, centres, range }) => {
 
 /* ---------- TrendChart ---------- */
 
-interface TrendRow {
-  label: string;
-  Cow: number;
-  Buffalo: number;
-  Mix: number;
-}
-
-const TrendChart: React.FC<{ data: TrendRow[]; range: number }> = ({ data, range }) => {
+const TrendChart: React.FC = () => {
   const cc = useChartColors();
+  const centres = useCentreOptions();
+  const [centre, setCentre] = useState<string>(ALL_CENTRES);
+  const [days, setDays] = useState<TrendDays>(30);
+  const { data, loading } = useTrendData(days, centre);
+  const centreLabel = centre === ALL_CENTRES ? 'All centres' : centres.find((c) => c.id === centre)?.label ?? centre;
+
   return (
-    <Panel title="Milk collection" subtitle={`Litres per day by milk type, last ${range} days`} className="h-full">
-      <div className="h-[260px] sm:h-[300px]" role="img" aria-label="Stacked area chart of daily litres by milk type">
+    <Panel
+      title="Milk collection"
+      subtitle={`Litres per day, split by milk type · ${centreLabel}`}
+      className="h-full"
+      action={
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Select
+            label="Centre"
+            value={centre}
+            onChange={setCentre}
+            className="min-w-[220px]"
+            options={[{ value: ALL_CENTRES, label: 'All' }, ...centres.map((c) => ({ value: c.id, label: c.label }))]}
+          />
+          <Segmented
+            label="Chart period"
+            value={days}
+            onChange={setDays}
+            options={[
+              { value: 7, label: '7 days' },
+              { value: 14, label: '14 days' },
+              { value: 30, label: '30 days' },
+            ]}
+          />
+        </div>
+      }
+    >
+      <div className={cn('h-[260px] transition-opacity sm:h-[300px]', loading && 'opacity-60')} role="img" aria-label="Stacked area chart of daily litres by milk type">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
             <defs>
@@ -229,7 +277,7 @@ const TrendChart: React.FC<{ data: TrendRow[]; range: number }> = ({ data, range
             </defs>
             <CartesianGrid stroke={cc.grid} vertical={false} />
             <XAxis dataKey="label" tick={{ fill: cc.tick, fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={28} />
-            <YAxis tick={{ fill: cc.tick, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} width={48} />
+            <YAxis tick={{ fill: cc.tick, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={litreTick} width={48} allowDecimals={false} />
             <Tooltip content={<ChartTip format={(v) => `${nf(v)} L`} />} cursor={{ stroke: cc.grid }} />
             <Area type="monotone" dataKey="Buffalo" name="Buffalo" stackId="s" stroke={cc.buffalo} strokeWidth={2} fill="url(#tr-buf)" />
             <Area type="monotone" dataKey="Cow" name="Cow" stackId="s" stroke={cc.cow} strokeWidth={2} fill="url(#tr-cow)" />
@@ -345,7 +393,7 @@ const ShiftChart: React.FC<{ data: ShiftRow[] }> = ({ data }) => {
           <BarChart data={data} margin={{ top: 8, right: 4, left: -14, bottom: 0 }} barGap={3}>
             <CartesianGrid stroke={cc.grid} vertical={false} />
             <XAxis dataKey="label" tick={{ fill: cc.tick, fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fill: cc.tick, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
+            <YAxis tick={{ fill: cc.tick, fontSize: 11 }} tickLine={false} axisLine={false} width={44} tickFormatter={litreTick} allowDecimals={false} />
             <Tooltip content={<ChartTip format={(v) => `${nf(v)} L`} />} cursor={{ fill: cc.grid }} />
             <Bar dataKey="Morning" name="Morning" fill={cc.brand} radius={[6, 6, 0, 0]} maxBarSize={18} />
             <Bar dataKey="Evening" name="Evening" fill={cc.cow} radius={[6, 6, 0, 0]} maxBarSize={18} />
@@ -360,27 +408,54 @@ const ShiftChart: React.FC<{ data: ShiftRow[] }> = ({ data }) => {
   );
 };
 
-/* ---------- TankerBoard ---------- */
-
-const TankerBoard: React.FC = () => (
-  <Panel title="Tanker tracking" subtitle="Live tanker telemetry" className="h-full">
-    <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-line bg-soft/40 px-6 py-8 text-center">
-      <div><p className="font-semibold">No tanker API is available in MilkShell</p><p className="mt-1 text-sm text-mute">This panel will show live tanker data when the portal exposes a tanker endpoint.</p></div>
-    </div>
-  </Panel>
-);
-
 /* ---------- LiveFeed ---------- */
 
-const LiveFeed: React.FC<{ rows: CollectionEntry[]; loading: boolean }> = ({ rows, loading }) => (
-  <Panel title="Latest collection records" subtitle="Newest samples received from the centres" className="h-full" bodyClassName="!px-0 !pb-1" action={<Badge tone="brand" dot>API</Badge>}>
-    {loading ? <div className="space-y-3 p-5" aria-busy="true">{Array.from({length:5},(_,i)=><span key={i} className="skeleton block h-8 rounded" />)}</div> : rows.length ? (
-      <ul className="divide-y divide-line/70">
-        {rows.map((r) => <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-4 py-2.5 sm:px-5"><div className="min-w-0"><p className="truncate text-sm font-semibold">{r.farmer}</p><p className="flex flex-wrap items-center gap-x-2 text-xs text-mute"><span className="tnum">{r.date} {r.time}</span><span>{r.centre}</span><KindChip kind={r.kind} /></p></div><div className="text-right"><p className="tnum text-sm font-semibold">{nf(r.litres,1)} L</p><p className="tnum text-xs text-mute">Fat {nf(r.fat,1)} · SNF {nf(r.snf,1)}</p></div></li>)}
-      </ul>
-    ) : <div className="p-6 text-sm text-mute">No collection rows were returned for this period.</div>}
-  </Panel>
-);
+const LIST_HEIGHT = 'h-[470px]';
+
+const LiveFeed: React.FC<{ rows: CollectionEntry[]; loading: boolean }> = ({ rows, loading }) => {
+  const to = useFirstAllowedRoute(['/collections', '/reports/farmerwise', '/live']);
+  return (
+    <Panel
+      title="Latest collection records"
+      subtitle="Newest samples received from the centres"
+      className="h-full"
+      bodyClassName="!px-0 !pb-0"
+      action={
+        <div className="flex items-center gap-1">
+          <Badge tone="brand" dot>API</Badge>
+          <ViewAll to={to} />
+        </div>
+      }
+    >
+      {loading ? (
+        <div className={cn('space-y-3 p-5', LIST_HEIGHT)} aria-busy="true">
+          {Array.from({ length: 7 }, (_, i) => <span key={i} className="skeleton block h-10 rounded" />)}
+        </div>
+      ) : rows.length ? (
+        <ul className={cn('divide-y divide-line/70 overflow-y-auto overscroll-contain rounded-b-2xl', LIST_HEIGHT)}>
+          {rows.map((r) => (
+            <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-4 py-3.5 sm:px-5">
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-semibold">{r.farmer}</p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-mute">
+                  <span className="tnum">{r.date} {r.time}</span>
+                  <span>{r.centre}</span>
+                  <KindChip kind={r.kind} />
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="tnum text-[15px] font-semibold">{nf(r.litres, 1)} L</p>
+                <p className="tnum mt-0.5 text-xs text-mute">Fat {nf(r.fat, 1)} · SNF {nf(r.snf, 1)}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="p-6 text-sm text-mute">No collection rows were returned for this period.</div>
+      )}
+    </Panel>
+  );
+};
 
 /* ---------- CentreTable ---------- */
 
@@ -444,33 +519,44 @@ const CentreTable: React.FC<{ rows: CentreRow[]; range: number }> = ({ rows, ran
 
 const TopSuppliers: React.FC<{ rows: SupplierRow[]; range: number }> = ({ rows, range }) => {
   const max = Math.max(...rows.map((r) => r.litres), 1);
+  const to = useFirstAllowedRoute(['/farmers', '/reports/farmerwise', '/collections']);
   return (
-    <Panel title="Top farmers" subtitle={`Most litres poured, last ${range} days`} className="h-full" bodyClassName="!px-0 !pb-1">
-      <ol className="divide-y divide-line/70">
-        {rows.map((r, i) => (
-          <li key={r.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/12 text-xs font-bold text-brand" aria-hidden>
-              {initials(r.name)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="truncate text-sm font-semibold">
-                  <span className="sr-only">Rank {i + 1}: </span>
-                  {r.name}
-                </p>
-                <p className="tnum shrink-0 text-sm font-semibold">{nf(r.litres)} L</p>
+    <Panel
+      title="Top farmers"
+      subtitle={`Most litres poured, last ${range} days`}
+      className="h-full"
+      bodyClassName="!px-0 !pb-0"
+      action={<ViewAll to={to} />}
+    >
+      {rows.length ? (
+        <ol className={cn('divide-y divide-line/70 overflow-y-auto overscroll-contain rounded-b-2xl', LIST_HEIGHT)}>
+          {rows.map((r, i) => (
+            <li key={`${r.centre}:${r.id}`} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/12 text-xs font-bold text-brand" aria-hidden>
+                {initials(r.name)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="truncate text-[15px] font-semibold">
+                    <span className="sr-only">Rank {i + 1}: </span>
+                    {r.name}
+                  </p>
+                  <p className="tnum shrink-0 text-[15px] font-semibold">{nf(r.litres)} L</p>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-3 text-xs text-mute">
+                  <span className="truncate">{r.centre}</span>
+                  <KindChip kind={r.kind} />
+                </div>
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-soft">
+                  <div className="h-full rounded-full bg-brand/80" style={{ width: `${(r.litres / max) * 100}%` }} />
+                </div>
               </div>
-              <div className="mt-1 flex items-center justify-between gap-3 text-xs text-mute">
-                <span className="truncate">{r.centre}</span>
-                <KindChip kind={r.kind} />
-              </div>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-soft">
-                <div className="h-full rounded-full bg-brand/80" style={{ width: `${(r.litres / max) * 100}%` }} />
-              </div>
-            </div>
-          </li>
-        ))}
-      </ol>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <div className="p-6 text-sm text-mute">No farmers poured milk in this period.</div>
+      )}
     </Panel>
   );
 };
@@ -495,7 +581,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="xl:col-span-8">
-          <TrendChart data={data.trend} range={range} />
+          <TrendChart />
         </div>
         <div className="xl:col-span-4">
           <MilkMix mix={data.summary.mixByKind} range={range} />
@@ -509,17 +595,14 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="xl:col-span-7">
-          <TankerBoard />
-        </div>
-        <div className="xl:col-span-5">
           <LiveFeed rows={data.recentRows} loading={data.loading} />
-        </div>
-
-        <div className="xl:col-span-7">
-          <CentreTable rows={data.centres} range={range} />
         </div>
         <div className="xl:col-span-5">
           <TopSuppliers rows={data.suppliers} range={range} />
+        </div>
+
+        <div className="xl:col-span-12">
+          <CentreTable rows={data.centres} range={range} />
         </div>
       </div>
     </div>

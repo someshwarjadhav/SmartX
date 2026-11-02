@@ -4,6 +4,7 @@ import { ArrowRight, CalendarDays, Search, SlidersHorizontal, Wifi, WifiOff } fr
 import { useMilkVlccEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import { SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import { Badge } from '../../components/ui/Badge';
+import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
@@ -71,20 +72,20 @@ const VlcStatusFilters: React.FC<FilterProps> = ({ value, plantOptions, onChange
         e.preventDefault();
         onSubmit();
       }}
-      className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-12"
+      className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
     >
-      <SelectField wrapperClassName="lg:col-span-4" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant })} options={plantOptions} />
-      <Field label="Shift" className="lg:col-span-4">
+      <SelectField wrapperClassName="xl:col-span-4" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant })} options={plantOptions} />
+      <Field label="Shift" className="xl:col-span-4">
         <Segmented<ShiftFilter> label="Shift" value={value.shift} onChange={(shift) => onChange({ shift })} options={SHIFT_FILTER_OPTIONS} className={SEGMENT} />
       </Field>
 
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 sm:col-span-2 lg:col-span-12">
+      <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-12">
         <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
-        <ArrowRight size={16} className="mt-[2.4rem] text-mute" aria-hidden />
+        <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
         <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
       </div>
 
-      <div className="sm:col-span-2 lg:col-span-12">
+      <div className="sm:col-span-2 xl:col-span-12">
         <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
           Submit
         </Button>
@@ -125,8 +126,9 @@ const VlcStatus: React.FC = () => {
   const plantOptions = useMemo(() => [{ value: 'all', label: 'All MCCs' }, ...Array.from(new Map(centres.map((c) => [c.mccId, c.mccId])).keys()).map((id) => ({ value: id, label: id }))], [centres]);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both' });
+  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both' }, submitted);
   const loading = live.loading;
   const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.id, name:c.label, active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
   const active = tiles.filter((t) => t.active).length;
@@ -137,7 +139,9 @@ const VlcStatus: React.FC = () => {
       return;
     }
     setError(undefined);
+    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
     setApplied(draft);
+    setSubmitted(true);
   };
 
   return (
@@ -151,16 +155,22 @@ const VlcStatus: React.FC = () => {
       <Panel
         title="VLC Active/In Active"
         action={
+          submitted && !loading && (
           <div className="flex items-center gap-2">
             <Badge tone="ok">Active {active}</Badge>
             <Badge tone="danger">Inactive {tiles.length - active}</Badge>
           </div>
+          )
         }
       >
-        {tiles.length === 0 ? (
+        {!submitted ? (
+          <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
+        ) : loading ? (
+          <ReportLoader label="Loading VLC status…" />
+        ) : tiles.length === 0 ? (
           <EmptyState icon={WifiOff} title="No VLC found" text="This plant has no VLC yet." />
         ) : (
-          <ul className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6', loading && 'opacity-50')}>
+          <ul className={'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'}>
             {tiles.map((t) => (
               <Tile key={t.id} tile={t} />
             ))}

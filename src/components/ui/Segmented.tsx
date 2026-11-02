@@ -26,7 +26,7 @@ export function Segmented<T extends string | number>({ value, options, onChange,
             aria-checked={active}
             onClick={() => onChange(o.value)}
             className={cn(
-              'h-8 rounded-lg px-3 text-sm font-semibold transition',
+              'h-8 min-w-0 whitespace-nowrap rounded-lg px-2 text-[13px] font-semibold transition sm:px-3 sm:text-sm',
               active ? 'bg-panel text-brand shadow-card' : 'text-mute hover:text-ink',
             )}
           >
