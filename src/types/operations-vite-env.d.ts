@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly MODE: string;
   readonly VITE_API_BASE_URL: string;
   readonly VITE_LOGIN_PATH: string;
+  readonly VITE_DPU_MENU_URL?: string;
   readonly VITE_ENCRYPTION_KEY: string;
   readonly VITE_GATEWAY_PATH?: string;
   readonly VITE_REPORT_CONFIG_URL?: string;

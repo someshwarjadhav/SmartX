@@ -32,6 +32,8 @@ const BankPaymentSummary = lazy(() => import('../pages/operations/billing/BankPa
 const StandardDeduction = lazy(() => import('../pages/operations/billing/StandardDeduction'));
 const VlcStandardDeduction = lazy(() => import('../pages/operations/billing/VlcStandardDeduction'));
 const CattleFeedFarmerBill = lazy(() => import('../pages/operations/billing/CattleFeedFarmerBill'));
+const VlcMilkBill = lazy(() => import('../pages/operations/billing/VlcMilkBill'));
+const BillUnfreeze = lazy(() => import('../pages/operations/administrator/BillUnfreeze'));
 const VlcMaster = lazy(() => import('../pages/operations/masters/VlcMaster'));
 const RateMaster = lazy(() => import('../pages/operations/masters/RateMaster'));
 const RateStatus = lazy(() => import('../pages/operations/masters/RateStatus'));
@@ -48,8 +50,7 @@ const EkoMilkSettings = lazy(() => import('../pages/operations/settings/EkoMilkS
 const UserAccess = lazy(() => import('../pages/operations/administrator/UserAccess'));
 const PortalForm = lazy(() => import('../pages/operations/FormPlaceholder'));
 
-// Every screen the app can render. Whether a route shows in the sidebar, and whether the
-// signed-in user may open it, is decided by the menu API (see RouteGate), not by this list.
+
 const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/': Dashboard,
   '/settings': Settings,
@@ -81,10 +82,12 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/billing/standard-deduction': StandardDeduction,
   '/billing/vlc-standard-deduction': VlcStandardDeduction,
   '/billing/cattlefeed-farmer-bill': CattleFeedFarmerBill,
+  '/billing/vlc-milk-bill': VlcMilkBill,
   '/settings/dpu-settings': DpuSettings,
   '/settings/mobile-app': MobileAppSettings,
   '/settings/eko-milk-settings': EkoMilkSettings,
   '/administrator/user-access': UserAccess,
+  '/administrator/bill-unfreeze': BillUnfreeze,
   '/quality': Quality,
   '/pipeline': Pipeline,
   '/portal/*': PortalForm,
@@ -98,7 +101,6 @@ const ScrollToTop: React.FC = () => {
   return null;
 };
 
-// Loads centres, sidebar menu and report access once per sign-in, and re-fetches the menu on reload.
 const SessionGate: React.FC = () => {
   const { logout } = useAuth();
   const profile = useLoginData();
@@ -129,7 +131,7 @@ const SessionGate: React.FC = () => {
   return ready ? <Outlet /> : <PageLoader full />;
 };
 
-// A page opens only when the menu API gave this user a sidebar entry for it.
+
 const RouteGate: React.FC = () => {
   const { pathname } = useLocation();
   const sections = useNav();

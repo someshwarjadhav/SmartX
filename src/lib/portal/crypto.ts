@@ -5,13 +5,12 @@ import { lib } from 'crypto-js/core';
 
 const options = (iv: lib.WordArray) => ({ iv });
 
-/** Key from .env.local - trimmed and with accidental surrounding quotes removed. */
 function readSecret(): string {
   const raw = String(import.meta.env.VITE_ENCRYPTION_KEY ?? '').trim();
   return raw.replace(/^(['"])(.*)\1$/, '$2').trim();
 }
 
-/** True when VITE_ENCRYPTION_KEY is set (login and encrypted replies need it). */
+
 export const hasEncryptionKey = (): boolean => readSecret().length > 0;
 
 function getKey() {
@@ -43,5 +42,22 @@ export function decryptPayload(packed: string): unknown {
     return JSON.parse(plain);
   } catch {
     return plain;
+  }
+}
+
+
+export function decryptXorPayload(b64: string): unknown {
+  const key = new TextEncoder().encode(readSecret());
+  if (!key.length) throw new Error('VITE_ENCRYPTION_KEY is missing. Add it to .env.local and restart `npm run dev`.');
+  let clean = b64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  while (clean.length % 4) clean += '=';
+  const bin = atob(clean);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i) ^ key[i % key.length]!;
+  const text = new TextDecoder().decode(bytes).replace(/^\uFEFF/, '').trim();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
   }
 }
