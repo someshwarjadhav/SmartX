@@ -132,6 +132,7 @@ export async function loadSessionData(profile: LoginProfile): Promise<void> {
     console.info('[bootstrap] user id:', userId ?? '(NOT FOUND in login record)', '| station id:', centerStationId ?? '(NOT FOUND in login record)');
     console.info('[getCenter] centres:', data.centers.length, '| first raw row:', data.centers[0]?.raw ?? raw.centers);
     console.info('[getMenu] top level entries:', data.menu.map((n) => n.title || n.url), '| raw:', raw.menu);
+    console.info('[getReportAccess] report[index] -> hidden / shown columns:', [...data.report.byIndex].map(([i, v]) => ({ index: i, hidden: [...v.hidden], shown: [...v.shown] })));
     console.info('[getReportAccess] rules:', [...data.report.rules].map(([k, v]) => ({ report: k || '(all)', hidden: [...v.hidden], shown: [...v.shown] })), '| raw:', raw.report);
   }
 }

@@ -13,6 +13,7 @@ import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
 import { KindChip } from '../../components/ui/KindChip';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { useReportTable } from '../../hooks/useSessionData';
 import { Pagination } from '../../components/ui/Pagination';
 import { Panel } from '../../components/ui/Panel';
 import { Segmented } from '../../components/ui/Segmented';
@@ -199,16 +200,17 @@ const FarmerwiseCollection: React.FC = () => {
     pager.reset();
   };
 
+  const tbl = useReportTable('farmerwisecollection', COLUMNS);
   const buildTable = (): ExportTable => ({
     filename: `farmerwise-collection-${applied.fromDate}-${applied.toDate}`,
     title: 'Farmerwise collection',
     subtitle: `${applied.plant}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
-    columns: [
+    columns: tbl.pick([
       { header: 'Station Id' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Milk Type' }, { header: 'Farmer Id' }, { header: 'Name' },
       { header: 'Centre (VLC)' }, { header: 'Liter', type: 'dec1' }, { header: 'Kg', type: 'dec1' }, { header: 'Fat', type: 'dec1' }, { header: 'Snf', type: 'dec1' }, { header: 'CLR', type: 'dec1' }, { header: 'Rate', type: 'money' }, { header: 'Amount', type: 'money' },
-    ],
-    rows: rows.map((r) => [r.stationId, fmtDate(r.date), r.shift, r.kind, r.farmerId, r.farmer, r.centre, r.litres, r.kg ?? 0, r.fat, r.snf, r.clr ?? 0, r.rate, r.amount]),
-    totals: ['Total', '', '', '', '', `${rows.length} entries`, '', Math.round(totals.litres * 10) / 10, '', Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, '', '', Math.round(totals.amount * 100) / 100],
+    ] as ExportTable['columns']),
+    rows: rows.map((r) => tbl.pick<string | number>([r.stationId, fmtDate(r.date), r.shift, r.kind, r.farmerId, r.farmer, r.centre, r.litres, r.kg ?? 0, r.fat, r.snf, r.clr ?? 0, r.rate, r.amount])),
+    totals: tbl.pickTotals(['Total', '', '', '', '', `${rows.length} entries`, '', Math.round(totals.litres * 10) / 10, '', Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, '', '', Math.round(totals.amount * 100) / 100]),
   });
 
   const exportAs = (label: string, run: (t: ExportTable) => void | Promise<void>) => async () => {
@@ -261,7 +263,7 @@ const FarmerwiseCollection: React.FC = () => {
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another farmer, date range, shift or milk type." />
         ) : (
-          <DataTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmerwise collection" loading={loading} minWidth={1100} />
+          <DataTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmerwise collection" loading={loading} minWidth={1100} />
         )}
 
         {!loading && rows.length > 0 && (

@@ -45,3 +45,24 @@ export function decryptPayload(packed: string): unknown {
     return plain;
   }
 }
+
+/**
+ * DPU replies ({ success, data: "<base64>" }): the base64 holds the JSON XOR-ed with
+ * VITE_ENCRYPTION_KEY (key repeated over the bytes). Returns the parsed JSON (or the text).
+ */
+export function decryptXorPayload(b64: string): unknown {
+  const key = new TextEncoder().encode(readSecret());
+  if (!key.length) throw new Error('VITE_ENCRYPTION_KEY is missing. Add it to .env.local and restart `npm run dev`.');
+  let clean = b64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+  while (clean.length % 4) clean += '=';
+  const bin = atob(clean);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i) ^ key[i % key.length]!;
+  const text = new TextDecoder().decode(bytes).replace(/^\uFEFF/, '').trim();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
