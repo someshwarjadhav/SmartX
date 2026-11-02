@@ -98,7 +98,6 @@ export class Pagination<T = unknown> {
     const startIndex = (page - 1) * this.pageSize;
     this.paginatedData = this.data.slice(startIndex, startIndex + this.pageSize);
   }
-
   setPageSize(size: number) {
     this.pageSize = size;
     this.setPage(1);

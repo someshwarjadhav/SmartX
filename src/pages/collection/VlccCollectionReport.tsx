@@ -11,6 +11,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { useReportTable } from '../../hooks/useSessionData';
 import { Pagination } from '../../components/ui/Pagination';
 import { Panel } from '../../components/ui/Panel';
 import { Segmented } from '../../components/ui/Segmented';
@@ -191,16 +192,17 @@ const VlccCollectionReport: React.FC = () => {
     pager.reset();
   };
 
+  const tbl = useReportTable('vlcccollection', COLUMNS);
   const buildTable = (): ExportTable => ({
     filename: `vlcc-collection-report-${applied.fromDate}-${applied.toDate}`,
     title: 'Vlcc collection report',
     subtitle: `${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
-    columns: [
+    columns: tbl.pick([
       { header: 'Station Id' }, { header: 'Village' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Total Liter', type: 'dec1' },
       { header: 'Avg Fat', type: 'dec2' }, { header: 'Avg SNF', type: 'dec2' }, { header: 'Avg Rate', type: 'money' }, { header: 'Total Amount', type: 'money' },
-    ],
-    rows: rows.map((r) => [r.stationId, r.village, fmtDate(r.date), r.shift, r.totalLiter, r.avgFat, r.avgSnf, r.avgRate, r.totalAmount]),
-    totals: ['Total', `${rows.length} rows`, '', '', Math.round(totals.litres * 10) / 10, Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, totals.litres ? Math.round((totals.amount / totals.litres) * 100) / 100 : 0, Math.round(totals.amount * 100) / 100],
+    ] as ExportTable['columns']),
+    rows: rows.map((r) => tbl.pick<string | number>([r.stationId, r.village, fmtDate(r.date), r.shift, r.totalLiter, r.avgFat, r.avgSnf, r.avgRate, r.totalAmount])),
+    totals: tbl.pickTotals(['Total', `${rows.length} rows`, '', '', Math.round(totals.litres * 10) / 10, Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, totals.litres ? Math.round((totals.amount / totals.litres) * 100) / 100 : 0, Math.round(totals.amount * 100) / 100]),
   });
 
   const exportAs = (label: string, run: (t: ExportTable) => void | Promise<void>) => async () => {
@@ -253,7 +255,7 @@ const VlccCollectionReport: React.FC = () => {
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another VLC, date range, shift or milk type." />
         ) : (
-          <DataTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Vlcc collection report" loading={loading} minWidth={900} />
+          <DataTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Vlcc collection report" loading={loading} minWidth={900} />
         )}
 
         {!loading && rows.length > 0 && (
