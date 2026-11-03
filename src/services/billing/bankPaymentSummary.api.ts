@@ -1,10 +1,11 @@
-import { clearRequestMemo, gatewayGet } from "../http/client";
+import { clearRequestMemo } from "../http/client";
+import { dpuGet } from "../http/dpu";
 import { ApiError } from "../http/errors";
 import { apiDate } from "../utils/date";
 import { isObj, norm, rowsFrom, type Obj } from "../utils/loose";
 import { num } from "../utils/parse";
 
-export const PAY_FARMER_PATH = "/home/MilkBillPaySummma";
+export const PAY_FARMER_PATH = "/Login/MilkBillPaySummMA";
 
 export type PayType = "farmer";
 
@@ -121,7 +122,7 @@ async function one(type: PayType, from: string, to: string, vlcId: string): Prom
     `&todate=${encodeURIComponent(apiDate(to))}` +
     `&stationid=${encodeURIComponent(vlcId)}`;
   try {
-    const json = await gatewayGet(q, 0);
+    const json = await dpuGet(q, 0);
     return payRowsOf(json).map((r, i) => toPayRow(r, vlcId, i));
   } catch (e) {
     if (e instanceof ApiError && e.kind === "parse" && /empty/i.test(e.message)) return [];

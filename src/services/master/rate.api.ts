@@ -1,6 +1,8 @@
 import { BASE_URL } from "../config";
-import { clearRequestMemo, directGet, gatewayGet, gatewayText, parseGatewayText } from "../http/client";
+import { clearRequestMemo, directGet, gatewayGet } from "../http/client";
+import { dpuGet, dpuSaveAttempts, encryptedShapes, type SaveAttempt } from "../http/dpu";
 import { ApiError } from "../http/errors";
+import { encryptXorPayload } from "../../lib/portal/crypto";
 import { isObj, norm, pick, type Obj } from "../utils/loose";
 import { vlccName } from "../vlcc/names";
 
@@ -47,27 +49,6 @@ export function rowsOf(json: unknown): Obj[] {
   return [];
 }
 
-function assertDone(text: string, fallback: string): string {
-  const clean = text.replace(/[\r\n]+/g, " ").trim();
-  if (!clean) return "Done";
-  let json: unknown = clean;
-  try {
-    json = parseGatewayText(clean);
-  } catch {
-    if (/^<|error|fail|exception/i.test(clean)) throw new ApiError(fallback, "server");
-    return clean.replace(/^"|"$/g, "");
-  }
-  const v = asJson(json);
-  if (isObj(v)) {
-    const ok = v.Success ?? v.success;
-    const message = String(v.Message ?? v.message ?? "").trim();
-    if (ok === false) throw new ApiError(message || fallback, "server");
-    return message || "Done";
-  }
-  if (typeof v === "string" && /fail|error|not\s/i.test(v)) throw new ApiError(v, "server");
-  return typeof v === "string" ? v : "Done";
-}
-
 async function rateGet(endpoint: string): Promise<unknown> {
   try {
     return await gatewayGet(endpoint, 0);
@@ -109,7 +90,8 @@ export function toShownDate(d: string): string {
 }
 
 export async function getSavedRateList(vlcId: string, status: string): Promise<SavedRate[]> {
-  const json = await rateGet(`/dairy/dairy/getSavedRateList?rateid=${q(vlcId)}&status=${q(status)}`);
+  // DPU API: GET https://dpu.shivinfotech.co.in/api/Login/getSavedRateList?rateid=&status=
+  const json = await dpuGet(`/Login/getSavedRateList?rateid=${q(vlcId)}&status=${q(status)}`, 0);
   return rowsOf(json)
     .map((r): SavedRate => {
       const date = pick(r, ["date", "ratedate", "effectivedate", "edate"]);
@@ -207,39 +189,73 @@ export interface RateUpload {
   currentrate?: string;
 }
 
-function rateForm(body: RateUpload): FormData {
-  const f = new FormData();
-  f.append("json", body.json);
-  f.append("stationid", body.stationid);
-  f.append("milktype", body.milktype);
-  f.append("shift", body.shift);
-  f.append("trdate", body.effectivedate);
-  f.append("currentrate", body.currentrate?.trim() ? body.currentrate : "0");
-  return f;
-}
-
+// DPU API: POST https://dpu.shivinfotech.co.in/api/Login/RateExcel
+// Body { "Payload": "<XOR + base64 text>" }. Layout confirmed with the server: the old portal's form fields inside the Payload.
 export async function saveRateExcel(body: RateUpload): Promise<string> {
-  const root = BASE_URL || "https://smartx.shivinfotech.co.in";
-  let text: string;
+  let chart: unknown[] = [];
   try {
-    text = await gatewayText(
-      `${root}/gateway/Interceptor?path=/home/rateexcel`,
-      { method: "POST", body: rateForm(body) },
-      0,
-      true,
-    );
-  } catch (first) {
-    if (first instanceof ApiError && first.kind === "auth") throw first;
-    try {
-      text = await gatewayText("/home/rateexcel", { method: "POST", body: rateForm(body) });
-    } catch {
-      throw first;
-    }
+    const parsed: unknown = JSON.parse(body.json);
+    if (Array.isArray(parsed)) chart = parsed;
+  } catch {
+    /* chart stays empty */
   }
+  if (!chart.length) throw new ApiError("The rate file has no rows to upload.", "parse");
+
+  const current = body.currentrate?.trim() ? body.currentrate : "0";
+  const iso = body.effectivedate;
+  const endpoint = "/Login/RateExcel";
+  const enc = (v: unknown) => encryptedShapes(v)[0];
+  const PASCAL: Record<string, string> = {
+    json: "Json", stationid: "StationId", milktype: "MilkType", shift: "Shift", trdate: "TrDate",
+    effectivedate: "EffectiveDate", currentrate: "CurrentRate",
+  };
+  const pascal = (o: Record<string, unknown>) =>
+    Object.fromEntries(Object.entries(o).map(([k, v]) => [PASCAL[k] ?? k, v]));
+
+  // Exactly what the old working portal sends (form fields json, stationid, milktype, shift, trdate, ...).
+  const portal = {
+    json: body.json,
+    stationid: body.stationid,
+    milktype: body.milktype,
+    shift: body.shift,
+    trdate: iso,
+    effectivedate: iso,
+    currentrate: current,
+  };
+
+  // The server wants { "Payload": "<XOR + base64>" } (same scheme as its replies); the object inside has the same
+  // field names as the old portal's form (json, stationid, milktype, shift, trdate ...). Confirmed working: "xor-portal-exact".
+  const xor = (v: unknown) => ({ Payload: encryptXorPayload(v) });
+  const attempts: SaveAttempt[] = [
+    { label: "xor-portal-exact", path: endpoint, body: xor(portal) },
+    { label: "xor-portal-exact-pascal", path: endpoint, body: xor(pascal(portal)) },
+    { label: "xor-chart-only", path: endpoint, body: xor(chart) },
+    { label: "portal-exact", path: endpoint, body: enc(portal) },
+  ];
+
+  const message = await dpuSaveAttempts("RateExcel", attempts);
   clearRequestMemo();
-  return assertDone(text, "The rate chart could not be saved.");
+  return message || "Done";
 }
 
+// The two PUT endpoints below take their values in the URL, but the server answers 415 (Unsupported Media Type) to a
+// PUT that has no JSON body. So they are sent with Content-Type: application/json and a body. Which body the server
+// wants is not published, so the bodies are tried in order (only 400 / 415 / 422 moves on to the next one) and the one
+// that works is remembered.
+const cap = (k: string) => k.charAt(0).toUpperCase() + k.slice(1);
+const putAttempts = (path: string, params: Record<string, string>): SaveAttempt[] => {
+  const xor = (v: unknown) => ({ Payload: encryptXorPayload(v) });
+  return [
+    // the server answered "The Payload field is required" to an empty body and "not a valid Base-64 string" to AES text,
+    // so Payload must be XOR + base64 text. The values also stay in the URL.
+    { label: "xor-params", path, body: xor(params) },
+    { label: "xor-params-pascal", path, body: xor(Object.fromEntries(Object.entries(params).map(([k, v]) => [cap(k), v]))) },
+    { label: "xor-empty-object", path, body: xor({}) },
+    { label: "xor-query-text", path, body: xor(new URLSearchParams(params).toString()) },
+  ];
+};
+
+// DPU API: PUT https://dpu.shivinfotech.co.in/api/Login/updateCollectionRate?vlccid=&rateDate=&type=&rateid=&fromdate=&todate=
 export async function updateRate(p: {
   vlccid: string;
   rateDate: string;
@@ -248,25 +264,35 @@ export async function updateRate(p: {
   fromdate: string;
   todate: string;
 }): Promise<string> {
-  const text = await gatewayText(
-    `/dairy/dairy/updateCollectionRate?vlccid=${q(p.vlccid)}&rateDate=${q(p.rateDate)}&type=${q(p.type)}&rateid=${q(p.rateid)}&fromdate=${q(p.fromdate)}&todate=${q(p.todate)}`,
-    { method: "GET" },
+  const message = await dpuSaveAttempts(
+    "updateCollectionRate",
+    putAttempts(
+      `/Login/updateCollectionRate?vlccid=${q(p.vlccid)}&rateDate=${q(p.rateDate)}&type=${q(p.type)}&rateid=${q(p.rateid)}&fromdate=${q(p.fromdate)}&todate=${q(p.todate)}`,
+      { ...p },
+    ),
+    "PUT",
   );
-  return assertDone(text, "The collection rate could not be updated.");
+  clearRequestMemo();
+  return message || "Done";
 }
 
+// DPU API: PUT https://dpu.shivinfotech.co.in/api/Login/dpuSyncAsync?status=&villageid=&rateid=&type=
 export async function syncAsyncRate(p: {
   status: string;
   villageid: string;
   rateid: string;
   type: string;
 }): Promise<string> {
-  const text = await gatewayText(
-    `/dairy/dairy/dpuSyncAsync?status=${q(p.status)}&villageid=${q(p.villageid)}&rateid=${q(p.rateid)}&type=${q(p.type)}`,
-    { method: "GET" },
+  const message = await dpuSaveAttempts(
+    "dpuSyncAsync",
+    putAttempts(
+      `/Login/dpuSyncAsync?status=${q(p.status)}&villageid=${q(p.villageid)}&rateid=${q(p.rateid)}&type=${q(p.type)}`,
+      { ...p },
+    ),
+    "PUT",
   );
   clearRequestMemo();
-  return assertDone(text, "The rate could not be synced.");
+  return message || "Done";
 }
 
 export interface RateStatusRow {

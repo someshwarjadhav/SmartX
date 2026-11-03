@@ -1,12 +1,15 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
-import { ArrowRight, CalendarDays, FileSpreadsheet, FileText, Search, SearchX, SlidersHorizontal } from 'lucide-react';
-import { useMilkFarmerEntries } from '../../hooks/useMilkReportData';
+import { ArrowRight, CalendarDays, Search, SearchX, SlidersHorizontal } from 'lucide-react';
+import { useMilkFarmerEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
+import { reportActions } from '../../components/ui/reportActions';
+import { PartialNotice } from '../../components/ui/PartialNotice';
+import type { ExportTable } from '../../lib/exporters';
 import { TextField } from '../../components/ui/Fields';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useReportTable } from '../../hooks/useSessionData';
@@ -16,7 +19,6 @@ import { TableToolbar } from '../../components/ui/TableToolbar';
 import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
-import { exportExcel, exportPDF, type ExportTable } from '../../lib/exporters';
 import { fmtDate, nf, toISO } from '../../lib/format';
 
 /* ---------- Types ---------- */
@@ -109,9 +111,10 @@ const UnionwiseCollection: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
+  const centres = useMilkCenterOptions();
   const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both' }, submitted);
   const loading = live.loading;
-  const rows = useMemo(() => { const groups = new Map<string, typeof live.rows>(); for (const r of live.rows) { const key = `${r.plant}|${r.stationId}`; groups.set(key, [...(groups.get(key) ?? []), r]); } return [...groups].map(([key, list]) => { const first=list[0]; const qty=list.reduce((a,r)=>a+r.litres,0); const amount=list.reduce((a,r)=>a+r.amount,0); return { id:key, union:first?.plant ?? '', society:first?.centre ?? first?.stationId ?? '', farmer:new Set(list.map((r)=>r.farmerId)).size, qty, avgFat:qty?list.reduce((a,r)=>a+r.fat*r.litres,0)/qty:0, avgSnf:qty?list.reduce((a,r)=>a+r.snf*r.litres,0)/qty:0, avgRate:qty?amount/qty:0, amount }; }); }, [live.rows]);
+  const rows = useMemo(() => { const groups = new Map<string, typeof live.rows>(); for (const r of live.rows) { const key = `${r.plant}|${r.stationId}`; groups.set(key, [...(groups.get(key) ?? []), r]); } return [...groups].map(([key, list]) => { const first=list[0]; const qty=list.reduce((a,r)=>a+r.litres,0); const amount=list.reduce((a,r)=>a+r.amount,0); return { id:key, union:centres.find((c) => c.mccId === first?.plant)?.plantName || first?.plant || '', society:centres.find((c) => c.id === first?.stationId)?.label || first?.centre || first?.stationId || '', farmer:new Set(list.map((r)=>r.farmerId)).size, qty, avgFat:qty?list.reduce((a,r)=>a+r.fat*r.litres,0)/qty:0, avgSnf:qty?list.reduce((a,r)=>a+r.snf*r.litres,0)/qty:0, avgRate:qty?amount/qty:0, amount }; }); }, [live.rows, centres]);
   const pager = usePagination(rows);
 
   const submit = () => {
@@ -143,19 +146,7 @@ const UnionwiseCollection: React.FC = () => {
     };
   };
 
-  const exportAs = (label: string, run: (t: ExportTable) => void | Promise<void>) => async () => {
-    try {
-      await run(buildTable());
-      toast.show(`Exported ${rows.length} rows as ${label}`);
-    } catch {
-      toast.show('Export failed. Please try again.');
-    }
-  };
-
-  const actions: ExportAction[] = [
-    { id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary', run: exportAs('Excel', exportExcel) },
-    { id: 'pdf', label: 'PDF Export', icon: FileText, variant: 'danger', run: exportAs('PDF', exportPDF) },
-  ];
+  const actions: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print', 'csv'] });
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -164,6 +155,7 @@ const UnionwiseCollection: React.FC = () => {
       <UnionwiseFilters value={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
+      <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />
 
       <Panel bodyClassName="!p-0">
         {!submitted ? (

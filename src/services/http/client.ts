@@ -4,7 +4,7 @@ import {
   REQUEST_TIMEOUT_MS,
 } from "../config";
 import { getSession } from "../session";
-import { decryptPayload } from "../../lib/portal/crypto";
+import { decryptPayload, decryptXorPayload } from "../../lib/portal/crypto";
 import { ApiError, EmptyReplyError } from "./errors";
 
 export type Priority = 0 | 1 | 2;
@@ -46,6 +46,8 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 
 const ENCRYPTED = /^[A-Za-z0-9+/=]{8,}:[A-Za-z0-9+/=]{16,}$/;
 const looksEncrypted = (s: string) => ENCRYPTED.test(s.trim());
+const looksXorEncrypted = (s: string) =>
+  /^[A-Za-z0-9+/=_-]{16,}$/.test(s.trim()) && !s.includes(":");
 
 function decryptReply(v: unknown): unknown {
   const open = (s: string): unknown => {
@@ -66,6 +68,13 @@ function decryptReply(v: unknown): unknown {
       const inner = v[k];
       if (typeof inner === "string" && looksEncrypted(inner))
         return decryptReply(open(inner));
+      if (typeof inner === "string" && looksXorEncrypted(inner)) {
+        try {
+          return decryptReply(decryptXorPayload(inner));
+        } catch {
+          // Leave the original response unchanged if this value is not the portal's encrypted payload.
+        }
+      }
     }
   }
   return v;
@@ -107,6 +116,28 @@ export function listOf<T>(json: unknown): T[] {
     }
     const data = json.Data ?? json.data;
     if (Array.isArray(data)) return data as T[];
+    // DPU API: { Success: true, Message: "[{...},{...}]" } - the list arrives as JSON TEXT inside Message (or Data).
+    for (const cand of [json.Message, json.message, data]) {
+      if (typeof cand !== "string") continue;
+      const t = cand.trim();
+      if (!t) continue;
+      if (/^[\[{]/.test(t)) {
+        try {
+          let parsed: unknown = JSON.parse(t);
+          if (typeof parsed === "string") parsed = JSON.parse(parsed);
+          if (Array.isArray(parsed)) return parsed as T[];
+          if (isObj(parsed)) {
+            const inner = parsed.Data ?? parsed.data ?? parsed.Message ?? parsed.message;
+            if (Array.isArray(inner)) return inner as T[];
+            if (typeof inner === "string") return listOf<T>({ Success: true, Message: inner });
+          }
+        } catch {
+          /* not JSON - fall through */
+        }
+      }
+    }
+    // Success with a plain message such as "No Record Found" = empty list
+    if (ok !== false && (data === null || data === undefined || data === "" || /no\s*(record|data)/i.test(msg))) return [];
   }
   throw new ApiError("The server reply has an unexpected shape.", "parse");
 }

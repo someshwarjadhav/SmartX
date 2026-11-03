@@ -76,6 +76,7 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
   '/settings/dpu-settings': SlidersHorizontal,
   '/settings/eko-milk-settings': SlidersHorizontal,
   '/administrator/user-access': LockOpen,
+  '/administrator/bill-unfreeze': LockOpen,
   '/farmers': UsersRound,
   '/centers': Store,
   '/rates': Tags,

@@ -1,4 +1,5 @@
 import { gatewayPostJson } from '../http/client';
+import { dpuGet } from '../http/dpu';
 import { pick, rowsFrom } from '../utils/loose';
 import type { Center } from '../mappers/center.mapper.ts';
 
@@ -7,7 +8,6 @@ export const getCenter = (id: string): Promise<unknown> => gatewayPostJson('/hom
 
 const ID_KEYS = ['vlccid', 'vlcid', 'vlccode', 'centerid', 'centreid', 'villageid', 'dcsid', 'dcscode', 'id', 'code'];
 const NAME_KEYS = ['villagename', 'vlccname', 'vlcname', 'centername', 'centrename', 'dcsname', 'name', 'village'];
-
 
 
 export const cleanCentreName = (n: string): string => n.replace(/\s*\|\s*[\w-]*\s*$/, '').replace(/\s+/g, ' ').trim();
@@ -34,3 +34,10 @@ export function parseCenters(json: unknown): Center[] {
   }
   return out;
 }
+
+/**
+ * Centre list for the report dropdowns: DPU `GET /api/Login/FarmerCollectionDpu?id=<station id>`
+ * (replaces the old STIPL `/home/farmercollectiondpu` call used only by the report pages).
+ */
+export const getDpuCenter = (id: string, param: 'id' | 'stationid' | 'userid' | 'mccid' = 'id'): Promise<unknown> =>
+  dpuGet(`/Login/FarmerCollectionDpu?${param}=${encodeURIComponent(id)}`, 0);
