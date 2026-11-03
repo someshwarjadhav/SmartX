@@ -363,7 +363,12 @@ export const NAV_MODULES: NavModule[] = [
         "payment-summary-single-code",
         "/billing/bank-payment-summary",
       ),
-      form("VLC Milk Bill", "/billing/vlc-milk-bill", "vlc-milk-bill"),
+      form(
+        "VLC Milk Bill",
+        "/billing/vlc-milk-bill",
+        "vlc-milk-bill",
+        "/billing/vlc-milk-bill",
+      ),
     ],
   },
   {
