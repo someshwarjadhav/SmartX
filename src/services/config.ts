@@ -6,6 +6,9 @@ export const STIPL_BASE = (import.meta.env.VITE_STIPL_BASE_URL || 'https://stipl
 
 export const REPORT_CONFIG_URL = import.meta.env.VITE_REPORT_CONFIG_URL || 'https://stipldrive.ddns.net/home/userReportConfig';
 
+/** Menu API (start of the url). The user id is added as ?userid=... */
+export const MENU_URL = import.meta.env.VITE_MENU_URL || 'https://dpu.shivinfotech.co.in/api/Login/getmenu';
+
 export const environment = {
   staticIP: STIPL_BASE,
 };

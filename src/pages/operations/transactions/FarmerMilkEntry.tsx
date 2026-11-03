@@ -104,7 +104,6 @@ const FarmerMilkEntry: React.FC = () => {
       })
       .catch((e) => {
         if (!alive) return;
-        console.warn("[farmer milk] getRate failed", e);
         setRateError(e instanceof ApiError ? e.message : "the request failed.");
       });
     return () => {

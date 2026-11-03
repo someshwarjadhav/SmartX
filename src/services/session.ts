@@ -35,9 +35,6 @@ export function setSession(s: { vlccIds?: string[]; vlccNames?: Record<string, s
   }
   const fromLogin = !!s.vlccIds?.length;
   const vlccIds = fromLogin ? s.vlccIds! : splitIds(ENV_VLCC_IDS);
-  if (import.meta.env.DEV) {
-    console.info('[smartx] VLC ids:', vlccIds, fromLogin ? '(from login)' : vlccIds.length ? '(from VITE_VLCC_IDS in .env.local)' : '(NONE: not in login response, VITE_VLCC_IDS empty or the dev server was not restarted)', '| station:', s.stationId || ENV_STATION_ID || '-', '| mcc used:', ENV_MCC_ID || vlccIds[0]?.slice(0, 3) || s.mccId || '-', s.mccId && s.mccId !== (ENV_MCC_ID || vlccIds[0]?.slice(0, 3)) ? `(login record says ${s.mccId}: ignored)` : '');
-  }
   current = {
     vlccIds,
     vlccNames: { ...VILLAGE_NAMES, ...(s.vlccNames ?? {}) },

@@ -1,18 +1,18 @@
 import { ALL_MILK_CODE, FARMER_MILK_CODES } from '../config';
 import { gatewayPostJson, gatewayText, listOf, parseGatewayText, type Priority } from '../http/client';
+import { dpuUrl, openDpuReply } from '../http/dpu';
 import { adaptiveCollection, collectionWaves, fanOut, needSession, type CollectionParams, type Emit } from '../http/fanout';
 import type { RawFarmerRow, RawLoose } from '../types/raw';
 import type { QueryData } from '../http/fanout';
 import { apiDate } from '../utils/date';
 import { ApiError } from '../http/errors';
-import { decryptPayload, decryptXorPayload } from '../../lib/portal/crypto';
 
 /* ------------------------------------------------------------------ */
 /*  DPU Farmer Collection (manual test)                                */
 /*  Set DPU_FARMER_COLLECTION to false to go back to /home/farmercollection */
 /* ------------------------------------------------------------------ */
 export const DPU_FARMER_COLLECTION = true;
-export const DPU_FARMER_COLLECTION_URL = 'https://dpu.shivinfotech.co.in/api/Login/FarmerCollection';
+export const DPU_FARMER_COLLECTION_URL = dpuUrl('/Login/FarmerCollection');
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const nk = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -122,38 +122,6 @@ function rowsOfReply(reply: unknown): RawLoose[] {
 const dpuMilkCodes = (m: CollectionParams['milk']): string[] =>
   m !== 'ALL' ? [m] : ALL_MILK_CODE ? [ALL_MILK_CODE] : FARMER_MILK_CODES;
 
-/**
- * The DPU API answers { success: true, data: "<encrypted>" }.
- * Opens `data` (XOR+base64 with VITE_ENCRYPTION_KEY, or AES "cipher:iv") until real JSON is left.
- */
-const B64 = /^[A-Za-z0-9+/_-]{16,}={0,2}$/;
-const AES_PACKED = /^[A-Za-z0-9+/=]{8,}:[A-Za-z0-9+/=]{16,}$/;
-
-function openDpuReply(v: unknown, depth = 0): unknown {
-  if (depth > 4) return v;
-  if (typeof v === 'string') {
-    const t = v.replace(/\s+/g, '');
-    let opened: unknown = v;
-    try {
-      if (AES_PACKED.test(t)) opened = decryptPayload(t);
-      else if (B64.test(t)) opened = decryptXorPayload(t);
-    } catch {
-      return v;
-    }
-    return typeof opened === 'object' && opened !== null ? openDpuReply(opened, depth + 1) : v;
-  }
-  if (isObj(v)) {
-    for (const k of Object.keys(v)) {
-      if (!['data', 'response', 'result', 'payload'].includes(k.toLowerCase())) continue;
-      const inner = v[k];
-      if (typeof inner !== 'string') continue;
-      const opened = openDpuReply(inner, depth + 1);
-      if (opened !== inner) return opened;
-    }
-  }
-  return v;
-}
-
 async function dpuCall(body: Record<string, string>): Promise<unknown> {
   const text = await gatewayText(
     DPU_FARMER_COLLECTION_URL,
@@ -162,10 +130,6 @@ async function dpuCall(body: Record<string, string>): Promise<unknown> {
     true,
   );
   const reply = openDpuReply(parseGatewayText(text));
-  if (import.meta.env.DEV) {
-    console.info('[dpu] FarmerCollection sent:', body);
-    console.info('[dpu] FarmerCollection decrypted JSON:', reply); // <- yahan decrypt hua JSON dikhega (F12 > Console)
-  }
   return reply;
 }
 
@@ -185,7 +149,6 @@ function fetchDpuFarmerCollection(p: CollectionParams, emit?: Emit<RawFarmerRow>
       ).map((r) => toRawFarmer(r, id, code, p.shift));
       // the pages match rows to centres by vlccid: keep it one of the ids that were asked for
       for (const r of rows) if (!p.vlccIds.includes(String(r.vlccid))) r.vlccid = id;
-      if (import.meta.env.DEV) console.info(`[dpu] ${id}/${code}: ${rows.length} rows`, rows[0]);
       return rows;
     }),
   );

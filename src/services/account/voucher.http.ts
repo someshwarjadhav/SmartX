@@ -161,13 +161,9 @@ export async function postVoucher(
       const text = await sendPath(path, () => attempt.build(sent));
       assertNotError(text);
       preferred = i;
-      if (import.meta.env.DEV)
-        console.info(`[voucher] saved using "${attempt.name}"`);
       return text;
     } catch (e) {
       lastError = e;
-      if (import.meta.env.DEV)
-        console.warn(`[voucher] "${attempt.name}" failed`, e);
       if (!retryable(e)) throw e;
       if (count && before >= 0) {
         try {

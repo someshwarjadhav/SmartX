@@ -400,18 +400,6 @@ export async function loginApi(
     decoded = json;
   }
 
-  if (import.meta.env.DEV) {
-    const rec = isObj(decoded) ? decoded : {};
-    const data = Object.keys(rec).find((k) => k.toLowerCase() === "data");
-    const first =
-      data && Array.isArray(rec[data]) ? (rec[data] as unknown[])[0] : rec;
-    console.log(
-      "[login] response keys:",
-      Object.keys(rec),
-      "| user record keys:",
-      isObj(first) ? Object.keys(first) : first,
-    );
-  }
 
   if (!ok) {
     const message = isObj(decoded)
