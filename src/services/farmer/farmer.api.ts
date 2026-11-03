@@ -37,6 +37,8 @@ const ALIASES: Record<keyof RawFarmerRow, string[]> = {
   villagename: ['villagename', 'vlccname', 'dcsname', 'centername'],
   villageagentaddress: ['villageagentaddress', 'address'],
   beneficiaryname: ['beneficiaryname', 'centercode', 'customstationid'],
+  stationcode: ['stationcode', 'customstationid', 'centercode', 'stationid'],
+  branchid: ['branchid', 'branchcode'],
 };
 
 /** "2026-11-02T00:00:00" / "02/11/2026" -> "02 Nov 2026" (the format the pages read). */
@@ -144,7 +146,7 @@ function fetchDpuFarmerCollection(p: CollectionParams, emit?: Emit<RawFarmerRow>
         try {
           return await read(from, to);
         } catch {
-          await new Promise((r) => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, 200));
           return read(from, to);
         }
       };

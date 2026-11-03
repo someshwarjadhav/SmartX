@@ -38,6 +38,9 @@ export interface CollectionEntry {
   clr?: number;
   water?: number;
   village?: string;
+  /** Station Id as the portal prints it (falls back to stationId) */
+  stationCode?: string;
+  branchId?: string;
 }
 
 export const CENTRE_NAMES: string[] = CENTRES.map((c) => c.name);

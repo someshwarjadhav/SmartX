@@ -1,9 +1,25 @@
 
-export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money';
+export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money' | 'num2' | 'general';
+
+/**
+ * How the Total row is calculated for a column (Excel gets a real formula, PDF / CSV / print get the same value):
+ *  'sum'                 =SUM(column)
+ *  { wavg: col }         weighted average, weighted by column `col` (fat / snf by litres)
+ *  { ratio: [n, d] }     SUM(col n) / SUM(col d)   (average rate = amount / litres)
+ *  { diff: [a, b] }      total of column a minus total of column b
+ */
+export type TotalKind = 'sum' | { wavg: number } | { ratio: [number, number] } | { diff: [number, number] };
 
 export interface ExportColumn {
   header: string;
   type?: ColType;
+  total?: TotalKind;
+}
+
+/** Cells of column `col` are merged downwards while the columns listed in `by` keep the same value (grouped reports). */
+export interface MergeSpec {
+  col: number;
+  by: number[];
 }
 
 export interface ExportTable {
@@ -13,19 +29,92 @@ export interface ExportTable {
   columns: ExportColumn[];
   rows: Array<Array<string | number>>;
   totals?: Array<string | number>;
+  /** extra header row above the column names, e.g. DOC Collection / VLC Collection / Difference */
+  headerGroups?: Array<{ label: string; span: number }>;
+  /** vertical merges (Excel + PDF) for grouped reports */
+  merge?: MergeSpec[];
+}
+
+/** For rows in order: span of each run of equal keys (first row of a run = run length, the others = 0). */
+export function runSpans(keys: string[]): number[] {
+  const out: number[] = new Array(keys.length).fill(0);
+  let start = 0;
+  for (let i = 1; i <= keys.length; i++) {
+    if (i === keys.length || keys[i] !== keys[start]) {
+      out[start] = i - start;
+      start = i;
+    }
+  }
+  return out;
+}
+
+const spansFor = (rows: Array<Array<string | number>>, m: MergeSpec): number[] => runSpans(rows.map((r) => m.by.map((c) => String(r[c] ?? '')).join('\u0001')));
+
+const r2 = (n: number): number => Math.round(n * 100) / 100;
+
+/**
+ * Gives the Total row of a finished table real formulas, looking at the column names:
+ * Liter / Qty / Kg / Amount = SUM, Fat / Snf / Clr / Water = average weighted by Liter, Rate = Amount / Liter.
+ * Columns it does not know keep their fixed `totals` text.
+ */
+export function withFormulaTotals(t: ExportTable): ExportTable {
+  const find = (names: string[]): number => t.columns.findIndex((c) => names.includes(c.header.trim().toLowerCase()));
+  const qty = find(['liter', 'qty', 'total liter']);
+  const amount = find(['amount', 'total amount']);
+  const SUM = ['liter', 'qty', 'total liter', 'kg', 'amount', 'total amount', 'kg fat', 'kg snf', 'farmer'];
+  const AVG = ['fat', 'snf', 'clr', 'water', 'avg fat', 'avg. fat', 'avg snf', 'avg. snf'];
+  const RATE = ['rate', 'avg rate', 'avg. rate'];
+  return {
+    ...t,
+    columns: t.columns.map((c) => {
+      const h = c.header.trim().toLowerCase();
+      if (c.total) return c;
+      if (SUM.includes(h) && c.type && c.type !== 'text') return { ...c, total: 'sum' as const };
+      if (AVG.includes(h) && qty >= 0) return { ...c, total: { wavg: qty } };
+      if (RATE.includes(h) && qty >= 0 && amount >= 0) return { ...c, total: { ratio: [amount, qty] as [number, number] } };
+      return c;
+    }),
+  };
+}
+
+/** Total row values of a table (computed from the `total` kinds of its columns, else the fixed `totals`). */
+export function totalsOf(t: ExportTable): Array<string | number> | undefined {
+  if (!t.columns.some((c) => c.total)) return t.totals;
+  const col = (i: number): number[] => t.rows.map((r) => Number(r[i]) || 0);
+  const sum = (i: number): number => col(i).reduce((a, b) => a + b, 0);
+  const out: Array<string | number> = t.columns.map((c, i) => {
+    const k = c.total;
+    if (!k || (typeof k === 'object' && 'diff' in k)) return typeof t.totals?.[i] === 'string' ? (t.totals[i] as string) : '';
+    if (k === 'sum') return r2(sum(i));
+    if ('wavg' in k) {
+      const w = sum(k.wavg);
+      const v = col(i);
+      const wt = col(k.wavg);
+      return w ? r2(v.reduce((a, x, j) => a + x * (wt[j] ?? 0), 0) / w) : 0;
+    }
+    const d = sum(k.ratio[1]);
+    return d ? r2(sum(k.ratio[0]) / d) : 0;
+  });
+  t.columns.forEach((c, i) => {
+    const k = c.total;
+    if (k && typeof k === 'object' && 'diff' in k) out[i] = r2(Number(out[k.diff[0]]) - Number(out[k.diff[1]]));
+  });
+  if (out[0] === '') out[0] = 'Total';
+  return out;
 }
 
 const IN = 'en-IN';
 const num = (v: number, d: number): string => new Intl.NumberFormat(IN, { minimumFractionDigits: d, maximumFractionDigits: d }).format(v);
 
-const DECIMALS: Record<ColType, number | undefined> = { text: undefined, int: 0, dec1: 1, dec2: 2, money: 2 };
+const DECIMALS: Record<ColType, number | undefined> = { text: undefined, int: 0, dec1: 1, dec2: 2, money: 2, num2: 2, general: undefined };
 
 function show(v: string | number, type: ColType | undefined, rupee: string): string {
   if (typeof v !== 'number') return String(v ?? '');
   switch (type) {
     case 'int': return num(v, 0);
     case 'dec1': return num(v, 1);
-    case 'dec2': return num(v, 2);
+    case 'dec2':
+    case 'num2': return num(v, 2);
     case 'money': return `${rupee}${num(v, 2)}`;
     default: return String(v);
   }
@@ -115,7 +204,8 @@ function csvValue(v: string | number, type: ColType | undefined): string | numbe
 export function exportCSV(t: ExportTable): void {
   const line = (r: Array<string | number>) => r.map((v, i) => csvCell(csvValue(v, t.columns[i]?.type))).join(',');
   const lines = [t.columns.map((c) => csvCell(c.header)).join(','), ...t.rows.map(line)];
-  if (t.totals) lines.push(line(t.totals));
+  const tot = totalsOf(t);
+  if (tot) lines.push(line(tot));
   save(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), `${t.filename}.csv`);
 }
 
@@ -123,44 +213,118 @@ export function exportCSV(t: ExportTable): void {
 /*  Excel                                                              */
 /* ------------------------------------------------------------------ */
 
-export async function exportExcel(t: ExportTable): Promise<void> {
-  const XLSX = await import('xlsx');
-  const aoa: Array<Array<string | number>> = [[t.title], [t.subtitle ?? ''], [`Generated ${stamp()}`], [], t.columns.map((c) => c.header), ...t.rows];
-  if (t.totals) aoa.push(t.totals);
+const XLSX_FORMAT: Record<ColType, string | undefined> = { text: undefined, int: '#,##0', dec1: '#,##0.0', dec2: '#,##0.00', money: '"₹"#,##0.00', num2: '0.00', general: undefined };
+
+/**
+ * One worksheet for every Excel export.
+ *  titleBlock: title / filter / generated lines on top (New style report); false = plain header on row 1 (STIPL old / new Excel)
+ *  Total row = real Excel formulas (=SUM, weighted average ...) so the sheet keeps working when someone edits a value.
+ */
+function buildSheet(XLSX: typeof import('xlsx'), t: ExportTable, titleBlock: boolean) {
+  const ncol = t.columns.length;
+  const top: Array<Array<string | number>> = [];
+  if (titleBlock) top.push([t.title], [t.subtitle ?? ''], [`Generated ${stamp()}`], []);
+  const groupRow = t.headerGroups ? top.length : -1;
+  if (t.headerGroups) {
+    const row: string[] = [];
+    for (const g of t.headerGroups) {
+      row.push(g.label);
+      for (let i = 1; i < g.span; i++) row.push('');
+    }
+    while (row.length < ncol) row.push('');
+    top.push(row);
+  }
+  const headerRow = top.length;
+  top.push(t.columns.map((c) => c.header));
+  const first = top.length; // 0-based index of the first data row
+  const n = t.rows.length;
+  const aoa: Array<Array<string | number>> = [...top, ...t.rows];
+  const totals = n > 0 ? totalsOf(t) : undefined;
+  const totalRow = first + n; // 0-based
+  if (totals) aoa.push(totals);
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
+  // widths
   ws['!cols'] = t.columns.map((c, i) => {
-    const longest = Math.max(c.header.length, ...t.rows.slice(0, 200).map((r) => String(r[i] ?? '').length));
-    return { wch: Math.min(34, Math.max(9, longest + 2)) };
+    const longest = Math.max(c.header.length, ...t.rows.map((r) => String(r[i] ?? '').length));
+    return { wch: Math.min(40, Math.max(10, longest + 3)) };
   });
-  ws['!merges'] = [0, 1, 2].map((r) => ({ s: { r, c: 0 }, e: { r, c: Math.max(0, t.columns.length - 1) } }));
-  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 4, c: 0 }, e: { r: 4 + t.rows.length, c: Math.max(0, t.columns.length - 1) } }) };
 
-  const fmt: Record<ColType, string | undefined> = { text: undefined, int: '#,##0', dec1: '#,##0.0', dec2: '#,##0.00', money: '"₹"#,##0.00' };
-  const first = 5;
-  const last = first + t.rows.length + (t.totals ? 1 : 0);
+  // merges: title lines, header groups, grouped (vertical) cells
+  const merges: Array<{ s: { r: number; c: number }; e: { r: number; c: number } }> = [];
+  if (titleBlock) for (const r of [0, 1, 2]) merges.push({ s: { r, c: 0 }, e: { r, c: Math.max(0, ncol - 1) } });
+  if (t.headerGroups && groupRow >= 0) {
+    let c = 0;
+    for (const g of t.headerGroups) {
+      if (g.span > 1) merges.push({ s: { r: groupRow, c }, e: { r: groupRow, c: c + g.span - 1 } });
+      c += g.span;
+    }
+  }
+  for (const m of t.merge ?? []) {
+    spansFor(t.rows, m).forEach((span, i) => {
+      if (span > 1) merges.push({ s: { r: first + i, c: m.col }, e: { r: first + i + span - 1, c: m.col } });
+    });
+  }
+  if (merges.length) ws['!merges'] = merges;
+  if (titleBlock && !t.merge?.length) {
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: headerRow, c: 0 }, e: { r: headerRow + n, c: Math.max(0, ncol - 1) } }) };
+  }
+  if (!titleBlock && !t.merge?.length && n > 0) {
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: headerRow, c: 0 }, e: { r: headerRow + n, c: Math.max(0, ncol - 1) } }) };
+  }
+
+  // number formats for the data rows and the total row
+  const last = first + n + (totals ? 1 : 0);
   for (let r = first; r < last; r++) {
     t.columns.forEach((c, ci) => {
-      const f = fmt[c.type ?? 'text'];
+      const f = XLSX_FORMAT[c.type ?? 'text'];
       const cell = ws[XLSX.utils.encode_cell({ r, c: ci })];
       if (f && cell && cell.t === 'n') cell.z = f;
     });
   }
 
+  // total row: formulas (cached values are kept so viewers that do not recalculate still show the numbers)
+  if (totals) {
+    const L = (i: number): string => XLSX.utils.encode_col(i);
+    const rng = (i: number): string => `${L(i)}${first + 1}:${L(i)}${first + n}`;
+    const tr = totalRow + 1; // 1-based
+    t.columns.forEach((c, ci) => {
+      const k = c.total;
+      if (!k) return;
+      let f: string;
+      if (k === 'sum') f = `SUM(${rng(ci)})`;
+      else if ('wavg' in k) f = `IFERROR(SUMPRODUCT(${rng(k.wavg)},${rng(ci)})/SUM(${rng(k.wavg)}),0)`;
+      else if ('ratio' in k) f = `IFERROR(SUM(${rng(k.ratio[0])})/SUM(${rng(k.ratio[1])}),0)`;
+      else f = `${L(k.diff[0])}${tr}-${L(k.diff[1])}${tr}`;
+      const addr = XLSX.utils.encode_cell({ r: totalRow, c: ci });
+      const z = XLSX_FORMAT[c.type ?? 'text'] ?? '0.00';
+      ws[addr] = { t: 'n', v: Number(totals[ci]) || 0, f, z };
+    });
+  }
+  return ws;
+}
+
+/** New style Excel: title block, filters line, header, data, total row with formulas. */
+export async function exportExcel(t: ExportTable): Promise<void> {
+  const XLSX = await import('xlsx');
+  // only header row + data + total row (no title / filter / generated lines)
+  const ws = buildSheet(XLSX, t, false);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, t.title.slice(0, 31).replace(/[\\/?*[\]:]/g, ' '));
   XLSX.writeFile(wb, `${t.filename}.xlsx`);
 }
 
-export async function exportLegacyExcel(t: ExportTable): Promise<void> {
+/** STIPL style Excel (old / new export): header on row 1, data below, total row with formulas, sheet "Sheet1". */
+export async function exportPlainExcel(t: ExportTable): Promise<void> {
   const XLSX = await import('xlsx');
-  const aoa: Array<Array<string | number>> = [t.columns.map((c) => c.header), ...t.rows];
-  if (t.totals) aoa.push(t.totals);
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const ws = buildSheet(XLSX, t, false);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  XLSX.writeFile(wb, `${t.filename}.xls`, { bookType: 'xls' });
+  XLSX.writeFile(wb, `${t.filename}.xlsx`);
 }
+
+/** kept for older pages: same as the plain STIPL sheet */
+export const exportLegacyExcel = exportPlainExcel;
 
 /* ------------------------------------------------------------------ */
 /*  PDF                                                                */
@@ -197,8 +361,25 @@ export async function exportPDF(t: ExportTable): Promise<void> {
   };
   head();
 
-  const body = t.rows.map((r) => r.map((v, i) => show(v, t.columns[i]?.type, 'Rs ')));
-  const foot = t.totals ? [t.totals.map((v, i) => show(v, t.columns[i]?.type, 'Rs '))] : undefined;
+  const spanOf = (t.merge ?? []).map((m) => ({ col: m.col, spans: spansFor(t.rows, m) }));
+  const body = t.rows.map((r, ri) => {
+    const cells: Array<string | { content: string; rowSpan: number; styles: { valign: 'middle' } }> = [];
+    r.forEach((v, i) => {
+      const m = spanOf.find((x) => x.col === i);
+      const text = show(v, t.columns[i]?.type, 'Rs ');
+      if (!m) return void cells.push(text);
+      const span = m.spans[ri] ?? 0;
+      if (span === 0) return; // covered by the merged cell above
+      cells.push(span > 1 ? { content: text, rowSpan: span, styles: { valign: 'middle' } } : text);
+    });
+    return cells;
+  });
+  const totals = totalsOf(t);
+  const foot = totals ? [totals.map((v, i) => show(v, t.columns[i]?.type, 'Rs '))] : undefined;
+  const headRows = [
+    ...(t.headerGroups ? [t.headerGroups.map((g) => ({ content: g.label, colSpan: g.span, styles: { halign: 'center' as const } }))] : []),
+    t.columns.map((c) => c.header),
+  ];
   const align: Record<number, { halign: 'right' | 'left' }> = {};
   t.columns.forEach((c, i) => {
     align[i] = { halign: isNumeric(c.type) ? 'right' : 'left' };
@@ -208,7 +389,7 @@ export async function exportPDF(t: ExportTable): Promise<void> {
 
   autoTable(doc, {
     startY: t.subtitle ? 90 : 76,
-    head: [t.columns.map((c) => c.header)],
+    head: headRows,
     body,
     foot,
     showFoot: 'lastPage',
@@ -221,7 +402,8 @@ export async function exportPDF(t: ExportTable): Promise<void> {
     margin: { left: M, right: M, top: 40, bottom: 36 },
     didParseCell: (d) => {
       // header cells follow the numeric alignment of their column
-      if (d.section === 'head' || d.section === 'foot') d.cell.styles.halign = isNumeric(t.columns[d.column.index]?.type) ? 'right' : 'left';
+      if (d.section === 'head' && t.headerGroups && d.row.index === 0) d.cell.styles.halign = 'center';
+      else if (d.section === 'head' || d.section === 'foot') d.cell.styles.halign = isNumeric(t.columns[d.column.index]?.type) ? 'right' : 'left';
     },
     didDrawPage: (d) => {
       if (d.pageNumber > 1) {
@@ -310,7 +492,8 @@ export function printTable(t: ExportTable): void {
     `<${tag} class="${isNumeric(t.columns[i]?.type) ? 'r' : ''}">${esc(show(v, t.columns[i]?.type, '₹'))}</${tag}>`;
   const head = t.columns.map((c) => `<th class="${isNumeric(c.type) ? 'r' : ''}">${esc(c.header)}</th>`).join('');
   const body = t.rows.map((r) => `<tr>${r.map((v, i) => cell(v, i)).join('')}</tr>`).join('');
-  const foot = t.totals ? `<tfoot><tr>${t.totals.map((v, i) => cell(v, i)).join('')}</tr></tfoot>` : '';
+  const totals = totalsOf(t);
+  const foot = totals ? `<tfoot><tr>${totals.map((v, i) => cell(v, i)).join('')}</tr></tfoot>` : '';
   const landscape = t.columns.length > 6;
   printHTML(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.title)}</title><style>${printCss(p, landscape, t.columns.length > 10)}</style></head><body>
     <div class="bar"></div>

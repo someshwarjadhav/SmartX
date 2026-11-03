@@ -10,7 +10,6 @@ import {
 import { columnOrder, columnVisible } from "../services/report/report.api.ts";
 import type { Center } from "../services/mappers/center.mapper.ts";
 import type { LoginProfile } from "../services/auth/auth.api.ts";
-import type { Column } from "../components/ui/DataTable";
 import { COLUMN_ALIASES } from "../config/portal/reportAccess";
 
 export function useLoginData(): LoginProfile | null {
@@ -52,7 +51,7 @@ export function useReportColumns(report: string) {
  * plus helpers that cut the Excel / PDF / CSV arrays the same way. `report` = key of REPORT_INDEX.
  * The export arrays must be in the same order as `columns`.
  */
-export function useReportTable<T>(report: string, columns: Column<T>[]) {
+export function useReportTable<C extends { key: string }>(report: string, columns: C[]) {
   const shown = useReportColumns(report).arrange(columns, (c) => c.key, COLUMN_ALIASES);
   const idx = shown.map((c) => columns.indexOf(c));
   const pick = <A>(arr: A[]): A[] => idx.map((i) => arr[i] as A);

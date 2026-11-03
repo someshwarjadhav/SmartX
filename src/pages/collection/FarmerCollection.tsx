@@ -1,12 +1,12 @@
 import type * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ArrowRight, CalendarDays, Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Users } from 'lucide-react';
 import type { CollectionEntry } from '../../data/farmerCollection';
-import { useMilkFarmerEntries, useMilkCenterOptions, usePlantOptions } from '../../hooks/useMilkReportData';
+import { useMilkFarmerEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
-import type { ExportTable } from '../../lib/exporters';
+import type { ColType, ExportTable } from '../../lib/exporters';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { KindChip } from '../../components/ui/KindChip';
@@ -20,7 +20,7 @@ import { usePagination } from '../../hooks/usePagination';
 import { useReportColumns } from '../../hooks/useSessionData';
 import { useToast } from '../../hooks/useToast';
 import { cn } from '../../lib/cn';
-import { fmtDate, nf, toISO } from '../../lib/format';
+import { fmtDate, fmtDateDots, fmtDateLong, nf, time24, toISO } from '../../lib/format';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
 import { ReportLoader } from '../../components/ui/ReportLoader';
@@ -79,7 +79,7 @@ const FarmerCollectionFilters: React.FC<FilterProps> = ({ value, plantOptions, c
         }}
         className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
       >
-        <SelectField wrapperClassName="xl:col-span-3" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant, centre: 'all' })} options={plantOptions} />
+        <SelectField wrapperClassName="xl:col-span-3" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant, centre: '' })} options={plantOptions} />
         <SelectField wrapperClassName="xl:col-span-3" label="VLC Name" value={value.centre} onChange={(centre) => onChange({ centre })} options={centreOptions} />
 
         <Field label="Milk Type" className="xl:col-span-3">
@@ -96,7 +96,7 @@ const FarmerCollectionFilters: React.FC<FilterProps> = ({ value, plantOptions, c
         </div>
 
         <div className="flex items-end sm:col-span-2 xl:col-span-6">
-          <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
+          <Button type="submit" size="lg" disabled={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
             Submit
           </Button>
         </div>
@@ -109,15 +109,16 @@ const FarmerCollectionFilters: React.FC<FilterProps> = ({ value, plantOptions, c
 
 const defaults = (): CollectionFilters => {
   const today = toISO(new Date());
-  return { plant: 'all', centre: 'all', kind: 'both', shift: 'both', from: today, to: today };
+  // plant / centre '' = the first plant and its first centre (no "All" row in the dropdowns)
+  return { plant: '', centre: '', kind: 'both', shift: 'both', from: today, to: today };
 };
 
 const weighted = (rows: CollectionEntry[], pick: (r: CollectionEntry) => number, litres: number): number =>
   litres ? rows.reduce((a, r) => a + pick(r) * r.litres, 0) / litres : 0;
 
 const COLUMNS: Column<CollectionEntry>[] = [
-  { key: 'station', header: 'Station Id', cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationId}</span>, mobile: 'hidden' },
-  { key: 'date', header: 'Date', cell: (r) => <span className="tnum whitespace-nowrap">{fmtDate(r.date)}</span> },
+  { key: 'station', header: 'Station Id', cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationCode || r.stationId}</span>, mobile: 'hidden' },
+  { key: 'date', header: 'Date', cell: (r) => <span className="tnum whitespace-nowrap">{fmtDateLong(r.date)}</span> },
   {
     key: 'shift',
     header: 'Shift',
@@ -136,19 +137,19 @@ const COLUMNS: Column<CollectionEntry>[] = [
     cell: (r) => (
       <div className="min-w-0">
         <p className="truncate font-semibold">{r.farmer}</p>
-        <p className="tnum text-xs font-normal text-mute md:hidden">Station {r.stationId}</p>
+        <p className="tnum text-xs font-normal text-mute md:hidden">Station {r.stationCode || r.stationId}</p>
       </div>
     ),
     mobile: 'title',
   },
-  { key: 'centre', header: 'Centre (VLC)', cell: (r) => <span className="whitespace-nowrap">{r.centre}</span>, mobile: 'hidden' },
+  { key: 'centre', header: 'Station Name', cell: (r) => <span className="whitespace-nowrap">{r.centre}</span>, mobile: 'hidden' },
   { key: 'sample', header: 'Sample No', cell: (r) => <span className="tnum">{r.sampleNo ?? ''}</span>, mobile: 'hidden' },
-  { key: 'litres', header: 'Liter', align: 'right', cell: (r) => <span className="tnum font-semibold">{nf(r.litres, 1)}</span> },
-  { key: 'kg', header: 'Kg', align: 'right', cell: (r) => <span className="tnum">{nf(r.kg ?? 0, 1)}</span>, mobile: 'hidden' },
-  { key: 'fat', header: 'Fat', align: 'right', cell: (r) => <span className="tnum">{nf(r.fat, 1)}</span> },
-  { key: 'snf', header: 'Snf', align: 'right', cell: (r) => <span className="tnum">{nf(r.snf, 1)}</span> },
-  { key: 'clr', header: 'CLR', align: 'right', cell: (r) => <span className="tnum">{nf(r.clr ?? 0, 1)}</span>, mobile: 'hidden' },
-  { key: 'water', header: 'Water', align: 'right', cell: (r) => <span className="tnum">{nf(r.water ?? 0, 1)}</span>, mobile: 'hidden' },
+  { key: 'litres', header: 'Liter', align: 'right', cell: (r) => <span className="tnum font-semibold">{nf(r.litres, 2)}</span> },
+  { key: 'kg', header: 'Kg', align: 'right', cell: (r) => <span className="tnum">{nf(r.kg ?? 0, 2)}</span>, mobile: 'hidden' },
+  { key: 'fat', header: 'Fat', align: 'right', cell: (r) => <span className="tnum">{nf(r.fat, 2)}</span> },
+  { key: 'snf', header: 'Snf', align: 'right', cell: (r) => <span className="tnum">{nf(r.snf, 2)}</span> },
+  { key: 'clr', header: 'Clr', align: 'right', cell: (r) => <span className="tnum">{nf(r.clr ?? 0, 2)}</span>, mobile: 'hidden' },
+  { key: 'water', header: 'Water', align: 'right', cell: (r) => <span className="tnum">{nf(r.water ?? 0, 2)}</span>, mobile: 'hidden' },
   { key: 'time', header: 'Time', cell: (r) => <span className="tnum">{r.time}</span> },
   { key: 'rate', header: 'Rate', align: 'right', cell: (r) => <span className="tnum">₹{nf(r.rate, 2)}</span> },
   { key: 'amount', header: 'Amount', align: 'right', cell: (r) => <span className="tnum font-bold">₹{nf(r.amount, 2)}</span> },
@@ -162,7 +163,7 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   kind: ['milktype', 'milk'],
   farmerId: ['farmerid', 'farmercode'],
   name: ['name', 'farmername'],
-  centre: ['centre', 'centrevlc', 'vlc', 'vlcname', 'villagename'],
+  centre: ['centre', 'centrevlc', 'vlc', 'vlcname', 'villagename', 'stationname'],
   sample: ['sampleno', 'sample', 'sampleid'],
   litres: ['liter', 'litre', 'litres', 'qty'],
   kg: ['kg', 'weight'],
@@ -175,38 +176,103 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   amount: ['amount', 'amt'],
 };
 
-/** Export columns, same keys as COLUMNS, so hidden columns are also left out of Excel / PDF / CSV. */
-type ExportCol = { key: string; header: string; type?: 'dec1' | 'money'; value: (r: CollectionEntry) => string | number };
+/**
+ * Export columns for PDF / CSV / Print: same keys as COLUMNS, so columns hidden for this login are left out too.
+ * `total` = how the Total row is calculated (see TotalKind in lib/exporters).
+ */
+type ExportCol = { key: string; header: string; type?: ColType; total?: 'sum' | 'wavg' | 'ratio'; value: (r: CollectionEntry) => string | number };
 const EXPORT_COLS: ExportCol[] = [
-  { key: 'station', header: 'Station Id', value: (r) => r.stationId },
-  { key: 'date', header: 'Date', value: (r) => fmtDate(r.date) },
+  { key: 'station', header: 'Station Id', value: (r) => r.stationCode || r.stationId },
+  { key: 'date', header: 'Date', value: (r) => fmtDateLong(r.date) },
   { key: 'shift', header: 'Shift', value: (r) => r.shift },
   { key: 'kind', header: 'Milk Type', value: (r) => r.kind },
   { key: 'farmerId', header: 'Farmer Id', value: (r) => r.farmerId },
   { key: 'name', header: 'Name', value: (r) => r.farmer },
-  { key: 'centre', header: 'Centre (VLC)', value: (r) => r.centre },
+  { key: 'centre', header: 'Station Name', value: (r) => r.centre },
   { key: 'sample', header: 'Sample No', value: (r) => r.sampleNo ?? '' },
-  { key: 'litres', header: 'Liter', type: 'dec1', value: (r) => r.litres },
-  { key: 'kg', header: 'Kg', type: 'dec1', value: (r) => r.kg ?? 0 },
-  { key: 'fat', header: 'Fat', type: 'dec1', value: (r) => r.fat },
-  { key: 'snf', header: 'Snf', type: 'dec1', value: (r) => r.snf },
-  { key: 'clr', header: 'CLR', type: 'dec1', value: (r) => r.clr ?? 0 },
-  { key: 'water', header: 'Water', type: 'dec1', value: (r) => r.water ?? 0 },
+  { key: 'litres', header: 'Liter', type: 'dec2', total: 'sum', value: (r) => r.litres },
+  { key: 'kg', header: 'Kg', type: 'dec2', total: 'sum', value: (r) => r.kg ?? 0 },
+  { key: 'fat', header: 'Fat', type: 'dec2', total: 'wavg', value: (r) => r.fat },
+  { key: 'snf', header: 'Snf', type: 'dec2', total: 'wavg', value: (r) => r.snf },
+  { key: 'clr', header: 'Clr', type: 'dec2', total: 'wavg', value: (r) => r.clr ?? 0 },
+  { key: 'water', header: 'Water', type: 'dec2', total: 'wavg', value: (r) => r.water ?? 0 },
   { key: 'time', header: 'Time', value: (r) => r.time },
-  { key: 'rate', header: 'Rate', type: 'money', value: (r) => r.rate },
-  { key: 'amount', header: 'Amount', type: 'money', value: (r) => r.amount },
+  { key: 'rate', header: 'Rate', type: 'money', total: 'ratio', value: (r) => r.rate },
+  { key: 'amount', header: 'Amount', type: 'money', total: 'sum', value: (r) => r.amount },
 ];
 
+/* ---------- STIPL Excel layouts (Old Excel Export / New Excel Export) ---------- */
+
+const r2 = (n: number): number => Math.round(n * 100) / 100;
+const KIND_TEXT: Record<string, string> = { cow: 'Cow', buffalo: 'Buffalo', mix: 'Mix' };
+
+interface SheetCol {
+  header: string;
+  /** 'sum' | 'wavg' (weighted by Liter) | 'ratio' (Amount / Liter) -> formula in the Total row */
+  total?: 'sum' | 'wavg' | 'ratio';
+  num?: boolean;
+  value: (r: CollectionEntry) => string | number;
+}
+
+const SHEET_COLS: Record<string, SheetCol> = {
+  station: { header: 'Station Id', value: (r) => r.stationCode || r.stationId },
+  date: { header: 'Date', value: (r) => fmtDateLong(r.date) },
+  shift: { header: 'Shift', value: (r) => (r.shift === 'Morning' ? 'M' : 'E') },
+  kind: { header: 'Milk Type', value: (r) => KIND_TEXT[r.kind] ?? r.kind },
+  farmerId: { header: 'Farmer Id', value: (r) => r.farmerId },
+  name: { header: 'Name', value: (r) => r.farmer },
+  litres: { header: 'Liter', total: 'sum', num: true, value: (r) => r.litres },
+  kg: { header: 'Kg', total: 'sum', num: true, value: (r) => r.kg ?? 0 },
+  fat: { header: 'Fat', total: 'wavg', num: true, value: (r) => r.fat },
+  snf: { header: 'Snf', total: 'wavg', num: true, value: (r) => r.snf },
+  clr: { header: 'Clr', total: 'wavg', num: true, value: (r) => r.clr ?? 0 },
+  water: { header: 'Water', total: 'wavg', num: true, value: (r) => r.water ?? 0 },
+  time: { header: 'Time', value: (r) => r.time },
+  rate: { header: 'Rate', total: 'ratio', num: true, value: (r) => r.rate },
+  amount: { header: 'Amount', total: 'sum', num: true, value: (r) => r.amount },
+  branch: { header: 'BranchId', value: (r) => r.branchId ?? '1' },
+  stationName: { header: 'Station Name', value: (r) => r.centre || r.village || '' },
+  kgFat: { header: 'Kg Fat', total: 'sum', num: true, value: (r) => r2((r.litres * r.fat) / 100) },
+  kgSnf: { header: 'Kg Snf', total: 'sum', num: true, value: (r) => r2((r.litres * r.snf) / 100) },
+  collDate: { header: 'Collection Date', value: (r) => fmtDateDots(r.date) },
+  collTime: { header: 'Collection Time', value: (r) => time24(r.time) },
+  sampleNo: { header: 'Sample No', value: (r) => r.sampleNo ?? '' },
+};
+
+/** Old Excel Export: same column order as the table (Station Id first). */
+const OLD_ORDER = ['station', 'date', 'shift', 'kind', 'farmerId', 'name', 'litres', 'kg', 'fat', 'snf', 'clr', 'water', 'time', 'rate', 'amount', 'branch', 'stationName', 'kgFat', 'kgSnf', 'collDate', 'collTime', 'sampleNo'];
+/** New Excel Export: Date first, Station Id / Shift after Time. */
+const NEW_ORDER = ['date', 'farmerId', 'name', 'litres', 'kg', 'fat', 'snf', 'clr', 'water', 'kind', 'time', 'station', 'shift', 'rate', 'amount', 'branch', 'stationName', 'kgFat', 'kgSnf', 'collDate', 'collTime', 'sampleNo'];
+
+function sheetTable(order: string[], rows: CollectionEntry[], filename: string, numType: ColType): ExportTable {
+  const cols = order.map((k) => SHEET_COLS[k]).filter((c): c is SheetCol => !!c);
+  const at = (key: string): number => cols.findIndex((c) => c.header === SHEET_COLS[key]?.header);
+  const litres = at('litres');
+  const amount = at('amount');
+  return {
+    filename,
+    title: 'Farmer collection',
+    columns: cols.map((c) => ({
+      header: c.header,
+      ...(c.num ? { type: numType } : {}),
+      ...(c.total === 'sum' ? { total: 'sum' as const } : c.total === 'wavg' ? { total: { wavg: litres } } : c.total === 'ratio' ? { total: { ratio: [amount, litres] as [number, number] } } : {}),
+    })),
+    rows: rows.map((r) => cols.map((c) => c.value(r))),
+  };
+}
+
 const FarmerCollection: React.FC = () => {
+  const resultsRef = useRef<HTMLDivElement>(null);
   const centres = useMilkCenterOptions();
-  const plantOptions = usePlantOptions(centres);
   const [draft, setDraft] = useState<CollectionFilters>(defaults);
   const [applied, setApplied] = useState<CollectionFilters>(defaults);
   const [submitted, setSubmitted] = useState(false);
-  const centreOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...centres.filter((c) => draft.plant === 'all' || c.mccId === draft.plant).map((c) => ({ value: c.id, label: c.label }))], [centres, draft.plant]);
-  const live = useMilkFarmerEntries({ from: applied.from, to: applied.to, shift: applied.shift, milk: applied.kind }, submitted);
+  // dropdowns: only real plants / centres, first one selected by default (no "All")
+  const scope = useReportScope(centres, draft.plant, draft.centre);
+  const live = useMilkFarmerEntries({ from: applied.from, to: applied.to, shift: applied.shift, milk: applied.kind, vlccId: applied.centre || 'all' }, submitted && !!applied.centre);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
+  const fetching = live.fetching;
   const loading = live.loading;
 
   // userReportConfig -> report[0] = Farmer Collection: only the columns allowed for this login are shown / exported
@@ -215,8 +281,8 @@ const FarmerCollection: React.FC = () => {
   const shownKeys = useMemo(() => new Set(columns.map((c) => c.key)), [columns]);
 
   const rows = useMemo(() => live.rows.filter((r) =>
-    (applied.plant === 'all' || r.plant === applied.plant) &&
-    (applied.centre === 'all' || r.stationId === applied.centre) &&
+    (!applied.plant || r.plant === applied.plant) &&
+    (!applied.centre || r.stationId === applied.centre) &&
     (applied.kind === 'both' || r.kind === applied.kind) &&
     (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.from && r.date <= applied.to
   ), [live.rows, applied]);
@@ -239,34 +305,54 @@ const FarmerCollection: React.FC = () => {
       setError('From date cannot be after To date');
       return;
     }
+    if (!scope.centre) {
+      setError('No VLC found for this plant');
+      return;
+    }
     setError(undefined);
-    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
-    setApplied(draft);
+    const next = { ...draft, plant: scope.plant, centre: scope.centre };
+    if (submitted && JSON.stringify(applied) === JSON.stringify(next)) { live.retry(); }
+    setApplied(next);
     setSubmitted(true);
+    // bring the results (and the loader) up so nothing has to be scrolled
+    window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     pager.reset();
   };
 
+  const plantName = centres.find((c) => c.mccId === applied.plant)?.plantName ?? '';
+  const centreName = centres.find((c) => c.id === applied.centre)?.label ?? '';
+
+  /** PDF / CSV / Print: the columns shown in the table (follows userReportConfig). */
   const buildTable = (): ExportTable => {
     const cols = columns.map((c) => EXPORT_COLS.find((e) => e.key === c.key)).filter((e): e is ExportCol => !!e);
-    const total = (key: string): string | number => {
-      if (key === 'name') return `${rows.length} entries`;
-      if (key === 'litres') return Math.round(totals.litres * 10) / 10;
-      if (key === 'fat') return Math.round(totals.fat * 100) / 100;
-      if (key === 'snf') return Math.round(totals.snf * 100) / 100;
-      if (key === 'amount') return Math.round(totals.amount * 100) / 100;
-      return '';
-    };
+    const li = cols.findIndex((c) => c.key === 'litres');
+    const ai = cols.findIndex((c) => c.key === 'amount');
     return {
       filename: `farmer-collection-${applied.from}-${applied.to}`,
       title: 'Farmer collection',
-      subtitle: `${applied.plant}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.kind === 'both' ? 'Cow & Buffalo' : applied.kind}  |  ${fmtDate(applied.from)} to ${fmtDate(applied.to)}`,
-      columns: cols.map((c) => (c.type ? { header: c.header, type: c.type } : { header: c.header })),
+      subtitle: `${plantName}  |  ${centreName}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.kind === 'both' ? 'Cow & Buffalo' : applied.kind}  |  ${fmtDate(applied.from)} to ${fmtDate(applied.to)}`,
+      columns: cols.map((c) => ({
+        header: c.header,
+        ...(c.type ? { type: c.type } : {}),
+        ...(c.total === 'sum' ? { total: 'sum' as const } : c.total === 'wavg' && li >= 0 ? { total: { wavg: li } } : c.total === 'ratio' && li >= 0 && ai >= 0 ? { total: { ratio: [ai, li] as [number, number] } } : {}),
+      })),
       rows: rows.map((r) => cols.map((c) => c.value(r))),
-      totals: cols.map((c, i) => (i === 0 ? 'Total' : total(c.key))),
+      totals: cols.map((c, i) => (i === 0 ? 'Total' : c.key === 'name' ? `${rows.length} entries` : '')),
     };
   };
 
-  const actions: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'entries', toast: toast.show, legacyExcel: true });
+  // Old Excel = farmercollection.xlsx layout, New Excel = Station Id first layout (all 22 columns, Total row with SUM formulas)
+  const actions: ExportAction[] = reportActions({
+    build: buildTable,
+    count: rows.length,
+    unit: 'entries',
+    toast: toast.show,
+    stiplExcel: {
+      // Old Excel = the portal's farmercollection.xlsx (same columns, same file name, Total row at the end)
+      old: () => sheetTable(NEW_ORDER, rows, 'farmercollection', 'num2'),
+      new: () => sheetTable(OLD_ORDER, rows, applied.centre || 'farmer-collection', 'num2'),
+    },
+  });
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -279,11 +365,12 @@ const FarmerCollection: React.FC = () => {
         <StatCard index={3} tone="danger" label="Total Farmer" note="Pouring in this range" icon={Users} value={totals.farmers} format={(n) => nf(Math.round(n))} />
       </div>
 
-      <FarmerCollectionFilters value={draft} plantOptions={plantOptions} centreOptions={centreOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
+      <FarmerCollectionFilters value={{ ...draft, plant: scope.plant, centre: scope.centre }} plantOptions={scope.plantOptions} centreOptions={scope.centreOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={fetching} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
       <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />
 
+      <div ref={resultsRef} className="scroll-mt-20">
       <Panel bodyClassName="!p-0">
         {!submitted ? (
           <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
@@ -296,7 +383,7 @@ const FarmerCollection: React.FC = () => {
           pageSize={pager.pageSize}
           onPageSize={pager.setPageSize}
           sizeLabel="Result per page"
-          actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
+          actions={<ExportBar actions={actions} disabled={fetching || rows.length === 0} />}
         />
 
         {loading ? (
@@ -304,7 +391,7 @@ const FarmerCollection: React.FC = () => {
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range, shift or milk type." />
         ) : (
-          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection" loading={loading} minWidth={Math.max(520, shownKeys.size * 73)} />
+          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection" minWidth={Math.max(520, shownKeys.size * 73)} />
         )}
 
         {!loading && rows.length > 0 && (
@@ -313,6 +400,7 @@ const FarmerCollection: React.FC = () => {
           </>
         )}
       </Panel>
+      </div>
 
       <Toast message={toast.message} onClose={toast.close} />
     </div>

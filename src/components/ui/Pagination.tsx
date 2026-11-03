@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { PAGE_SIZES } from '../../hooks/usePagination';
 import { Select } from './Select';
 
 interface Props {
@@ -28,7 +29,7 @@ export function pagesToShow(page: number, count: number): Array<number | '…'> 
 const btn =
   'grid h-9 min-w-9 place-items-center rounded-lg border px-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40';
 
-export const Pagination: React.FC<Props> = ({ page, pageSize, total, onPage, onPageSize, sizes = [10, 50, 100], showSize = true }) => {
+export const Pagination: React.FC<Props> = ({ page, pageSize, total, onPage, onPageSize, sizes = PAGE_SIZES, showSize = true }) => {
   const count = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);

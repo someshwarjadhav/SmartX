@@ -1,7 +1,7 @@
 import type * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ArrowRight, CalendarDays, Search, SlidersHorizontal, Wifi, WifiOff } from 'lucide-react';
-import { useMilkVlccEntries, useMilkCenterOptions, usePlantOptions } from '../../hooks/useMilkReportData';
+import { useMilkVlccEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
 import { SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import { Badge } from '../../components/ui/Badge';
 import { ReportLoader } from '../../components/ui/ReportLoader';
@@ -86,7 +86,7 @@ const VlcStatusFilters: React.FC<FilterProps> = ({ value, plantOptions, onChange
       </div>
 
       <div className="sm:col-span-2 xl:col-span-12">
-        <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
+        <Button type="submit" size="lg" disabled={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
           Submit
         </Button>
       </div>
@@ -98,7 +98,8 @@ const VlcStatusFilters: React.FC<FilterProps> = ({ value, plantOptions, onChange
 
 const defaults = (): Filters => {
   const today = toISO(new Date());
-  return { plant: 'all', shift: 'both', fromDate: today, toDate: today };
+  // '' = first plant (no "All MCCs" row)
+  return { plant: '', shift: 'both', fromDate: today, toDate: today };
 };
 
 const Tile: React.FC<{ tile: VlcTile }> = ({ tile }) => (
@@ -122,15 +123,20 @@ const Tile: React.FC<{ tile: VlcTile }> = ({ tile }) => (
 );
 
 const VlcStatus: React.FC = () => {
+  const resultsRef = useRef<HTMLDivElement>(null);
   const centres = useMilkCenterOptions();
-  const plantOptions = usePlantOptions(centres);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
+  const scope = useReportScope(centres, draft.plant, '');
+  const plantOptions = scope.plantOptions;
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both' }, submitted);
-  const loading = live.loading;
-  const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.id, name:c.name || c.id, active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
+  // only the centres of the chosen plant are asked (faster than loading every plant)
+  const plantIds = useMemo(() => centres.filter((c) => c.mccId === applied.plant).map((c) => c.id), [centres, applied.plant]);
+  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both', vlccIds: plantIds }, submitted && plantIds.length > 0);
+  // tiles say "inactive" for a centre that has not answered yet, so this page waits for every centre before it draws them
+  const loading = live.fetching;
+  const tiles = useMemo(() => centres.filter((c) => c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.id, name:c.name || c.id, active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
   const active = tiles.filter((t) => t.active).length;
 
   const submit = () => {
@@ -139,19 +145,23 @@ const VlcStatus: React.FC = () => {
       return;
     }
     setError(undefined);
-    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
-    setApplied(draft);
+    const next = { ...draft, plant: scope.plant };
+    if (submitted && JSON.stringify(applied) === JSON.stringify(next)) { live.retry(); }
+    setApplied(next);
     setSubmitted(true);
+    // bring the results (and the loader) up so nothing has to be scrolled
+    window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
 
   return (
     <div className="space-y-4 sm:space-y-5">
       <PageHeader title="VLC Status" subtitle="Which centres are online and reporting." />
 
-      <VlcStatusFilters value={draft} plantOptions={plantOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
+      <VlcStatusFilters value={{ ...draft, plant: scope.plant }} plantOptions={plantOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
 
+      <div ref={resultsRef} className="scroll-mt-20">
       <Panel
         title="VLC Active/In Active"
         action={
@@ -177,6 +187,7 @@ const VlcStatus: React.FC = () => {
           </ul>
         )}
       </Panel>
+      </div>
     </div>
   );
 };

@@ -86,13 +86,13 @@ export const TableLoader: React.FC<{
   label?: string;
   className?: string;
   rows?: number;
-}> = ({ label = "Loading data…", className, rows = 6 }) => {
+}> = ({ label = "Loading data…", className, rows = 5 }) => {
   const [hint, setHint] = useState(0);
 
   useEffect(() => {
     const t = window.setInterval(
       () => setHint((h) => (h + 1) % HINTS.length),
-      2600,
+      1200,
     );
     return () => window.clearInterval(t);
   }, []);

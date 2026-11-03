@@ -17,7 +17,7 @@ export const environment = {
 export const REQUEST_TIMEOUT_MS = 90_000;
 
 
-export const MAX_PARALLEL_REQUESTS = 6;
+export const MAX_PARALLEL_REQUESTS = 10;
 
 export const FRESH_FOR_MS = 5 * 60_000;
 

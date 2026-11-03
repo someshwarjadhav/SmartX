@@ -25,6 +25,8 @@ export interface FarmerRow {
   amount: number;
  
   village: string;
+  stationCode: string;
+  branchId: string;
 }
 
 export function mapFarmers(rows: RawFarmerRow[]): FarmerRow[] {
@@ -52,6 +54,8 @@ export function mapFarmers(rows: RawFarmerRow[]): FarmerRow[] {
       rate: num(r.rtpl),
       amount: num(r.amount),
       village: str(r.villageagentaddress),
+      stationCode: str(r.stationcode),
+      branchId: str(r.branchid),
     };
   });
 }
