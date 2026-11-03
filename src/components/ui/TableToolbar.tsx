@@ -30,6 +30,6 @@ export const TableToolbar: React.FC<Props> = ({ from, to, total, pageSize, onPag
       />
     </div>
     {filters}
-    {actions && <div className="flex flex-wrap items-center gap-2 lg:ml-auto">{actions}</div>}
+    {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto lg:ml-auto">{actions}</div>}
   </div>
 );

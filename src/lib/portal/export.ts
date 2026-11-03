@@ -31,27 +31,36 @@ export function exportCSV<T>(name: string, cols: ExportCol<T>[], rows: T[]) {
   download(`${name}.csv`, 'text/csv;charset=utf-8', '\ufeff' + head + '\n' + body);
 }
 
-function tableHTML<T>(title: string, cols: ExportCol<T>[], rows: T[]) {
-  const th = cols.map((column) => `<th>${htmlEsc(column.header)}</th>`).join('');
-  const tr = rows.map((row) => `<tr>${cols.map((column) => `<td>${htmlEsc(column.value(row))}</td>`).join('')}</tr>`).join('');
-  const generated = new Date().toLocaleString();
-  return `
-    <header class="report-header">
-      <div class="brand-mark" aria-hidden="true">D</div>
-      <div class="report-heading">
-        <p class="eyebrow">DHARA DAIRY</p>
-        <h1>${htmlEsc(title)}</h1>
-        <p class="generated">Generated ${htmlEsc(generated)}</p>
-      </div>
-    </header>
-    <table><thead><tr>${th}</tr></thead><tbody>${tr || `<tr><td colspan="${cols.length}">No records in this report.</td></tr>`}</tbody></table>
-    <footer>Dhara Dairy · Data from the SmartX portal</footer>
-  `;
-}
 
-export function exportExcel<T>(name: string, cols: ExportCol<T>[], rows: T[]) {
-  const html = `<html><head><meta charset="utf-8"></head><body>${tableHTML(name, cols, rows)}</body></html>`;
-  download(`${name}.xls`, 'application/vnd.ms-excel', html);
+const cellValue = (v: string | number): string | number => {
+  if (typeof v === 'number') return v;
+  const t = v.trim();
+  if (/^-?(0|[1-9]\d{0,14})(\.\d+)?$/.test(t)) return Number(t);
+  return v;
+};
+
+
+export async function exportExcel<T>(name: string, cols: ExportCol<T>[], rows: T[]) {
+  const XLSX = await import('xlsx');
+  const head = cols.map((c) => c.header);
+  const body = rows.map((r) => cols.map((c) => cellValue(c.value(r))));
+  const aoa: Array<Array<string | number>> = [
+    ['SMARTX'],
+    [name],
+    [`Generated ${new Date().toLocaleString('en-IN')}`],
+    [],
+    head,
+    ...(body.length ? body : [['No records in this report.']]),
+    [],
+    ['SmartX · Data from the SmartX portal'],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = head.map((h, i) => ({
+    wch: Math.min(40, Math.max(String(h).length, ...body.map((r) => String(r[i] ?? '').length), 8) + 2),
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ') || 'Report');
+  XLSX.writeFile(wb, `${name}.xlsx`);
 }
 
 
@@ -113,10 +122,10 @@ function pdfBody<T>(title: string, cols: ExportCol<T>[], rows: T[], o: PdfOption
   return `
     <header class="top">
       <div class="logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2.5c3.4 4.3 6 7.4 6 10.9A6 6 0 0 1 6 13.4C6 9.9 8.6 6.8 12 2.5Z" fill="#06222a"/><path d="M9 14.2a3 3 0 0 0 3 3" stroke="#38bec3" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+        <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2.5c3.4 4.3 6 7.4 6 10.9A6 6 0 0 1 6 13.4C6 9.9 8.6 6.8 12 2.5Z" fill="#fff"/><path d="M9.9 11.4l4.2 4.2M14.1 11.4l-4.2 4.2" stroke="#2563eb" stroke-width="1.9" fill="none" stroke-linecap="round"/></svg>
       </div>
       <div class="ttl">
-        <p class="eyebrow">DHARA DAIRY · SMARTX</p>
+        <p class="eyebrow">SMARTX · DAIRY PORTAL</p>
         <h1>${htmlEsc(title)}</h1>
         ${o.subtitle ? `<p class="sub">${htmlEsc(o.subtitle)}</p>` : ''}
       </div>
@@ -124,9 +133,9 @@ function pdfBody<T>(title: string, cols: ExportCol<T>[], rows: T[], o: PdfOption
     </header>
     ${chips ? `<div class="chips">${chips}</div>` : ''}
     ${cards ? `<div class="cards">${cards}</div>` : ''}
-    <table><thead>${head}</thead><tbody>${body || empty}${rows.length ? foot : ''}</tbody></table>
+    <div class="tw"><table><thead>${head}</thead><tbody>${body || empty}${rows.length ? foot : ''}</tbody></table></div>
     ${o.note ? `<p class="note">${htmlEsc(o.note)}</p>` : ''}
-    <footer><span>Dhara Dairy · Data from the SmartX portal</span><span class="pg"></span></footer>
+    <footer><span>SmartX · Data from the SmartX portal</span><span class="pg"></span></footer>
   `;
 }
 
@@ -139,16 +148,16 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
     <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
       <title>${htmlEsc(title)}</title>
       <style>
-        :root { color-scheme: light; --deep:#0e2a3a; --brand:#14969b; --light:#38bec3; --line:#d6e2e8; --soft:#f0f6f7; --mute:#627d8c; }
+        :root { color-scheme: light; --deep:#0b1a3d; --brand:#2563eb; --light:#60a5fa; --line:#cddbf3; --soft:#f1f5fe; --mute:#5b6b8f; }
         * { box-sizing: border-box; }
         body { margin: 0; padding: 28px; color: var(--deep); background: #fff; font: 12px/1.45 Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .top { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 18px 22px; color: #fff; border-radius: 16px; border-bottom: 5px solid var(--brand); background: linear-gradient(120deg, #0e2a3a 0%, #123c4f 60%, #0f6c73 100%); }
-        .logo { display: grid; width: 50px; height: 50px; flex: 0 0 auto; place-items: center; border-radius: 15px; background: var(--light); }
+        .top { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 18px 22px; color: #fff; border-radius: 16px; border-bottom: 5px solid var(--brand); background: linear-gradient(120deg, #0b1a3d 0%, #1b3771 58%, #2563eb 100%); }
+        .logo { display: grid; width: 50px; height: 50px; flex: 0 0 auto; place-items: center; border-radius: 15px; background: linear-gradient(135deg, #2563eb, #60a5fa); box-shadow: 0 4px 12px rgba(37,99,235,.45); }
         .ttl { min-width: 0; flex: 1; }
-        .eyebrow { margin: 0 0 3px; color: #8edadd; font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
+        .eyebrow { margin: 0 0 3px; color: #93c5fd; font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
         h1 { margin: 0; font-size: 22px; line-height: 1.2; overflow-wrap: anywhere; }
-        .top .sub { margin: 4px 0 0; color: #d4e5e9; font-size: 12px; }
-        .stamp { display: grid; gap: 1px; text-align: right; font-size: 10px; color: #b9d3d8; white-space: nowrap; }
+        .top .sub { margin: 4px 0 0; color: #cfdcff; font-size: 12px; }
+        .stamp { display: grid; gap: 1px; text-align: right; font-size: 10px; color: #b4c4e8; white-space: nowrap; }
         .stamp b { color: #fff; font-size: 11.5px; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
         .chip { padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); font-size: 11px; }
@@ -158,21 +167,23 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
         .card.ok { border-left-color: #26a06a; } .card.warn { border-left-color: #e09628; } .card.danger { border-left-color: #da4e4e; }
         .card p { margin: 0; color: var(--mute); font-size: 10.5px; font-weight: 600; }
         .card strong { display: block; margin-top: 2px; font-size: 17px; letter-spacing: -.01em; }
+        .tw { overflow-x: auto; border-radius: 12px; }
         table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 11px; }
         thead { display: table-header-group; }
         th { padding: 9px 9px; color: #fff; background: var(--brand); text-align: left; font-weight: 700; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.18); }
         th.grp { background: var(--deep); text-align: center; font-size: 11.5px; letter-spacing: .02em; }
-        tr.sub th { background: #1a7f84; }
+        tr.sub th { background: #1d4fbf; }
         th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
         td.c { text-align: center; }
-        td { padding: 7px 9px; border-top: 1px solid var(--line); border-right: 1px solid #e8f0f3; vertical-align: top; }
+        td { padding: 7px 9px; border-top: 1px solid var(--line); border-right: 1px solid #e3ebfa; vertical-align: top; }
         tbody tr:nth-child(even) td { background: var(--soft); }
-        tr.total td { padding: 10px 9px; border-top: 2px solid var(--brand); background: #e3f3f4 !important; font-weight: 800; font-variant-numeric: tabular-nums; }
+        tr.total td { padding: 10px 9px; border-top: 2px solid var(--brand); background: #e3ecfd !important; font-weight: 800; font-variant-numeric: tabular-nums; }
         td.empty { padding: 28px; text-align: center; color: var(--mute); }
         .note { margin: 12px 0 0; color: var(--mute); font-size: 10.5px; }
         footer { display: flex; justify-content: space-between; margin-top: 18px; padding-top: 9px; border-top: 1px solid var(--line); color: var(--mute); font-size: 10px; }
-        @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 12mm 10mm 14mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px sans-serif; color: #627d8c; } }
-        @media print { body { padding: 0; } tr { break-inside: avoid; } .top, .cards, .chips { break-inside: avoid; } }
+        @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 12mm 10mm 14mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px sans-serif; color: #5b6b8f; } }
+        @media print { body { padding: 0; } .tw { overflow: visible; } tr { break-inside: avoid; } .top, .cards, .chips { break-inside: avoid; } }
+        @media (max-width: 480px) { h1 { font-size: 18px; } .logo { width: 42px; height: 42px; } .cards { grid-template-columns: 1fr 1fr; } }
         @media (max-width: 700px) { body { padding: 14px; } .top { flex-wrap: wrap; } .stamp { text-align: left; } table { font-size: 9px; } }
       </style>
     </head><body>${pdfBody(title, cols, rows, options)}</body></html>`);
