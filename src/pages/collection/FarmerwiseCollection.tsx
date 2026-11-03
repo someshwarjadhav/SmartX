@@ -1,8 +1,8 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
-import { ArrowRight, CalendarDays, Droplets, FileSpreadsheet, FileText, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Table2, Users } from 'lucide-react';
+import { ArrowRight, CalendarDays, Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Users } from 'lucide-react';
 import type { CollectionEntry } from '../../data/farmerCollection';
-import { useMilkFarmerEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
+import { useMilkFarmerEntries, useMilkCenterOptions, usePlantOptions, useFarmerMasterOptions, farmerKey } from '../../hooks/useMilkReportData';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
 import { ReportLoader } from '../../components/ui/ReportLoader';
@@ -10,6 +10,9 @@ import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
+import { reportActions } from '../../components/ui/reportActions';
+import { PartialNotice } from '../../components/ui/PartialNotice';
+import type { ExportTable } from '../../lib/exporters';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
 import { KindChip } from '../../components/ui/KindChip';
 import { PageHeader } from '../../components/ui/PageHeader';
@@ -22,7 +25,6 @@ import { TableToolbar } from '../../components/ui/TableToolbar';
 import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
-import { exportCSV, exportExcel, exportPDF, type ExportTable } from '../../lib/exporters';
 import { cn } from '../../lib/cn';
 import { fmtDate, nf, toISO } from '../../lib/format';
 
@@ -163,7 +165,7 @@ const COLUMNS: Column<CollectionEntry>[] = [
 
 const FarmerwiseCollection: React.FC = () => {
   const centres = useMilkCenterOptions();
-  const plantOptions = useMemo(() => [{ value: 'all', label: 'All MCCs' }, ...Array.from(new Map(centres.map((c) => [c.mccId, c.mccId])).keys()).map((id) => ({ value: id, label: id }))], [centres]);
+  const plantOptions = usePlantOptions(centres);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
   const [submitted, setSubmitted] = useState(false);
@@ -172,8 +174,21 @@ const FarmerwiseCollection: React.FC = () => {
   const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType }, submitted);
   const loading = live.loading;
   const centreOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...centres.filter((c) => draft.plant === 'all' || c.mccId === draft.plant).map((c) => ({ value: c.id, label: c.label }))], [centres, draft.plant]);
-  const farmerOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...live.rows.filter((r) => draft.vlcId === 'all' || r.stationId === draft.vlcId).map((r) => ({ value: r.farmerId, label: `${r.farmer} | ${r.farmerId}` })).filter((o, i, a) => a.findIndex((x) => x.value === o.value) === i)], [live.rows, draft.vlcId]);
-  const rows = useMemo(() => live.rows.filter((r) => (applied.plant === 'all' || r.plant === applied.plant) && (applied.vlcId === 'all' || r.stationId === applied.vlcId) && (applied.farmerId === 'all' || r.farmerId === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
+  const farmerVlccIds = useMemo(() => (draft.vlcId !== 'all' ? [draft.vlcId] : centres.filter((c) => draft.plant === 'all' || c.mccId === draft.plant).map((c) => c.id)), [draft.vlcId, draft.plant, centres]);
+  const centreNames = useMemo(() => Object.fromEntries(centres.map((c) => [c.id, c.name || c.id])), [centres]);
+  const { options: masterFarmers, loading: farmersLoading } = useFarmerMasterOptions(farmerVlccIds, centreNames);
+  // only if the farmer master gave nobody: farmers of the chosen VLC are read from its collection
+  const pre = useMilkFarmerEntries({ from: draft.fromDate, to: draft.toDate, shift: 'both', milk: 'both', vlccId: draft.vlcId }, draft.vlcId !== 'all' && !farmersLoading && masterFarmers.length === 0);
+  const farmerOptions = useMemo(() => {
+    // farmer master (id | name) first; farmers seen in the loaded collection are added if the master missed them
+    const have = new Set(masterFarmers.map((o) => o.value));
+    const extra = [...pre.rows, ...live.rows]
+      .filter((r) => (draft.vlcId === 'all' || r.stationId === draft.vlcId) && !have.has(farmerKey(r.stationId, r.farmerId)))
+      .map((r) => ({ value: farmerKey(r.stationId, r.farmerId), label: `${r.farmerId} | ${r.farmer}` }))
+      .filter((o, i, a) => a.findIndex((x) => x.value === o.value) === i);
+    return [{ value: 'all', label: farmersLoading ? 'Loading farmers…' : 'All Farmers' }, ...masterFarmers, ...extra];
+  }, [masterFarmers, farmersLoading, pre.rows, live.rows, draft.vlcId]);
+  const rows = useMemo(() => live.rows.filter((r) => (applied.plant === 'all' || r.plant === applied.plant) && (applied.vlcId === 'all' || r.stationId === applied.vlcId) && (applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
 
   const pager = usePagination(rows);
 
@@ -213,20 +228,7 @@ const FarmerwiseCollection: React.FC = () => {
     totals: tbl.pickTotals(['Total', '', '', '', '', `${rows.length} entries`, '', Math.round(totals.litres * 10) / 10, '', Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, '', '', Math.round(totals.amount * 100) / 100]),
   });
 
-  const exportAs = (label: string, run: (t: ExportTable) => void | Promise<void>) => async () => {
-    try {
-      await run(buildTable());
-      toast.show(`Exported ${rows.length} entries as ${label}`);
-    } catch {
-      toast.show('Export failed. Please try again.');
-    }
-  };
-
-  const actions: ExportAction[] = [
-    { id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary', run: exportAs('Excel', exportExcel) },
-    { id: 'pdf', label: 'PDF Export', icon: FileText, variant: 'danger', run: exportAs('PDF', exportPDF) },
-    { id: 'csv', label: 'CSV Export', icon: Table2, variant: 'success', run: exportAs('CSV', exportCSV) },
-  ];
+  const actions: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'entries', toast: toast.show, without: ['print'] });
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -242,6 +244,7 @@ const FarmerwiseCollection: React.FC = () => {
       <FarmerwiseFilters value={draft} plantOptions={plantOptions} centreOptions={centreOptions} farmerOptions={farmerOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
+      <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />
 
       <Panel bodyClassName="!p-0">
         {!submitted ? (
