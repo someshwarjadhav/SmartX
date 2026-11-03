@@ -1,10 +1,3 @@
-/**
- * The portal returns some bills as ready-made HTML. Before that markup goes on screen,
- * into a print window or into an Excel file it is cleaned here: scripts, styles, forms,
- * event handlers, classes and unsafe links are removed, and only plain table / text
- * formatting is kept.
- */
-
 const DROP_TAGS = new Set([
   "script", "style", "link", "meta", "base", "iframe", "frame", "frameset", "object",
   "embed", "applet", "form", "input", "button", "textarea", "select", "option",

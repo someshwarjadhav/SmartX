@@ -5,13 +5,12 @@ import { lib } from 'crypto-js/core';
 
 const options = (iv: lib.WordArray) => ({ iv });
 
-/** Key from .env.local - trimmed and with accidental surrounding quotes removed. */
 function readSecret(): string {
   const raw = String(import.meta.env.VITE_ENCRYPTION_KEY ?? '').trim();
   return raw.replace(/^(['"])(.*)\1$/, '$2').trim();
 }
 
-/** True when VITE_ENCRYPTION_KEY is set (login and encrypted replies need it). */
+
 export const hasEncryptionKey = (): boolean => readSecret().length > 0;
 
 function getKey() {
@@ -46,10 +45,7 @@ export function decryptPayload(packed: string): unknown {
   }
 }
 
-/**
- * DPU replies ({ success, data: "<base64>" }): the base64 holds the JSON XOR-ed with
- * VITE_ENCRYPTION_KEY (key repeated over the bytes). Returns the parsed JSON (or the text).
- */
+
 export function decryptXorPayload(b64: string): unknown {
   const key = new TextEncoder().encode(readSecret());
   if (!key.length) throw new Error('VITE_ENCRYPTION_KEY is missing. Add it to .env.local and restart `npm run dev`.');

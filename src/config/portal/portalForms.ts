@@ -57,7 +57,12 @@ export const NAV_MODULES: NavModule[] = [
     icon: UserCog,
     children: [
       form("Center Access", "/administrator/center-access", "center-access"),
-      form("Bill Unfreeze", "/administrator/bill-freeze", "bill-freeze"),
+      form(
+        "Bill Unfreeze",
+        "/administrator/bill-freeze",
+        "bill-freeze",
+        "/administrator/bill-unfreeze",
+      ),
       form(
         "System Administrator",
         "/administrator/system-administrator",
