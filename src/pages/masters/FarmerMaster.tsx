@@ -31,7 +31,7 @@ import { downloadFarmerSample, parseFarmerSheet } from '../../lib/farmerImport';
 import { exportExcel, type ExportTable } from '../../lib/exporters';
 import { nf, toISO } from '../../lib/format';
 
-/* ---------- Summary card ---------- */
+
 
 const FarmerSummary: React.FC<{ rows: FarmerRecord[] }> = ({ rows }) => {
   const total = rows.length;
@@ -77,7 +77,7 @@ const FarmerSummary: React.FC<{ rows: FarmerRecord[] }> = ({ rows }) => {
   );
 };
 
-/* ---------- Add / edit form ---------- */
+
 
 interface FormProps {
   farmers: FarmerRecord[];
@@ -137,13 +137,26 @@ function validate(v: Values, farmers: FarmerRecord[], isEdit: boolean): Errors {
 const FarmerForm: React.FC<FormProps> = ({ farmers, editing, onSubmit, onCancel, centreOptions }) => {
   const [values, setValues] = useState<Values>(() => (editing ? fromRecord(editing) : blank(farmers, centreOptions[0]?.value ?? '')));
   const [errors, setErrors] = useState<Errors>({});
+  const codeTouched = useRef(false);
+
+
+  useEffect(() => {
+    if (editing || codeTouched.current) return;
+    setValues((v) => {
+      const vlcId = v.vlcId || centreOptions[0]?.value || '';
+      const farmerId = String(nextFarmerCode(farmers, vlcId));
+      return vlcId === v.vlcId && farmerId === v.farmerId ? v : { ...v, vlcId, farmerId };
+    });
+  }, [farmers, centreOptions, editing]);
 
   const set = <K extends keyof Values>(key: K, value: Values[K]) => {
+    if (key === 'farmerId') codeTouched.current = true;
     setValues((v) => ({ ...v, [key]: value }));
     setErrors((e) => ({ ...e, [key]: undefined }));
   };
 
   const changeCentre = (vlcId: string) => {
+    codeTouched.current = false;
     setValues((v) => ({ ...v, vlcId, farmerId: String(nextFarmerCode(farmers, vlcId)) }));
     setErrors({});
   };
@@ -176,7 +189,7 @@ const FarmerForm: React.FC<FormProps> = ({ farmers, editing, onSubmit, onCancel,
         <div className="pointer-events-none absolute -right-10 -top-14 h-40 w-40 rounded-full bg-glow/30 blur-3xl" aria-hidden />
         <Avatar name={values.name} size="lg" className="relative ring-2 ring-white/30" />
         <div className="relative min-w-0 flex-1">
-          <h2 className="font-display text-lg font-bold leading-tight">{editing ? 'Edit Farmer' : 'Farmer Master'}</h2>
+          <h2 className="font-display text-lg font-bold leading-tight">{editing ? 'Edit Farmer' : 'Add Farmer'}</h2>
           <p className="mt-0.5 truncate text-sm text-white/70">
             {values.name.trim() || 'New farmer'} · {centre?.label ?? '—'} · Code {values.farmerId || '—'}
           </p>
@@ -222,7 +235,7 @@ const FarmerForm: React.FC<FormProps> = ({ farmers, editing, onSubmit, onCancel,
   );
 };
 
-/* ---------- Excel import ---------- */
+
 
 interface ImportProps {
   onImport: (records: FarmerRecord[], invalid: number) => void | Promise<void>;
@@ -285,7 +298,7 @@ const FarmerImport: React.FC<ImportProps> = ({ onImport, validCentreIds }) => {
   );
 };
 
-/* ---------- Farmer list ---------- */
+
 
 interface ListProps {
   rows: FarmerRecord[];
@@ -305,6 +318,7 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
   const pager = usePagination(rows);
   const pageKeys = useMemo(() => pager.visible.map(farmerKey), [pager.visible]);
   const checkedOnPage = pageKeys.filter((k) => selected.has(k)).length;
+  const changedCount = useMemo(() => rows.filter((r) => selected.has(farmerKey(r)) !== r.active).length, [rows, selected]);
 
   const toggle = (key: string, on: boolean) => {
     const next = new Set(selected);
@@ -341,8 +355,8 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
       key: 'status',
       header: 'Status',
       cell: (r) => (
-        <Badge tone={r.active ? 'ok' : 'neutral'} dot>
-          {r.active ? 'Active' : 'Inactive'}
+        <Badge tone={selected.has(farmerKey(r)) ? 'ok' : 'neutral'} dot>
+          {selected.has(farmerKey(r)) ? 'Active' : 'Inactive'}
         </Badge>
       ),
     },
@@ -382,8 +396,8 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
         actions={
           <>
             <ExportBar actions={exportActions} disabled={rows.length === 0} />
-            <Button size="sm" variant="success" icon={<RefreshCw size={15} aria-hidden />} disabled={selected.size === 0} onClick={onUpdateStatus}>
-              Update Status{selected.size > 0 ? ` (${selected.size})` : ''}
+            <Button size="sm" variant="success" icon={<RefreshCw size={15} aria-hidden />} disabled={changedCount === 0} onClick={onUpdateStatus}>
+              Update Status{changedCount > 0 ? ` (${changedCount})` : ''}
             </Button>
           </>
         }
@@ -395,12 +409,12 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
         <DataTable columns={columns} rows={pager.visible} rowKey={farmerKey} ariaLabel="Farmer master" minWidth={980} isSelected={(r) => selected.has(farmerKey(r))} />
       )}
 
-      {rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />}
+      {rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} />}
     </Panel>
   );
 };
 
-/* ---------- Page ---------- */
+
 
 const FarmerMaster: React.FC = () => {
   const centers = useMilkCenterOptions();
@@ -415,8 +429,7 @@ const FarmerMaster: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
-  // silent = refresh in the background (no "Loading" bar, errors are not shown) - used right after a save so the table
-  // updates at once. Returns the fresh list, or null when it could not be read.
+
   const refreshRecords = async (silent = false): Promise<FarmerRecord[] | null> => {
     if (!ids.length) { setFarmers([]); setLoading(false); return []; }
     if (!silent) setLoading(true);
@@ -424,6 +437,8 @@ const FarmerMaster: React.FC = () => {
       const data = await getData(ids);
       const list: FarmerRecord[] = data.map((r) => ({ vlcId: r.vlccid, farmerId: Number(r.farmerId) || 0, name: r.name, bankHolder: r.nameInBank, address: r.address, mobile: r.mobile, bankName: r.bank, ifsc: r.ifsc, accountNo: r.account, aadhaar: r.aadhaar, active: r.active }));
       setFarmers(list);
+    
+      setSelected(new Set(list.filter((f) => f.active).map(farmerKey)));
       return list;
     } catch (e) {
       if (!silent) toast.show(e instanceof Error ? e.message : 'Could not load farmer records');
@@ -441,8 +456,7 @@ const FarmerMaster: React.FC = () => {
     setFormKey((k) => k + 1);
   };
 
-  // The save endpoint can answer with an error AFTER it stored the record (its SQL raises one at the end). So when the
-  // call fails, the list is read again and the record is looked up before the user is told that nothing was saved.
+
   const same = (a: string, b: string) => a.trim() === b.trim();
   const isStored = (list: FarmerRecord[], r: FarmerRecord, isEdit: boolean): boolean => {
     const got = list.find((f) => farmerKey(f) === farmerKey(r));
@@ -469,8 +483,14 @@ const FarmerMaster: React.FC = () => {
         }
         console.warn('[FarmerMaster] The server reported an error, but the farmer is stored:', serverNote);
       }
-      // show the farmer in the table and move the form to the next free code right away (same render), then sync with the server
+      
       setFarmers((prev) => (prev.some((f) => farmerKey(f) === farmerKey(record)) ? prev.map((f) => (farmerKey(f) === farmerKey(record) ? record : f)) : [...prev, record]));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (record.active) next.add(farmerKey(record));
+        else next.delete(farmerKey(record));
+        return next;
+      });
       toast.show(`${isEdit ? 'Updated' : 'Saved'} ${record.name}`);
       resetForm();
       void refreshRecords(true);
@@ -494,15 +514,17 @@ const FarmerMaster: React.FC = () => {
   };
 
   const updateStatus = async () => {
-    const changes = farmers.filter((f) => selected.has(farmerKey(f))).map((f) => ({ vlccid: f.vlcId, farmerId: String(f.farmerId), active: !f.active }));
-    if (!changes.length) return;
-    try { await updateFarmerStatus(changes); setFarmers((prev) => prev.map((f) => (selected.has(farmerKey(f)) ? { ...f, active: !f.active } : f))); setSelected(new Set()); toast.show(`Status changed for ${changes.length} farmers`); void refreshRecords(true); }
+    const changed = farmers.filter((f) => selected.has(farmerKey(f)) !== f.active);
+    if (!changed.length) return;
+    
+    const villages = new Set(changed.map((f) => f.vlcId));
+    const changes = farmers.filter((f) => villages.has(f.vlcId)).map((f) => ({ vlccid: f.vlcId, farmerId: String(f.farmerId), active: selected.has(farmerKey(f)) }));
+    try { await updateFarmerStatus(changes); setFarmers((prev) => prev.map((f) => ({ ...f, active: selected.has(farmerKey(f)) }))); toast.show(`Status changed for ${changed.length} farmer${changed.length === 1 ? '' : 's'}`); void refreshRecords(true); }
     catch (e) { toast.show(e instanceof Error ? e.message : 'Could not update status'); }
   };
 
   const changeCentre = (id: string) => {
     setCentre(id);
-    setSelected(new Set());
   };
 
   const buildTable = (): ExportTable => ({

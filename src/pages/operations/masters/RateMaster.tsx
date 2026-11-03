@@ -51,7 +51,7 @@ const BTN_DANGER =
   "!bg-danger !text-white enabled:hover:!bg-danger/85 dark:!text-[#2a0a0a] disabled:!opacity-50";
 
 const SHIFT_CODE = { morning: "1", evening: "2" } as const;
-const SHIFT_DEFAULT = "1";
+const SHIFT_DEFAULT = "0"; 
 type ShiftPick = keyof typeof SHIFT_CODE;
 
 const Check: React.FC<{
@@ -169,7 +169,10 @@ const UploadCard: React.FC<{
     const failed: string[] = [];
     const savedCentres = new Set<string>();
     let reason = "";
+ 
+    let stop = false;
     for (const id of picked) {
+      if (stop) break;
       for (const type of types) {
         try {
           await saveRateExcel({
@@ -185,6 +188,10 @@ const UploadCard: React.FC<{
         } catch (e) {
           failed.push(`${id}/${type}`);
           reason = msg(e, "The rate chart could not be saved.");
+          if (!done && /request layouts/.test(reason)) {
+            stop = true;
+            break;
+          }
         }
       }
     }
