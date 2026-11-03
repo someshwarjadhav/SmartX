@@ -15,7 +15,6 @@ import {
 export const getMenu = (userid: string): Promise<unknown> =>
   dpuGet(`/Login/menu?userid=${encodeURIComponent(userid)}`, 0);
 
-
 export interface MenuNode {
   id: string;
   title: string;
