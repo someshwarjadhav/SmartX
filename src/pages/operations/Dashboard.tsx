@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Area,
@@ -58,7 +58,6 @@ import { fetchVlccCollection } from "../../services/vlcc/vlcc.api.ts";
 import { getSession } from "../../services/session";
 import { vlccName } from "../../services/vlcc/names";
 import { buildCenters } from "../../services/mappers/center.mapper.ts";
-import { sampleDayCheck } from "../../dev/operations/selfcheck";
 import { refetchAll, useQuery, type QueryState } from "../../hooks/useQuery";
 import type {
   RawFarmerRow,
@@ -183,19 +182,6 @@ const Dashboard: React.FC = () => {
   const farmerRows = useMemo(() => mapFarmers(farmerQ.rows), [farmerQ.rows]);
   const farmers = useMemo(() => farmerTotals(farmerRows).farmers, [farmerRows]);
 
-  useEffect(() => {
-    if (!import.meta.env.DEV || vlccQ.fetching || farmerQ.fetching) return;
-    const res = sampleDayCheck(vlccRows, farmerRows);
-    if (res)
-      console.table(
-        res.map((r) => ({
-          check: r.name,
-          expected: r.expected,
-          actual: Number(r.actual.toFixed(2)),
-          result: r.ok ? "PASS" : "FAIL",
-        })),
-      );
-  }, [vlccRows, farmerRows, vlccQ.fetching, farmerQ.fetching]);
   const trend = useMemo(
     () => buildTrend(chartQ.rows, today, Number(range)),
     [chartQ.rows, today, range],

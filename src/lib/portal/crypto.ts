@@ -66,3 +66,38 @@ export function decryptXorPayload(b64: string): unknown {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/*  DPU replies: { success: true, data: "<encrypted>" }                */
+/* ------------------------------------------------------------------ */
+const B64_ONLY = /^[A-Za-z0-9+/_-]{16,}={0,2}$/;
+const AES_PACKED = /^[A-Za-z0-9+/=]{8,}:[A-Za-z0-9+/=]{16,}$/;
+const isPlainObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Opens the encrypted `data` of a DPU reply (XOR+base64 with VITE_ENCRYPTION_KEY, or AES "cipher:iv")
+ * until real JSON is left. Anything that is not encrypted is returned unchanged.
+ */
+export function openEncryptedReply(v: unknown, depth = 0): unknown {
+  if (depth > 4) return v;
+  if (typeof v === 'string') {
+    const t = v.replace(/\s+/g, '');
+    let opened: unknown = v;
+    try {
+      if (AES_PACKED.test(t)) opened = decryptPayload(t);
+      else if (B64_ONLY.test(t)) opened = decryptXorPayload(t);
+    } catch {
+      return v;
+    }
+    return typeof opened === 'object' && opened !== null ? openEncryptedReply(opened, depth + 1) : v;
+  }
+  if (isPlainObj(v)) {
+    for (const k of Object.keys(v)) {
+      if (!['data', 'response', 'result', 'payload'].includes(k.toLowerCase())) continue;
+      const inner = v[k];
+      if (typeof inner !== 'string') continue;
+      const opened = openEncryptedReply(inner, depth + 1);
+      if (opened !== inner) return opened;
+    }
+  }
+  return v;
+}

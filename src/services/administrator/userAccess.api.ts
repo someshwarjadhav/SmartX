@@ -209,11 +209,6 @@ function assertSaved(text: string) {
 }
 
 export async function postData(formData: FormData): Promise<void> {
-  if (import.meta.env.DEV)
-    console.info(
-      "[addUserAccess] sending",
-      Object.fromEntries(formData.entries()),
-    );
   const text = await gatewayText(
     ADD_USER_ACCESS_PATH,
     { method: "POST", body: formData },

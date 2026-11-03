@@ -190,7 +190,6 @@ export async function showRate(
   if (!records.length) return emptyGrid();
   const grid = gridFromRecords(records);
   if (!grid.rows.length) {
-    if (import.meta.env.DEV) console.warn("[rate] unknown ShowRateWeb record shape", records[0]);
     throw new ApiError(
       "The rate chart came back in a shape this page does not know. Open the browser console to see one record.",
       "parse",
