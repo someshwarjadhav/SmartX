@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Download, FileSpreadsheet, Pencil, RefreshCw, Save, Upload, UsersRound, X } from 'lucide-react';
 import { farmerKey, nextFarmerCode, type FarmerRecord } from '../../data/farmerMaster';
@@ -374,9 +374,9 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
         pageSize={pager.pageSize}
         onPageSize={pager.setPageSize}
         filters={
-          <div className="flex items-center gap-2">
+          <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
             <span className="text-sm font-bold">Center</span>
-            <Select label="Center" value={centre} onChange={onCentre} options={[{ value: 'all', label: 'All' }, ...centreOptions]} className="w-52" />
+            <Select label="Center" value={centre} onChange={onCentre} options={[{ value: 'all', label: 'All' }, ...centreOptions]} className="min-w-0 flex-1 sm:w-52 sm:flex-none" />
           </div>
         }
         actions={
@@ -415,14 +415,22 @@ const FarmerMaster: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
-  const refreshRecords = async () => {
-    if (!ids.length) { setFarmers([]); setLoading(false); return; }
-    setLoading(true);
+  // silent = refresh in the background (no "Loading" bar, errors are not shown) - used right after a save so the table
+  // updates at once. Returns the fresh list, or null when it could not be read.
+  const refreshRecords = async (silent = false): Promise<FarmerRecord[] | null> => {
+    if (!ids.length) { setFarmers([]); setLoading(false); return []; }
+    if (!silent) setLoading(true);
     try {
       const data = await getData(ids);
-      setFarmers(data.map((r) => ({ vlcId: r.vlccid, farmerId: Number(r.farmerId) || 0, name: r.name, bankHolder: r.nameInBank, address: r.address, mobile: r.mobile, bankName: r.bank, ifsc: r.ifsc, accountNo: r.account, aadhaar: r.aadhaar, active: r.active })));
-    } catch (e) { toast.show(e instanceof Error ? e.message : 'Could not load farmer records'); }
-    finally { setLoading(false); }
+      const list: FarmerRecord[] = data.map((r) => ({ vlcId: r.vlccid, farmerId: Number(r.farmerId) || 0, name: r.name, bankHolder: r.nameInBank, address: r.address, mobile: r.mobile, bankName: r.bank, ifsc: r.ifsc, accountNo: r.account, aadhaar: r.aadhaar, active: r.active }));
+      setFarmers(list);
+      return list;
+    } catch (e) {
+      if (!silent) toast.show(e instanceof Error ? e.message : 'Could not load farmer records');
+      return null;
+    } finally {
+      if (!silent) setLoading(false);
+    }
   };
   useEffect(() => { void refreshRecords(); }, [idsKey]);
 
@@ -433,10 +441,42 @@ const FarmerMaster: React.FC = () => {
     setFormKey((k) => k + 1);
   };
 
+  // The save endpoint can answer with an error AFTER it stored the record (its SQL raises one at the end). So when the
+  // call fails, the list is read again and the record is looked up before the user is told that nothing was saved.
+  const same = (a: string, b: string) => a.trim() === b.trim();
+  const isStored = (list: FarmerRecord[], r: FarmerRecord, isEdit: boolean): boolean => {
+    const got = list.find((f) => farmerKey(f) === farmerKey(r));
+    if (!got) return false;
+    if (!isEdit) return true;
+    return same(got.name, r.name) && same(got.address, r.address) && same(got.mobile, r.mobile) && same(got.bankName, r.bankName) && same(got.ifsc, r.ifsc) && same(got.accountNo, r.accountNo) && same(got.aadhaar, r.aadhaar) && got.active === r.active;
+  };
+
+  const saving = useRef(false);
   const save = async (record: FarmerRecord, isEdit: boolean) => {
+    if (saving.current) return;
+    saving.current = true;
     const input: FarmerInput = { vlccid: record.vlcId, farmerId: String(record.farmerId), name: record.name, nameInBank: record.bankHolder, address: record.address, mobile: record.mobile, bank: record.bankName, ifsc: record.ifsc, account: record.accountNo, aadhaar: record.aadhaar, active: record.active };
-    try { await postData(input, isEdit); await refreshRecords(); toast.show(`${isEdit ? 'Updated' : 'Saved'} ${record.name}`); resetForm(); }
-    catch (e) { toast.show(e instanceof Error ? e.message : 'Could not save farmer'); }
+    try {
+      let serverNote = '';
+      try {
+        await postData(input, isEdit);
+      } catch (e) {
+        serverNote = e instanceof Error ? e.message : 'Could not save farmer';
+        const fresh = await refreshRecords(true);
+        if (!fresh || !isStored(fresh, record, isEdit)) {
+          toast.show(serverNote);
+          return;
+        }
+        console.warn('[FarmerMaster] The server reported an error, but the farmer is stored:', serverNote);
+      }
+      // show the farmer in the table and move the form to the next free code right away (same render), then sync with the server
+      setFarmers((prev) => (prev.some((f) => farmerKey(f) === farmerKey(record)) ? prev.map((f) => (farmerKey(f) === farmerKey(record) ? record : f)) : [...prev, record]));
+      toast.show(`${isEdit ? 'Updated' : 'Saved'} ${record.name}`);
+      resetForm();
+      void refreshRecords(true);
+    } finally {
+      saving.current = false;
+    }
   };
 
   const edit = (record: FarmerRecord) => {
@@ -449,14 +489,14 @@ const FarmerMaster: React.FC = () => {
     const valid = records.filter((r) => ids.includes(r.vlcId));
     const invalidCentres = records.length - valid.length;
     const inputs: FarmerInput[] = valid.map((r) => ({ vlccid: r.vlcId, farmerId: String(r.farmerId), name: r.name, nameInBank: r.bankHolder, address: r.address, mobile: r.mobile, bank: r.bankName, ifsc: r.ifsc, account: r.accountNo, aadhaar: r.aadhaar, active: r.active }));
-    try { if (inputs.length) await postExcel(inputs); await refreshRecords(); toast.show(`Imported ${inputs.length} farmers${invalid + invalidCentres ? `, skipped ${invalid + invalidCentres}` : ''}`); }
+    try { if (inputs.length) await postExcel(inputs); await refreshRecords(true); toast.show(`Imported ${inputs.length} farmers${invalid + invalidCentres ? `, skipped ${invalid + invalidCentres}` : ''}`); }
     catch (e) { throw new Error(e instanceof Error ? e.message : 'Could not import farmers'); }
   };
 
   const updateStatus = async () => {
     const changes = farmers.filter((f) => selected.has(farmerKey(f))).map((f) => ({ vlccid: f.vlcId, farmerId: String(f.farmerId), active: !f.active }));
     if (!changes.length) return;
-    try { await updateFarmerStatus(changes); await refreshRecords(); toast.show(`Status changed for ${changes.length} farmers`); setSelected(new Set()); }
+    try { await updateFarmerStatus(changes); setFarmers((prev) => prev.map((f) => (selected.has(farmerKey(f)) ? { ...f, active: !f.active } : f))); setSelected(new Set()); toast.show(`Status changed for ${changes.length} farmers`); void refreshRecords(true); }
     catch (e) { toast.show(e instanceof Error ? e.message : 'Could not update status'); }
   };
 
@@ -503,7 +543,7 @@ const FarmerMaster: React.FC = () => {
         </div>
       </div>
 
-      {loading && <div role="status" className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">Loading farmers from the MilkShell API…</div>}
+      {loading && <div role="status" className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">Loading farmers…</div>}
       <FarmerList
         rows={rows}
         centre={centre}

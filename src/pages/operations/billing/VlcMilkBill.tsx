@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, ReceiptText, Search } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
+import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
   CardTitle,
@@ -14,6 +15,7 @@ import {
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { useCentreOptions } from "../../../hooks/useCentres";
+import { exportExcel, exportPDF, type ExportCol } from "../../../lib/portal/export";
 import { todayISO } from "../../../lib/portal/format";
 import {
   downloadBillsExcel,
@@ -24,6 +26,55 @@ import {
 } from "../../../lib/portal/safeHtml";
 import { getVlcMilkBill } from "../../../services/billing/vlcMilkBill.api";
 import { ApiError } from "../../../services/http/errors";
+import { norm, type Obj } from "../../../services/utils/loose";
+
+
+interface Row {
+  raw: Obj;
+  key: string;
+}
+interface Col {
+  key: string;
+  header: string;
+  numeric: boolean;
+}
+
+const dmy = (s: string) => s.split("-").reverse().join("-");
+const cell = (v: unknown) =>
+  v === null || v === undefined || typeof v === "object" ? "" : String(v).trim();
+const asNumber = (s: string): number | null => {
+  const clean = s.replace(/,/g, "");
+  return /^-?\d*\.?\d+$/.test(clean) ? parseFloat(clean) : null;
+};
+
+const prettify = (k: string) =>
+  k
+    .replace(/[_\-.]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b([a-z])([a-z]*)/gi, (_, a: string, b: string) => a.toUpperCase() + b.toLowerCase());
+
+/** Columns are read from the rows, so the page follows whatever fields the API sends. */
+function columnsOf(rows: Row[]): Col[] {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  for (const r of rows.slice(0, 200))
+    for (const k of Object.keys(r.raw)) {
+      const n = norm(k);
+      if (seen.has(n)) continue;
+      seen.add(n);
+      order.push(k);
+    }
+  const cols: Col[] = [];
+  for (const k of order) {
+    const values = rows.map((r) => cell(r.raw[k]));
+    if (values.every((v) => v === "")) continue;
+    const filled = values.filter((v) => v !== "");
+    cols.push({ key: k, header: prettify(k), numeric: filled.every((v) => asNumber(v) !== null) });
+  }
+  return cols;
+}
 
 const PAGE_SIZES = [10, 25, 50, 100, 250];
 
@@ -45,6 +96,8 @@ const VlcMilkBill: React.FC = () => {
   );
 
   const [bills, setBills] = useState<string[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [failed, setFailed] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needle, setNeedle] = useState("");
@@ -62,15 +115,19 @@ const VlcMilkBill: React.FC = () => {
     setError(null);
     setNeedle("");
     setPage(1);
+    setFailed(0);
     try {
-      const markup = await getVlcMilkBill({
+      const res = await getVlcMilkBill({
         fromdate: f.from,
         todate: f.to,
         stationIds: options.map((o) => o.id),
       });
-      setBills(splitBills(sanitizeBillHtml(markup)));
+      setBills(splitBills(sanitizeBillHtml(res.markup)));
+      setRows(res.rows.map((raw, n) => ({ raw, key: String(n) })));
+      setFailed(res.failed);
     } catch (e) {
       setBills([]);
+      setRows([]);
       setError(
         e instanceof ApiError ? e.message : "The milk bill could not be loaded.",
       );
@@ -79,23 +136,65 @@ const VlcMilkBill: React.FC = () => {
     }
   };
 
-  const visible = useMemo(() => {
+  const cols = useMemo(() => columnsOf(rows), [rows]);
+
+  const visibleRows = useMemo(() => {
+    const s = needle.trim().toLowerCase();
+    if (!s) return rows;
+    return rows.filter((r) =>
+      cols.map((c) => cell(r.raw[c.key])).join(" ").toLowerCase().includes(s),
+    );
+  }, [rows, needle, cols]);
+
+  const visibleBills = useMemo(() => {
     const s = needle.trim().toLowerCase();
     return s ? bills.filter((b) => textOf(b).toLowerCase().includes(s)) : bills;
   }, [bills, needle]);
 
-  const pages = Math.max(1, Math.ceil(visible.length / pageSize));
+  // The API answers with table rows, or (older portal) with a ready-made HTML bill.
+  const tableMode = rows.length > 0;
+  const visible = tableMode ? visibleRows : visibleBills;
+  const total = tableMode ? rows.length : bills.length;
+
+  const columns: Column<Row>[] = useMemo(
+    () =>
+      cols.map((c) => ({
+        key: c.key,
+        header: c.header,
+        align: c.numeric ? ("right" as const) : undefined,
+        sort: (r: Row) => {
+          const t = cell(r.raw[c.key]);
+          const n = c.numeric ? asNumber(t) : null;
+          return n !== null ? n : t;
+        },
+        cell: (r: Row) => cell(r.raw[c.key]) || "—",
+      })),
+    [cols],
+  );
+  const exportCols: ExportCol<Row>[] = useMemo(
+    () => cols.map((c) => ({ header: c.header, value: (r: Row) => cell(r.raw[c.key]) })),
+    [cols],
+  );
+
+  const pages = Math.max(1, Math.ceil(visibleBills.length / pageSize));
   useEffect(() => {
     if (page > pages) setPage(pages);
   }, [page, pages]);
   const start = (page - 1) * pageSize;
-  const shown = visible.slice(start, start + pageSize);
+  const shown = tableMode ? [] : visibleBills.slice(start, start + pageSize);
 
   const run = (kind: ExportKind) => {
     if (!applied || visible.length === 0) return;
     const name = `vlc-milk-bill-${applied.from}-${applied.to}`;
-    if (kind === "xls") return downloadBillsExcel(name, visible);
-    printBills("VLC Milk Bill", visible);
+    if (tableMode) {
+      if (kind === "xls") return exportExcel(name, exportCols, visibleRows);
+      return exportPDF("VLC Milk Bill", exportCols, visibleRows, {
+        subtitle: `${dmy(applied.from)} to ${dmy(applied.to)}`,
+        meta: [["From", dmy(applied.from)], ["To", dmy(applied.to)]],
+      });
+    }
+    if (kind === "xls") return downloadBillsExcel(name, visibleBills);
+    printBills("VLC Milk Bill", visibleBills);
   };
 
   const hasData = !!applied && !loading && !error && visible.length > 0;
@@ -172,7 +271,7 @@ const VlcMilkBill: React.FC = () => {
                     disabled={!applied}
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm">
+                <label className={tableMode ? "hidden" : "flex items-center gap-2 text-sm"}>
                   <span className="font-bold">Result per page:</span>
                   <div className="w-24">
                     <Select
@@ -204,10 +303,25 @@ const VlcMilkBill: React.FC = () => {
             <ErrorBlock message={error} onRetry={() => void submit()} />
           ) : visible.length === 0 ? (
             <p className="px-6 py-12 text-center text-sm text-mute">
-              {bills.length === 0
+              {total === 0
                 ? "No record for these dates."
                 : "Nothing matches your search."}
             </p>
+          ) : tableMode ? (
+            <div>
+              {failed > 0 && (
+                <p className="px-5 pt-4 text-sm text-warn">
+                  {failed} centre(s) could not be loaded, the rest are shown.
+                </p>
+              )}
+              <DataTable
+                columns={columns}
+                rows={visibleRows}
+                rowKey={(r) => r.key}
+                pageSize={100}
+                minWidth={Math.max(640, columns.length * 130)}
+              />
+            </div>
           ) : (
             <div className="space-y-4 p-4 sm:p-5">
               {shown.map((html, i) => (
@@ -222,9 +336,9 @@ const VlcMilkBill: React.FC = () => {
                 <p className="tnum">
                   Showing{" "}
                   <b className="text-ink">
-                    {start + 1}–{Math.min(start + pageSize, visible.length)}
+                    {start + 1}–{Math.min(start + pageSize, visibleBills.length)}
                   </b>{" "}
-                  of {visible.length}
+                  of {visibleBills.length}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
