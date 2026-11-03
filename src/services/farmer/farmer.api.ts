@@ -1,21 +1,18 @@
 import { ALL_MILK_CODE, FARMER_MILK_CODES } from '../config';
 import { gatewayPostJson, gatewayText, listOf, parseGatewayText, type Priority } from '../http/client';
-import { dpuUrl, openDpuReply } from '../http/dpu';
+import { dpuGet, dpuPostJson, dpuUrl, openDpuReply } from '../http/dpu';
 import { adaptiveCollection, collectionWaves, fanOut, needSession, type CollectionParams, type Emit } from '../http/fanout';
 import type { RawFarmerRow, RawLoose } from '../types/raw';
 import type { QueryData } from '../http/fanout';
-import { apiDate } from '../utils/date';
+import { apiDate, eachDay } from '../utils/date';
 import { ApiError } from '../http/errors';
 
-/* ------------------------------------------------------------------ */
-/*  DPU Farmer Collection (manual test)                                */
-/*  Set DPU_FARMER_COLLECTION to false to go back to /home/farmercollection */
-/* ------------------------------------------------------------------ */
+
 export const DPU_FARMER_COLLECTION = true;
 export const DPU_FARMER_COLLECTION_URL = dpuUrl('/Login/FarmerCollection');
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const nk = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '');
+export const nk = (k: string) => k.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** Raw field -> names the DPU reply may use for it (compared ignoring case / symbols). */
 const ALIASES: Record<keyof RawFarmerRow, string[]> = {
@@ -43,7 +40,7 @@ const ALIASES: Record<keyof RawFarmerRow, string[]> = {
 };
 
 /** "2026-11-02T00:00:00" / "02/11/2026" -> "02 Nov 2026" (the format the pages read). */
-function trdateOf(v: string): string {
+export function trdateOf(v: string): string {
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
   if (iso) return `${iso[3]} ${MON[Number(iso[2]) - 1]} ${iso[1]}`;
   const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/.exec(v);
@@ -102,7 +99,7 @@ function findRows(v: unknown, depth = 0): RawLoose[] | null {
   return null;
 }
 
-function rowsOfReply(reply: unknown): RawLoose[] {
+export function rowsOfReply(reply: unknown): RawLoose[] {
   if (isObj(reply)) {
     const okKey = Object.keys(reply).find((k) => ['success', 'issuccess', 'status'].includes(nk(k)));
     const ok = okKey ? reply[okKey] : undefined;
@@ -137,16 +134,27 @@ function fetchDpuFarmerCollection(p: CollectionParams, emit?: Emit<RawFarmerRow>
   needSession();
   const jobs = p.vlccIds.flatMap((id) =>
     dpuMilkCodes(p.milk).map((code) => async () => {
-      const rows = rowsOfReply(
-        await dpuCall({
-          id,
-          stationid: id,
-          shift: p.shift,
-          milktype: code,
-          fromdate: apiDate(p.from),
-          todate: apiDate(p.to),
-        }),
-      ).map((r) => toRawFarmer(r, id, code, p.shift));
+      const read = async (from: string, to: string): Promise<RawFarmerRow[]> =>
+        rowsOfReply(
+          await dpuCall({ id, stationid: id, shift: p.shift, milktype: code, fromdate: apiDate(from), todate: apiDate(to) }),
+        ).map((r) => toRawFarmer(r, id, code, p.shift));
+      // one retry, then (for a date range) day by day: a long range can come back cut off by the server,
+      // and a failed request would otherwise silently drop that centre from the totals.
+      const once = async (from: string, to: string): Promise<RawFarmerRow[]> => {
+        try {
+          return await read(from, to);
+        } catch {
+          await new Promise((r) => setTimeout(r, 500));
+          return read(from, to);
+        }
+      };
+      let rows: RawFarmerRow[];
+      try {
+        rows = await once(p.from, p.to);
+      } catch (e) {
+        if (p.from >= p.to) throw e;
+        rows = (await Promise.all(eachDay(p.from, p.to).map((d) => once(d, d)))).flat();
+      }
       // the pages match rows to centres by vlccid: keep it one of the ids that were asked for
       for (const r of rows) if (!p.vlccIds.includes(String(r.vlccid))) r.vlccid = id;
       return rows;
@@ -180,4 +188,53 @@ export const getFarmer = (vlcid: string, priority: Priority = 1): Promise<unknow
 export async function fetchFarmersOf(vlcid: string): Promise<QueryData<RawLoose>> {
   const rows = listOf<RawLoose>(await getFarmer(vlcid)).map((r) => ({ ...r, vlccid: vlcid }));
   return { rows, failed: 0, total: 1, done: 1 };
+}
+
+/* ------------------------------------------------------------------ */
+/*  DPU Farmer Master (farmer dropdown): POST /api/Login/FarmerMaster   */
+/* ------------------------------------------------------------------ */
+export interface MasterFarmerOption {
+  vlccid: string;
+  farmerId: string;
+  name: string;
+}
+
+const FARMER_ID_KEYS = ['farmerid', 'farmercode', 'farmer', 'farmerno', 'fid'];
+const FARMER_NAME_KEYS = ['farmername', 'name', 'fname'];
+const firstOf = (r: RawLoose, wanted: string[]): string => {
+  const keys = Object.keys(r);
+  for (const w of wanted) {
+    const k = keys.find((x) => nk(x) === w);
+    const v = k === undefined ? undefined : r[k];
+    if ((typeof v === 'string' && v.trim()) || typeof v === 'number') return String(v).trim();
+  }
+  return '';
+};
+
+/** Farmers of one centre, straight from the DPU farmer master (id + name, no collection needed). */
+export async function fetchDpuFarmerMaster(vlccid: string): Promise<MasterFarmerOption[]> {
+  const parse = (reply: unknown): MasterFarmerOption[] => {
+    const found: MasterFarmerOption[] = [];
+    for (const r of rowsOfReply(reply)) {
+      const farmerId = firstOf(r, FARMER_ID_KEYS);
+      if (farmerId) found.push({ vlccid, farmerId, name: firstOf(r, FARMER_NAME_KEYS) });
+    }
+    return found;
+  };
+  // 1) POST /Login/FarmerMaster   2) GET /Login/GetFarmer  (the swagger lists both; the first one that answers with farmers wins)
+  try {
+    const got = parse(await dpuPostJson('/Login/FarmerMaster', { VillageIds: vlccid, id: vlccid, vlccid, stationid: vlccid }, 1));
+    if (got.length) return got;
+  } catch (e) {
+    console.warn('[farmers] FarmerMaster failed:', e instanceof Error ? e.message : e);
+  }
+  for (const param of ['vlccid', 'VillageIds', 'id']) {
+    try {
+      const got = parse(await dpuGet(`/Login/GetFarmer?${param}=${encodeURIComponent(vlccid)}`, 1));
+      if (got.length) return got;
+    } catch (e) {
+      console.warn(`[farmers] GetFarmer?${param}= failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return [];
 }

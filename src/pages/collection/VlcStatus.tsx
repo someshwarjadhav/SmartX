@@ -1,7 +1,7 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
 import { ArrowRight, CalendarDays, Search, SlidersHorizontal, Wifi, WifiOff } from 'lucide-react';
-import { useMilkVlccEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
+import { useMilkVlccEntries, useMilkCenterOptions, usePlantOptions } from '../../hooks/useMilkReportData';
 import { SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import { Badge } from '../../components/ui/Badge';
 import { ReportLoader } from '../../components/ui/ReportLoader';
@@ -123,14 +123,14 @@ const Tile: React.FC<{ tile: VlcTile }> = ({ tile }) => (
 
 const VlcStatus: React.FC = () => {
   const centres = useMilkCenterOptions();
-  const plantOptions = useMemo(() => [{ value: 'all', label: 'All MCCs' }, ...Array.from(new Map(centres.map((c) => [c.mccId, c.mccId])).keys()).map((id) => ({ value: id, label: id }))], [centres]);
+  const plantOptions = usePlantOptions(centres);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both' }, submitted);
   const loading = live.loading;
-  const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.id, name:c.label, active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
+  const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.id, name:c.name || c.id, active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
   const active = tiles.filter((t) => t.active).length;
 
   const submit = () => {

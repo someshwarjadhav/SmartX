@@ -1,13 +1,23 @@
 import { directGet } from '../http/client';
+import { dpuGet } from '../http/dpu';
 import { REPORT_CONFIG_URL } from '../config';
 import { isObj, norm, pick, pickValue, rowsFrom, type Obj } from '../utils/loose';
 import { REPORT_INDEX } from '../../config/portal/reportAccess';
 
 
-export const getReportAccess = (userid: string): Promise<unknown> => {
-  const url = new URL(REPORT_CONFIG_URL);
-  url.searchParams.set('userid', userid);
-  return directGet(url.toString(), 0);
+/**
+ * Report column access: DPU `GET /api/Login/UserReportConfig?userid=<id>`.
+ * If the DPU call fails the old STIPL report-config URL is used so the columns never disappear.
+ */
+export const getReportAccess = async (userid: string): Promise<unknown> => {
+  try {
+    return await dpuGet(`/Login/UserReportConfig?userid=${encodeURIComponent(userid)}`, 0);
+  } catch (e) {
+    console.warn('[UserReportConfig] DPU call failed, using the old report-config URL:', e instanceof Error ? e.message : e);
+    const url = new URL(REPORT_CONFIG_URL);
+    url.searchParams.set('userid', userid);
+    return directGet(url.toString(), 0);
+  }
 };
 
 

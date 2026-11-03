@@ -1,6 +1,6 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
-import { ArrowRight, CalendarDays, Droplets, FileSpreadsheet, FileText, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Store, Sun, Table2 } from 'lucide-react';
+import { ArrowRight, CalendarDays, Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Store, Sun } from 'lucide-react';
 import { useMilkVlccEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
@@ -9,6 +9,9 @@ import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
+import { reportActions } from '../../components/ui/reportActions';
+import { PartialNotice } from '../../components/ui/PartialNotice';
+import type { ExportTable } from '../../lib/exporters';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useReportTable } from '../../hooks/useSessionData';
@@ -20,7 +23,6 @@ import { TableToolbar } from '../../components/ui/TableToolbar';
 import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
-import { exportCSV, exportExcel, exportPDF, type ExportTable } from '../../lib/exporters';
 import { cn } from '../../lib/cn';
 import { fmtDate, nf, toISO } from '../../lib/format';
 
@@ -205,20 +207,7 @@ const VlccCollectionReport: React.FC = () => {
     totals: tbl.pickTotals(['Total', `${rows.length} rows`, '', '', Math.round(totals.litres * 10) / 10, Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, totals.litres ? Math.round((totals.amount / totals.litres) * 100) / 100 : 0, Math.round(totals.amount * 100) / 100]),
   });
 
-  const exportAs = (label: string, run: (t: ExportTable) => void | Promise<void>) => async () => {
-    try {
-      await run(buildTable());
-      toast.show(`Exported ${rows.length} rows as ${label}`);
-    } catch {
-      toast.show('Export failed. Please try again.');
-    }
-  };
-
-  const actions: ExportAction[] = [
-    { id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary', run: exportAs('Excel', exportExcel) },
-    { id: 'pdf', label: 'PDF Export', icon: FileText, variant: 'danger', run: exportAs('PDF', exportPDF) },
-    { id: 'csv', label: 'CSV Export', icon: Table2, variant: 'success', run: exportAs('CSV', exportCSV) },
-  ];
+  const actions: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print'] });
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -234,6 +223,7 @@ const VlccCollectionReport: React.FC = () => {
       <VlccFilters value={draft} options={vlcOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
+      <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />
 
       <Panel bodyClassName="!p-0">
         {!submitted ? (

@@ -1,6 +1,6 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
-import { ArrowRight, CalendarDays, FileSpreadsheet, FileText, Search, SearchX, SlidersHorizontal, Table2 } from 'lucide-react';
+import { ArrowRight, CalendarDays, Search, SlidersHorizontal } from 'lucide-react';
 import { useMilkFarmerEntries, useMilkVlccEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import type { Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
@@ -8,6 +8,9 @@ import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
+import { reportActions } from '../../components/ui/reportActions';
+import { PartialNotice } from '../../components/ui/PartialNotice';
+import type { ExportTable } from '../../lib/exporters';
 import { SelectField, TextField } from '../../components/ui/Fields';
 import { KindChip } from '../../components/ui/KindChip';
 import { PageHeader } from '../../components/ui/PageHeader';
@@ -17,7 +20,6 @@ import { TableToolbar } from '../../components/ui/TableToolbar';
 import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
-import { exportCSV, exportExcel, exportPDF, type ExportTable } from '../../lib/exporters';
 import { cn } from '../../lib/cn';
 import { fmtDate, nf, toISO } from '../../lib/format';
 
@@ -189,6 +191,11 @@ const VarianceTable: React.FC<{ rows: VarianceRow[]; all: VarianceRow[]; loading
               <td className={cn(TD, 'font-semibold', diffTone(r.amountDiff))}>₹{nf(r.amountDiff, 2)}</td>
             </tr>
           ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={19} className="border border-line px-3 py-6 text-center text-sm text-mute">No variance found for this VLC and date range.</td>
+            </tr>
+          )}
         </tbody>
         <tfoot>
           <tr>
@@ -261,20 +268,7 @@ const VarianceReport: React.FC = () => {
     totals: ['Total', '', '', '', '', r1(sum(rows, (r) => r.vendorQty)), '', '', '', r2(sum(rows, (r) => r.vendorAmount)), r1(sum(rows, (r) => r.farmerQty)), '', '', '', r2(sum(rows, (r) => r.farmerAmount)), r1(sum(rows, (r) => r.qtyDiff)), '', '', r2(sum(rows, (r) => r.amountDiff))],
   });
 
-  const exportAs = (label: string, run: (t: ExportTable) => void | Promise<void>) => async () => {
-    try {
-      await run(buildTable());
-      toast.show(`Exported ${rows.length} rows as ${label}`);
-    } catch {
-      toast.show('Export failed. Please try again.');
-    }
-  };
-
-  const actions: ExportAction[] = [
-    { id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary', run: exportAs('Excel', exportExcel) },
-    { id: 'pdf', label: 'PDF Export', icon: FileText, variant: 'danger', run: exportAs('PDF', exportPDF) },
-    { id: 'csv', label: 'CSV Export', icon: Table2, variant: 'success', run: exportAs('CSV', exportCSV) },
-  ];
+  const actions: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print'] });
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -283,6 +277,7 @@ const VarianceReport: React.FC = () => {
       <VarianceFilters value={draft} vlcOptions={vlcOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
 
       {(vendor.error || farmer.error) && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{vendor.error || farmer.error} <button className="ml-2 underline" onClick={() => { vendor.retry(); farmer.retry(); }}>Retry</button></div>}
+      <PartialNotice failed={vendor.failed + farmer.failed} total={vendor.total + farmer.total} onRetry={() => { vendor.retry(); farmer.retry(); }} />
 
       <Panel bodyClassName="!p-0">
         {!submitted ? (
@@ -301,8 +296,6 @@ const VarianceReport: React.FC = () => {
 
         {loading ? (
           <ReportLoader label="Loading variance report…" />
-        ) : rows.length === 0 ? (
-          <EmptyState icon={SearchX} title="No variance found" text="Try another VLC or date range." />
         ) : (
           <VarianceTable rows={pager.visible} all={rows} loading={loading} />
         )}

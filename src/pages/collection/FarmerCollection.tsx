@@ -1,9 +1,12 @@
 import type * as React from 'react';
 import { useMemo, useState } from 'react';
-import { ArrowRight, CalendarDays, Droplets, FileSpreadsheet, FileText, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Table2, Users } from 'lucide-react';
+import { ArrowRight, CalendarDays, Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Users } from 'lucide-react';
 import type { CollectionEntry } from '../../data/farmerCollection';
-import { useMilkFarmerEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
+import { useMilkFarmerEntries, useMilkCenterOptions, usePlantOptions } from '../../hooks/useMilkReportData';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
+import { reportActions } from '../../components/ui/reportActions';
+import { PartialNotice } from '../../components/ui/PartialNotice';
+import type { ExportTable } from '../../lib/exporters';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { KindChip } from '../../components/ui/KindChip';
@@ -16,7 +19,6 @@ import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
 import { useReportColumns } from '../../hooks/useSessionData';
 import { useToast } from '../../hooks/useToast';
-import { exportCSV, exportExcel, exportLegacyExcel, exportPDF, type ExportTable } from '../../lib/exporters';
 import { cn } from '../../lib/cn';
 import { fmtDate, nf, toISO } from '../../lib/format';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
@@ -197,7 +199,7 @@ const EXPORT_COLS: ExportCol[] = [
 
 const FarmerCollection: React.FC = () => {
   const centres = useMilkCenterOptions();
-  const plantOptions = useMemo(() => [{ value: 'all', label: 'All MCCs' }, ...Array.from(new Map(centres.map((c) => [c.mccId, c.mccId])).keys()).map((id) => ({ value: id, label: id }))], [centres]);
+  const plantOptions = usePlantOptions(centres);
   const [draft, setDraft] = useState<CollectionFilters>(defaults);
   const [applied, setApplied] = useState<CollectionFilters>(defaults);
   const [submitted, setSubmitted] = useState(false);
@@ -264,21 +266,7 @@ const FarmerCollection: React.FC = () => {
     };
   };
 
-  const exportAs = (label: string, run: (t: ExportTable) => void | Promise<void>) => async () => {
-    try {
-      await run(buildTable());
-      toast.show(`Exported ${rows.length} entries as ${label}`);
-    } catch {
-      toast.show('Export failed. Please try again.');
-    }
-  };
-
-  const actions: ExportAction[] = [
-    { id: 'old', label: 'Old Excel Export', icon: FileSpreadsheet, variant: 'primary', run: exportAs('Old Excel', exportLegacyExcel) },
-    { id: 'new', label: 'New Excel Export', icon: FileSpreadsheet, variant: 'primary', run: exportAs('Excel', exportExcel) },
-    { id: 'pdf', label: 'PDF Export', icon: FileText, variant: 'danger', run: exportAs('PDF', exportPDF) },
-    { id: 'csv', label: 'CSV Export', icon: Table2, variant: 'success', run: exportAs('CSV', exportCSV) },
-  ];
+  const actions: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'entries', toast: toast.show, legacyExcel: true });
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -294,6 +282,7 @@ const FarmerCollection: React.FC = () => {
       <FarmerCollectionFilters value={draft} plantOptions={plantOptions} centreOptions={centreOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
+      <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />
 
       <Panel bodyClassName="!p-0">
         {!submitted ? (
