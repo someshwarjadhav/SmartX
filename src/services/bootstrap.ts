@@ -68,16 +68,12 @@ export function applySession(profile: LoginProfile) {
   for (const c of centers) if (c.name) names[c.id] = c.name;
   const stationByVlcc: Record<string, string> = {};
   for (const c of centers) if (c.stationId) stationByVlcc[c.id] = c.stationId;
-  const stations = [...new Set(Object.values(stationByVlcc))];
   setSession({
     ...profile,
     vlccIds: centers.length ? centers.map((c) => c.id) : profile.vlccIds,
     vlccNames: names,
     stationByVlcc,
   });
-  if (import.meta.env.DEV) {
-    console.info('[getCenter] routes:', [...new Set(centers.map((c) => c.routeName || c.routeId).filter(Boolean))], '| station ids:', stations);
-  }
   Object.assign(GLOBALS, { centerdata: centers, userid: profile.userId ?? null, stationid: profile.centerStationId ?? null });
 }
 
@@ -93,13 +89,11 @@ async function loadCenters(profile: LoginProfile): Promise<unknown> {
     try {
       const reply = await getCenter(id);
       if (parseCenters(reply).length > 0) {
-        if (import.meta.env.DEV) console.info('[getCenter] centres found with id:', id);
         return reply;
       }
       answeredEmpty = reply;
     } catch (e) {
       lastError = e;
-      if (import.meta.env.DEV) console.warn('[getCenter] id', id, 'failed:', e instanceof Error ? e.message : e);
     }
   }
   if (answeredEmpty !== null) return answeredEmpty;
@@ -119,7 +113,6 @@ export async function loadSessionData(profile: LoginProfile): Promise<void> {
     if (res.status === 'fulfilled') return res.value;
     const why = res.reason instanceof Error ? res.reason.message : String(res.reason);
     errors[name] = why;
-    console.warn(`[${name}] not loaded:`, why);
     return null;
   };
   const raw: RawData = { centers: value(c, 'getCenter'), menu: value(m, 'getMenu'), report: value(r, 'getReportAccess') };
@@ -128,12 +121,6 @@ export async function loadSessionData(profile: LoginProfile): Promise<void> {
   loaded = raw.centers !== null || !centerStationId;
   vaultSave(DATA_KEY, { userId: userId ?? '', raw } satisfies StoredData);
 
-  if (import.meta.env.DEV) {
-    console.info('[bootstrap] user id:', userId ?? '(NOT FOUND in login record)', '| station id:', centerStationId ?? '(NOT FOUND in login record)');
-    console.info('[getCenter] centres:', data.centers.length, '| first raw row:', data.centers[0]?.raw ?? raw.centers);
-    console.info('[getMenu] top level entries:', data.menu.map((n) => n.title || n.url), '| raw:', raw.menu);
-    console.info('[getReportAccess] rules:', [...data.report.rules].map(([k, v]) => ({ report: k || '(all)', hidden: [...v.hidden], shown: [...v.shown] })), '| raw:', raw.report);
-  }
 }
 
 export function saveLogin(username: string, record: unknown) {

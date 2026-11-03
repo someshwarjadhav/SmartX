@@ -33,7 +33,7 @@ export const SessionCheck: React.FC = () => {
       ? text({
           loginRecord: getSavedLoginRecord(),
           getCenter_reply: head(raw?.centers),
-          getMenu_reply: head(raw?.menu),
+          getMenu_reply: raw?.menu ?? null, // full decrypted menu reply (not cut)
           getReportAccess_reply: head(raw?.report, 4),
         }, 20000)
       : ''),

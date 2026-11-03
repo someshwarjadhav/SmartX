@@ -1,5 +1,5 @@
 import { asFlag } from "../report/report.api.ts";
-import { gatewayGet } from "../http/client";
+import { dpuGet } from "../http/dpu";
 import {
   isObj,
   norm,
@@ -10,11 +10,10 @@ import {
   type Obj,
 } from "../utils/loose";
 
+// Menu binding: DPU API only -> https://dpu.shivinfotech.co.in/api/Login/menu?userid=<id>
+// (reply is decrypted inside dpuGet).
 export const getMenu = (userid: string): Promise<unknown> =>
-  gatewayGet(
-    `/dairy/dairy/getmenu?userid=${encodeURIComponent(userid)}`,
-    0,
-  );
+  dpuGet(`/Login/menu?userid=${encodeURIComponent(userid)}`, 0);
 
 export interface MenuNode {
   id: string;
@@ -138,18 +137,78 @@ function nodeOf(row: Obj, index: number): { node: MenuNode; parent: string } {
   };
 }
 
+const MODULE_KEYS = [
+  "modulename",
+  "mainmenuname",
+  "mainmenu",
+  "menugroup",
+  "groupname",
+  "parentname",
+  "parentmenuname",
+  "module",
+];
+
+const looksJson = (t: string) => /^[[{]/.test(t.trim());
+
+/** Finds the list of menu rows wherever the reply keeps it (root, data, nested object, JSON-in-a-string). */
+function menuRows(json: unknown, depth = 0): Obj[] {
+  if (depth > 5) return [];
+  if (typeof json === "string") {
+    if (!looksJson(json)) return [];
+    try {
+      return menuRows(JSON.parse(json), depth + 1);
+    } catch {
+      return [];
+    }
+  }
+  const direct = rowsFrom(json);
+  if (direct.length) return direct;
+  if (!isObj(json)) return [];
+  for (const v of Object.values(json)) {
+    if (Array.isArray(v) && v.length > 0 && v.every(isObj)) return v as Obj[];
+  }
+  for (const v of Object.values(json)) {
+    if (isObj(v) || (typeof v === "string" && looksJson(v))) {
+      const got = menuRows(v, depth + 1);
+      if (got.length) return got;
+    }
+  }
+  return [];
+}
+
 export function parseMenu(json: unknown): MenuNode[] {
-  const entries = rowsFrom(json).map(nodeOf);
+  const rows = menuRows(json);
+  const entries = rows.map((r, i) => ({
+    ...nodeOf(r, i),
+    module: pick(r, MODULE_KEYS),
+  }));
   const byId = new Map(entries.map((e) => [e.node.id, e.node]));
   const roots: MenuNode[] = [];
-  for (const { node, parent } of entries) {
+  const moduleRoots = new Map<string, MenuNode>();
+  for (const { node, parent, module } of entries) {
     const host =
       parent && parent !== "0" && parent !== node.id
         ? byId.get(parent)
         : undefined;
-    if (host) host.children.push(node);
-    else roots.push(node);
+    if (host) {
+      host.children.push(node);
+      continue;
+    }
+    // flat rows: every row is a form and carries its module name -> group the forms under their module
+    if (module && !node.children.length && norm(module) !== norm(node.title)) {
+      let root = moduleRoots.get(norm(module));
+      if (!root) {
+        root = { id: `mod:${norm(module)}`, title: module, url: "", enabled: true, children: [] };
+        moduleRoots.set(norm(module), root);
+        roots.push(root);
+      }
+      root.children.push(node);
+      continue;
+    }
+    roots.push(node);
   }
+  if (!roots.length && json !== null && json !== undefined)
+    console.warn("[menu] no menu rows could be read from the reply:", json);
   return roots;
 }
 

@@ -9,6 +9,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { TextField } from '../../components/ui/Fields';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { useReportTable } from '../../hooks/useSessionData';
 import { Pagination } from '../../components/ui/Pagination';
 import { Panel } from '../../components/ui/Panel';
 import { TableToolbar } from '../../components/ui/TableToolbar';
@@ -125,6 +126,7 @@ const UnionwiseCollection: React.FC = () => {
     pager.reset();
   };
 
+  const tbl = useReportTable('unionwisecollection', COLUMNS);
   const buildTable = (): ExportTable => {
     const qty = rows.reduce((a, r) => a + r.qty, 0);
     const amount = rows.reduce((a, r) => a + r.amount, 0);
@@ -132,12 +134,12 @@ const UnionwiseCollection: React.FC = () => {
       filename: `unionwise-collection-${applied.fromDate}-${applied.toDate}`,
       title: 'Unionwise collection',
       subtitle: `${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
-      columns: [
+      columns: tbl.pick([
         { header: 'Union' }, { header: 'Society' }, { header: 'Farmer', type: 'int' }, { header: 'Qty', type: 'dec1' },
         { header: 'Avg. Fat', type: 'dec2' }, { header: 'Avg. SNF', type: 'dec2' }, { header: 'Avg. Rate', type: 'money' }, { header: 'Amount', type: 'money' },
-      ],
-      rows: rows.map((r) => [r.union, r.society, r.farmer, r.qty, r.avgFat, r.avgSnf, r.avgRate, r.amount]),
-      totals: ['Total', `${rows.length} societies`, rows.reduce((a, r) => a + r.farmer, 0), Math.round(qty * 10) / 10, '', '', qty ? Math.round((amount / qty) * 100) / 100 : 0, Math.round(amount * 100) / 100],
+      ] as ExportTable['columns']),
+      rows: rows.map((r) => tbl.pick<string | number>([r.union, r.society, r.farmer, r.qty, r.avgFat, r.avgSnf, r.avgRate, r.amount])),
+      totals: tbl.pickTotals(['Total', `${rows.length} societies`, rows.reduce((a, r) => a + r.farmer, 0), Math.round(qty * 10) / 10, '', '', qty ? Math.round((amount / qty) * 100) / 100 : 0, Math.round(amount * 100) / 100]),
     };
   };
 
@@ -183,7 +185,7 @@ const UnionwiseCollection: React.FC = () => {
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range." />
         ) : (
-          <DataTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Unionwise collection" loading={loading} minWidth={820} />
+          <DataTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Unionwise collection" loading={loading} minWidth={820} />
         )}
 
         {!loading && rows.length > 0 && (

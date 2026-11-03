@@ -155,9 +155,9 @@ async function send(
 }
 
 async function sendOnce(
-  endpoint: string,
+  _endpoint: string,
   init: RequestInit,
-  fields: unknown,
+  _fields: unknown,
   url: string,
 ): Promise<unknown> {
   const controller = new AbortController();
@@ -182,22 +182,12 @@ async function sendOnce(
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 200);
-      if (import.meta.env.DEV)
-        console.warn(`[smartx] HTTP ${res.status} on ${endpoint}`, {
-          sent: fields ?? "GET",
-          response: body,
-        });
       throw new ApiError(
         `The server answered with error ${res.status}${body ? `: ${body}` : "."}`,
         "server",
       );
     }
     const text = await res.text();
-    if (import.meta.env.DEV)
-      console.debug(`[smartx] OK ${endpoint}`, {
-        sent: fields ?? "GET",
-        reply: text.replace(/[\r\n]+/g, "").slice(0, 160),
-      });
     return parseGatewayText(text);
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -323,19 +313,6 @@ export async function gatewayText(
         "auth",
       );
     const text = await res.text();
-    if (import.meta.env.DEV)
-      console.debug(
-        `[smartx] ${init.method ?? "GET"} ${endpoint} -> ${res.status}`,
-        {
-          sent:
-            typeof init.body === "string"
-              ? init.body.slice(0, 400)
-              : init.body
-                ? "[form data]"
-                : endpoint,
-          reply: text.replace(/[\r\n]+/g, "").slice(0, 300),
-        },
-      );
     if (!res.ok) {
       const body = text
         .replace(/<[^>]*>/g, " ")
