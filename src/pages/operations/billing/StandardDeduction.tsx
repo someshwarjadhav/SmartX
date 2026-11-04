@@ -1,11 +1,17 @@
 import type * as React from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Percent, Save, Users } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
-import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
+import {
+  CardTitle,
+  ReportPage,
+  Reveal,
+} from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
+import { MilkLoader } from "../../../components/operations/MilkLoader";
+import { useSmoothLoading } from "../../../hooks/useSmoothLoading";
 import {
   RateTransfer,
   noNegative,
@@ -37,6 +43,8 @@ const StandardDeduction: React.FC = () => {
   const [left, setLeft] = useState<CnFarmer[]>([]);
   const [right, setRight] = useState<CnRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const showLoader = useSmoothLoading(loading);
+  const ticket = useRef(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -56,23 +64,33 @@ const StandardDeduction: React.FC = () => {
   };
 
   const show = async () => {
+    console.log(
+      `[StdDeduction] "Show Farmers" clicked: vlcId=${vlcId || "(empty)"} category=${category.label} flag=${category.flag} from=${from}`,
+    );
     if (!vlcId || !from || loading) return;
     clearRequestMemo();
     setLoading(true);
     reset();
+    const mine = ++ticket.current;
     try {
       const d = await getFarmers(vlcId, category.flag, from);
+      if (mine !== ticket.current) return;
       setLeft(d.farmers);
       setRight(d.saved);
       setLoaded(true);
     } catch (e) {
+      console.error("[StdDeduction] load FAILED:", e);
+      if (mine !== ticket.current) return;
       setError(msg(e, "The farmers could not be loaded."));
     } finally {
-      setLoading(false);
+      if (mine === ticket.current) setLoading(false);
     }
   };
 
   const submit = async () => {
+    console.log(
+      `[StdDeduction] "Submit" clicked: vlcId=${vlcId || "(empty)"} flag=${category.flag} date=${from} rows on right=${right.length}`,
+    );
     if (saving) return;
     const bad = right.find((r) => !noNegative(r));
     if (bad)
@@ -92,6 +110,7 @@ const StandardDeduction: React.FC = () => {
       reset();
       setGen((g) => g + 1);
     } catch (e) {
+      console.error("[StdDeduction] SAVE FAILED:", e);
       toast(msg(e, "The standard deduction could not be saved."), "warn");
     } finally {
       setSaving(false);
@@ -179,17 +198,23 @@ const StandardDeduction: React.FC = () => {
       )}
 
       <Reveal delay={0.1}>
-        <RateTransfer
-          key={gen}
-          left={left}
-          right={right}
-          loaded={loaded}
-          onChange={(l, r) => {
-            setLeft(l);
-            setRight(r);
-          }}
-          onWarn={(m) => toast(m, "warn")}
-        />
+        {showLoader ? (
+          <Card>
+            <MilkLoader label="Loading list…" />
+          </Card>
+        ) : (
+          <RateTransfer
+            key={gen}
+            left={left}
+            right={right}
+            loaded={loaded}
+            onChange={(l, r) => {
+              setLeft(l);
+              setRight(r);
+            }}
+            onWarn={(m) => toast(m, "warn")}
+          />
+        )}
       </Reveal>
     </ReportPage>
   );

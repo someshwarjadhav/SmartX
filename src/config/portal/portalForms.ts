@@ -278,11 +278,13 @@ export const NAV_MODULES: NavModule[] = [
         "Cattle Feed Sale",
         "/Transactions/cattlefeed-sale",
         "cattlefeed-sale",
+        "/transactions/sale-entry",
       ),
       form(
         "Sale Entry",
         "/Transactions/cattlefeed-sale-single-code",
         "cattlefeed-sale-single-code",
+        "/transactions/sale-entry",
       ),
       form(
         "Production Output",

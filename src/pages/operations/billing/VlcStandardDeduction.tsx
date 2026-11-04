@@ -1,11 +1,17 @@
 import type * as React from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Percent, Save, Users } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
-import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
+import {
+  CardTitle,
+  ReportPage,
+  Reveal,
+} from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
+import { MilkLoader } from "../../../components/operations/MilkLoader";
+import { useSmoothLoading } from "../../../hooks/useSmoothLoading";
 import {
   RateTransfer,
   noNegative,
@@ -38,10 +44,12 @@ const VlcStandardDeduction: React.FC = () => {
   const [left, setLeft] = useState<CnFarmer[]>([]);
   const [right, setRight] = useState<CnRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const showLoader = useSmoothLoading(loading);
+  const ticket = useRef(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [gen, setGen] = useState(0); 
+  const [gen, setGen] = useState(0);
 
   const category = useMemo(
     () => VLC_CATEGORIES.find((c) => c.id === cat) ?? VLC_CATEGORIES[0],
@@ -60,15 +68,18 @@ const VlcStandardDeduction: React.FC = () => {
     clearRequestMemo();
     setLoading(true);
     reset();
+    const mine = ++ticket.current;
     try {
       const d = await getVlcs(ids, category.flag, from);
+      if (mine !== ticket.current) return;
       setLeft(d.farmers);
       setRight(d.saved);
       setLoaded(true);
     } catch (e) {
+      if (mine !== ticket.current) return;
       setError(msg(e, "The VLCs could not be loaded."));
     } finally {
-      setLoading(false);
+      if (mine === ticket.current) setLoading(false);
     }
   };
 
@@ -83,13 +94,13 @@ const VlcStandardDeduction: React.FC = () => {
     setSaving(true);
     try {
       const reply = await saveVlcCommission({
-        stationId: ids[0] ?? getSession()?.stationId ?? "", 
+        stationId: ids[0] ?? getSession()?.stationId ?? "",
         flag: category.flag,
         effectiveDate: from,
         rows: right,
       });
       toast(reply || "VLC standard deduction saved");
-      reset(); 
+      reset();
       setGen((g) => g + 1);
     } catch (e) {
       toast(msg(e, "The VLC standard deduction could not be saved."), "warn");
@@ -166,17 +177,23 @@ const VlcStandardDeduction: React.FC = () => {
       )}
 
       <Reveal delay={0.1}>
-        <RateTransfer
-          key={gen}
-          left={left}
-          right={right}
-          loaded={loaded}
-          onChange={(l, r) => {
-            setLeft(l);
-            setRight(r);
-          }}
-          onWarn={(m) => toast(m, "warn")}
-        />
+        {showLoader ? (
+          <Card>
+            <MilkLoader label="Loading list…" />
+          </Card>
+        ) : (
+          <RateTransfer
+            key={gen}
+            left={left}
+            right={right}
+            loaded={loaded}
+            onChange={(l, r) => {
+              setLeft(l);
+              setRight(r);
+            }}
+            onWarn={(m) => toast(m, "warn")}
+          />
+        )}
       </Reveal>
     </ReportPage>
   );
