@@ -23,10 +23,11 @@ import { ErrorBlock } from "../../../components/operations/Widget";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
 import { useToast } from "../../../context/ToastContext";
-import { getSession } from "../../../services/session";
+import { getSession, patchSessionVlcc } from "../../../services/session";
+import { refreshSessionCenters } from "../../../services/bootstrap";
+import { SHOW_CUSTOMER_ID } from "../../../services/config";
 import { ApiError } from "../../../services/http/errors";
 import { GLOBALS } from "../../../lib/portal/global";
-import { cn } from "../../../lib/portal/cn";
 import {
   assertConfigured,
   createVillage,
@@ -35,6 +36,7 @@ import {
   getMccRoute,
   getVillageById,
   getVillageDetails,
+  putVillageStations,
   updateVillage,
   VLC_TYPES,
   type VlcInput,
@@ -113,6 +115,7 @@ const VlcMaster: React.FC = () => {
   const [routes, setRoutes] = useState<VlcRoute[]>([]);
   const [routeId, setRouteId] = useState("");
   const [slots, setSlots] = useState<VlcSlots | null>(null);
+  const [slotsLoading, setSlotsLoading] = useState(true);
   const [rows, setRows] = useState<VlcRecord[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,22 +134,29 @@ const VlcMaster: React.FC = () => {
   useEffect(() => {
     let alive = true;
     setError(null);
+    setSlotsLoading(true);
     (async () => {
       try {
         assertConfigured(mccid, plantid);
         const [r, s] = await Promise.all([
           getMccRoute(mccid, plantid),
-          getMaxVlcc(mccid, plantid).catch(() => null),
+          getMaxVlcc(mccid, plantid).catch((e) => {
+            console.warn("[vlc] getMaxVlcc failed:", e);
+            return null;
+          }),
         ]);
         if (!alive) return;
         setRoutes(r);
         setSlots(s);
+        setSlotsLoading(false);
         setRouteId((cur) =>
           r.some((x) => x.routeId === cur) ? cur : (r[0]?.routeId ?? ""),
         );
       } catch (e) {
-        if (alive)
+        if (alive) {
+          setSlotsLoading(false);
           setError(msg(e, "The MCC / route list could not be loaded."));
+        }
       }
     })();
     return () => {
@@ -175,7 +185,16 @@ const VlcMaster: React.FC = () => {
     };
   }, [mccid, routeId, tick]);
 
-  const idFromServer = !!slots?.nextVillageId;
+  const stat = useMemo(() => {
+    const n = (v?: string) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
+    const used = n(slots?.used) ?? (slots ? null : rows.length);
+    const allocated = n(slots?.allocated);
+    const available =
+      n(slots?.available) ??
+      (allocated !== null && used !== null ? Math.max(allocated - used, 0) : null);
+    return { allocated: allocated ?? 0, used: used ?? 0, available: available ?? 0 };
+  }, [slots, rows.length]);
+
   useEffect(() => {
     if (editing) return;
     setForm((f) => ({ ...f, villageId: slots?.nextVillageId ?? f.villageId }));
@@ -183,10 +202,14 @@ const VlcMaster: React.FC = () => {
 
   const errors = useMemo(() => {
     const e: Partial<Record<keyof VlcInput, string>> = {};
-    if (!form.villageId.trim()) e.villageId = "VLC id is required";
+    const typed = form.villageId.trim();
+    if (!typed) e.villageId = "VLC id is required";
     else if (
-      !editing &&
-      rows.some((r) => r.villageId === form.villageId.trim())
+      rows.some(
+        (r) =>
+          r.villageId !== editing?.villageId &&
+          (r.villageId === typed || r.displayId === typed),
+      )
     )
       e.villageId = "This VLC id already exists";
     if (!form.villageName.trim()) e.villageName = "VLC name is required";
@@ -208,11 +231,41 @@ const VlcMaster: React.FC = () => {
 
   const refresh = () => setTick((t) => t + 1);
 
+  const syncStations = async (saved: VlcInput, wasEdit: boolean) => {
+    const id = saved.villageId.trim();
+    const customId = saved.customerId.trim() || id;
+    const prev = getSession();
+    const known = prev?.stationByVlcc?.[id] ?? "";
+    const changed = !wasEdit || customId !== (known || id);
+
+    patchSessionVlcc({
+      villageId: id,
+      name: saved.villageName.trim(),
+      customId: customId !== id || known ? customId : undefined,
+    });
+
+    if (SHOW_CUSTOMER_ID && changed) {
+      const ses = getSession();
+      const ids = ses?.vlccIds ?? [id];
+      const customs = ids.map((v) => ses?.stationByVlcc?.[v] || v);
+      const loginId = GLOBALS.userid || ses?.mccLoginId || GLOBALS.id || "";
+      await putVillageStations(ids, customs, String(loginId));
+    }
+    void refreshSessionCenters();
+  };
+
   const submit = async () => {
     setSubmitted(true);
     const first = Object.values(errors)[0];
     if (first) return toast(first, "warn");
     if (!routeId) return toast("Select the MCC / BMC first", "warn");
+    if (
+      !editing &&
+      slots?.nextVillageId &&
+      slots.available !== "" &&
+      Number(slots.available) <= 0
+    )
+      return toast("No station id is available for this MCC/BMC.", "warn");
     if (saving) return;
     setSaving(true);
     try {
@@ -222,11 +275,28 @@ const VlcMaster: React.FC = () => {
         userId,
         rateId: editing?.rateId,
       };
-      if (editing) await updateVillage(form, ctx);
-      else await createVillage(form, ctx);
+      const typed = form.villageId.trim();
+      const stationId = editing
+        ? editing.villageId
+        : slots?.nextVillageId || typed;
+      const saved: VlcInput = {
+        ...form,
+        villageId: stationId,
+        customerId: typed !== stationId ? typed : "",
+      };
+      if (editing) await updateVillage(saved, ctx);
+      else await createVillage(saved, ctx);
       toast(editing ? "VLC updated successfully!" : "VLC saved successfully!");
+      try {
+        await syncStations(saved, !!editing);
+      } catch (e) {
+        toast(
+          msg(e, "The VLC is saved, but the customer id could not be linked."),
+          "warn",
+        );
+      }
       setEditing(null);
-      setSubmitted(false);
+        setSubmitted(false);
       setForm(emptyVlc());
 
       refresh();
@@ -254,7 +324,8 @@ const VlcMaster: React.FC = () => {
     setEditing(r);
     setSubmitted(false);
     setForm({
-      villageId: rec.villageId,
+      villageId: rec.customId || rec.villageId,
+      customerId: "",
       villageName: rec.villageName,
       type: rec.type || VLC_TYPES[0],
       active: rec.active,
@@ -335,9 +406,9 @@ const VlcMaster: React.FC = () => {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
-            <StatCard compact tone="text-brand" label="Allocated Station Id" icon={<Hash />} value={Number(slots?.allocated) || 0} loading={!slots} hint="Station ids given to this MCC/BMC" />
-            <StatCard compact tone="text-warn" label="Used Station Id" icon={<Layers />} value={Number(slots?.used) || 0} loading={!slots} hint="Already linked to a VLC" />
-            <StatCard compact tone="text-ok" label="Available Station Id" icon={<CheckCircle2 />} value={Number(slots?.available) || 0} loading={!slots} hint="Free to give to a new VLC" />
+            <StatCard compact tone="text-brand" label="Allocated Station Id" icon={<Hash />} value={stat.allocated} loading={slotsLoading} hint="Station ids given to this MCC/BMC" />
+            <StatCard compact tone="text-warn" label="Used Station Id" icon={<Layers />} value={stat.used} loading={slotsLoading} hint="Already linked to a VLC" />
+            <StatCard compact tone="text-ok" label="Available Station Id" icon={<CheckCircle2 />} value={stat.available} loading={slotsLoading} hint="Free to give to a new VLC" />
             <StatCard compact tone="text-brand" label="VLCs Listed" icon={<Building2 />} value={rows.length} loading={listLoading} hint="Centres under this MCC/BMC" />
           </div>
 
@@ -348,7 +419,7 @@ const VlcMaster: React.FC = () => {
                   title={
                     <CardTitle icon={Building2}>
                       {editing
-                        ? `Edit VLC ${editing.villageId}`
+                        ? `Edit VLC ${editing.displayId || editing.villageId}`
                         : "VLC (Village Level Center)"}
                     </CardTitle>
                   }
@@ -393,14 +464,10 @@ const VlcMaster: React.FC = () => {
                     <Field label="VLC ID">
                       <Input
                         inputMode="numeric"
-                        readOnly={!!editing || idFromServer}
                         value={form.villageId}
-                        className={cn(
-                          (!!editing || idFromServer) && "bg-brand/5",
-                          invalid(shown("villageId")),
-                        )}
+                        className={invalid(shown("villageId"))}
                         onChange={(e) =>
-                          set("villageId", digits(e.target.value, 9))
+                          set("villageId", digits(e.target.value, 12))
                         }
                       />
                       <Err text={shown("villageId")} />

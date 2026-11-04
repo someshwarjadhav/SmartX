@@ -31,6 +31,7 @@ const CashPaymentSummary = lazy(() => import('../pages/operations/billing/CashPa
 const BankPaymentSummary = lazy(() => import('../pages/operations/billing/BankPaymentSummary'));
 const StandardDeduction = lazy(() => import('../pages/operations/billing/StandardDeduction'));
 const VlcStandardDeduction = lazy(() => import('../pages/operations/billing/VlcStandardDeduction'));
+const DeductionEntry = lazy(() => import('../pages/operations/billing/DeductionEntry'));
 const CattleFeedFarmerBill = lazy(() => import('../pages/operations/billing/CattleFeedFarmerBill'));
 const VlcMilkBill = lazy(() => import('../pages/operations/billing/VlcMilkBill'));
 const BillUnfreeze = lazy(() => import('../pages/operations/administrator/BillUnfreeze'));
@@ -42,6 +43,7 @@ const RateStatus = lazy(() => import('../pages/operations/masters/RateStatus'));
 const VlcMilkEntry = lazy(() => import('../pages/operations/transactions/VlcMilkEntry'));
 const FarmerMilkEntry = lazy(() => import('../pages/operations/transactions/FarmerMilkEntry'));
 const ManageCollection = lazy(() => import('../pages/operations/transactions/ManageCollection'));
+const SaleEntry = lazy(() => import('../pages/operations/transactions/SaleEntry'));
 const CleaningReport = lazy(() => import('../pages/operations/reports/CleaningReport'));
 const EkoCalibration = lazy(() => import('../pages/operations/reports/EkoCalibration'));
 const EkoCorrection = lazy(() => import('../pages/operations/reports/EkoCorrection'));
@@ -72,6 +74,7 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/transactions/vlc-milk-entry': VlcMilkEntry,
   '/transactions/farmer-milk-entry': FarmerMilkEntry,
   '/transactions/manage-collection': ManageCollection,
+  '/transactions/sale-entry': SaleEntry,
   '/farmers': Farmers,
   '/farmers/report': Farmers,
   '/centers': Centers,
@@ -86,6 +89,7 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/billing/cash-payment-summary': CashPaymentSummary,
   '/billing/standard-deduction': StandardDeduction,
   '/billing/vlc-standard-deduction': VlcStandardDeduction,
+  '/billing/deduction-entry': DeductionEntry,
   '/billing/cattlefeed-farmer-bill': CattleFeedFarmerBill,
   '/billing/vlc-milk-bill': VlcMilkBill,
   '/portal/account/receipt-voucher': ReceiptVoucher,

@@ -198,7 +198,13 @@ export function parseMenu(json: unknown): MenuNode[] {
     if (module && !node.children.length && norm(module) !== norm(node.title)) {
       let root = moduleRoots.get(norm(module));
       if (!root) {
-        root = { id: `mod:${norm(module)}`, title: module, url: "", enabled: true, children: [] };
+        root = {
+          id: `mod:${norm(module)}`,
+          title: module,
+          url: "",
+          enabled: true,
+          children: [],
+        };
         moduleRoots.set(norm(module), root);
         roots.push(root);
       }
@@ -239,21 +245,23 @@ const ROUTES: Array<{ to: string; aliases: string[] }> = [
     aliases: ["farmermilkentry", "farmermilkcollection"],
   },
   { to: "/transactions/manage-collection", aliases: ["managecollection"] },
+  {
+    to: "/transactions/sale-entry",
+    aliases: ["saleentry", "cattlefeedsale", "cattlefeedsalesinglecode"],
+  },
   { to: "/master/vlc-master", aliases: ["vlcmaster"] },
   { to: "/master/farmer-master", aliases: ["farmermaster"] },
-  { to: "/master/excel-rate-upload", aliases: ["excelrateupload", "ratemaster"] },
+  {
+    to: "/master/excel-rate-upload",
+    aliases: ["excelrateupload", "ratemaster"],
+  },
   { to: "/master/rate-status", aliases: ["ratestatus"] },
   { to: "/settings/mobile-app", aliases: ["mobileappsettings"] },
   { to: "/settings/eko-milk-settings", aliases: ["ekomilksettings"] },
   { to: "/settings/dpu-settings", aliases: ["dpusettings"] },
   {
     to: "/farmers",
-    aliases: [
-      "farmers",
-      "farmer",
-      "farmerledger",
-      "farmerlist",
-    ],
+    aliases: ["farmers", "farmer", "farmerledger", "farmerlist"],
   },
   {
     to: "/centers",
@@ -270,8 +278,14 @@ const ROUTES: Array<{ to: string; aliases: string[] }> = [
     to: "/billing/cash-payment-summary",
     aliases: ["cashpaymentsummary", "cashpaymentsummarysinglecode"],
   },
-  { to: "/billing/standard-deduction", aliases: ["commissionmaster", "standarddeduction"] },
-  { to: "/billing/vlc-standard-deduction", aliases: ["commissionmasterowner", "vlcstandarddeduction"] },
+  {
+    to: "/billing/standard-deduction",
+    aliases: ["commissionmaster", "standarddeduction"],
+  },
+  {
+    to: "/billing/vlc-standard-deduction",
+    aliases: ["commissionmasterowner", "vlcstandarddeduction"],
+  },
   {
     to: "/billing/bank-payment-summary",
     aliases: ["paymentsummarysinglecode", "bankpaymentsummary"],

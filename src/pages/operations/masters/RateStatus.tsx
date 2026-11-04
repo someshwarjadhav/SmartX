@@ -8,7 +8,9 @@ import { Pager } from "../../../components/operations/ui/Pager";
 import { Segmented } from "../../../components/operations/ui/Fields";
 import { StatCard } from "../../../components/operations/ui/StatCard";
 import { EmptyState } from "../../../components/operations/EmptyState";
-import { ErrorBlock, LoadingBlock } from "../../../components/operations/Widget";
+import { ErrorBlock } from "../../../components/operations/Widget";
+import { MilkLoader } from "../../../components/operations/MilkLoader";
+import { useSmoothLoading } from "../../../hooks/useSmoothLoading";
 import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
 import { useToast } from "../../../context/ToastContext";
 import { GLOBALS } from "../../../lib/portal/global";
@@ -41,6 +43,7 @@ const RateStatus: React.FC = () => {
   const [tick, setTick] = useState(0);
   const [size, setSize] = useState(10);
   const [page, setPage] = useState(1);
+  const showLoader = useSmoothLoading(loading);
 
   const sess = getSession();
   const mccid = sess?.mccLoginId || GLOBALS.mccLoginId || sess?.mccId || GLOBALS.mccid || "";
@@ -109,6 +112,9 @@ const RateStatus: React.FC = () => {
 
             {error && <ErrorBlock compact message={error} onRetry={() => setTick((t) => t + 1)} busy={loading} />}
 
+            {showLoader ? (
+              <MilkLoader label="Loading rate status…" />
+            ) : (
             <div className="overflow-x-auto rounded-xl border border-line">
               <table className="w-full min-w-[56rem] text-sm">
                 <thead className="bg-soft/70 text-left text-xs text-mute">
@@ -140,11 +146,11 @@ const RateStatus: React.FC = () => {
                   ))}
                 </tbody>
               </table>
-              {loading && <LoadingBlock height="h-24" label="Loading rate status…" />}
               {!loading && !error && !rows.length && (
                 <EmptyState title="No rate status" hint="No centre has a rate for this milk type yet." />
               )}
             </div>
+            )}
 
             {total > 0 && <Pager total={total} page={current} size={size} onPage={setPage} onSize={(n) => { setSize(n); setPage(1); }} />}
           </div>

@@ -278,11 +278,13 @@ export const NAV_MODULES: NavModule[] = [
         "Cattle Feed Sale",
         "/Transactions/cattlefeed-sale",
         "cattlefeed-sale",
+        "/transactions/sale-entry",
       ),
       form(
         "Sale Entry",
         "/Transactions/cattlefeed-sale-single-code",
         "cattlefeed-sale-single-code",
+        "/transactions/sale-entry",
       ),
       form(
         "Production Output",
@@ -335,7 +337,12 @@ export const NAV_MODULES: NavModule[] = [
         "commission-master-owner",
         "/billing/vlc-standard-deduction",
       ),
-      form("Deduction Entry", "/billing/deduction-entry", "deduction-entry"),
+      form(
+        "Deduction Entry",
+        "/billing/deduction-entry",
+        "deduction-entry",
+        "/billing/deduction-entry",
+      ),
       form(
         "Cash Payment Summary",
         "/billing/cash-payment-summary",
