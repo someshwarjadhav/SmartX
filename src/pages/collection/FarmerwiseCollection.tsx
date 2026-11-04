@@ -125,6 +125,8 @@ const defaults = (): Filters => {
   return { plant, vlcId: '', farmerId: 'all', milkType: 'cow', shift: 'Morning', fromDate: today, toDate: today };
 };
 
+const KIND_TEXT: Record<string, string> = { cow: 'Cow', buffalo: 'Buffalo', mix: 'Mix' };
+
 const weighted = (rows: CollectionEntry[], pick: (r: CollectionEntry) => number, litres: number): number =>
   litres ? rows.reduce((a, r) => a + pick(r) * r.litres, 0) / litres : 0;
 
@@ -187,10 +189,14 @@ const FarmerwiseCollection: React.FC = () => {
   const farmerOptions = useMemo(() => {
     // farmer master (id | name) first; farmers seen in the loaded collection are added if the master missed them
     const have = new Set(masterFarmers.map((o) => o.value));
-    const extra = [...pre.rows, ...live.rows]
-      .filter((r) => r.stationId === scope.centre && !have.has(farmerKey(r.stationId, r.farmerId)))
-      .map((r) => ({ value: farmerKey(r.stationId, r.farmerId), label: `${r.farmerId} | ${r.farmer}` }))
-      .filter((o, i, a) => a.findIndex((x) => x.value === o.value) === i);
+    const extra: { value: string; label: string }[] = [];
+    for (const r of [...pre.rows, ...live.rows]) {
+      if (r.stationId !== scope.centre) continue;
+      const value = farmerKey(r.stationId, r.farmerId);
+      if (have.has(value)) continue;
+      have.add(value);
+      extra.push({ value, label: `${r.farmerId} | ${r.farmer}` });
+    }
     return [{ value: 'all', label: farmersLoading ? 'Loading farmers…' : 'All Farmers' }, ...masterFarmers, ...extra];
   }, [masterFarmers, farmersLoading, pre.rows, live.rows, scope.centre]);
   const rows = useMemo(() => live.rows.filter((r) => (!applied.plant || r.plant === applied.plant) && (!applied.vlcId || r.stationId === applied.vlcId) && (applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
@@ -236,7 +242,7 @@ const FarmerwiseCollection: React.FC = () => {
       { header: 'Station Id' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Milk Type' }, { header: 'Farmer Id' }, { header: 'Name' },
       { header: 'Station Name' }, { header: 'Liter', type: 'dec1' }, { header: 'Kg', type: 'dec1' }, { header: 'Fat', type: 'dec1' }, { header: 'Snf', type: 'dec1' }, { header: 'Clr', type: 'dec1' }, { header: 'Rate', type: 'money' }, { header: 'Amount', type: 'money' },
     ] as ExportTable['columns']),
-    rows: rows.map((r) => tbl.pick<string | number>([r.stationId, fmtDate(r.date), r.shift, r.kind, r.farmerId, r.farmer, r.centre, r.litres, r.kg ?? 0, r.fat, r.snf, r.clr ?? 0, r.rate, r.amount])),
+    rows: rows.map((r) => tbl.pick<string | number>([r.stationId, fmtDate(r.date), r.shift, KIND_TEXT[r.kind] ?? r.kind, r.farmerId, r.farmer, r.centre, r.litres, r.kg ?? 0, r.fat, r.snf, r.clr ?? 0, r.rate, r.amount])),
     totals: tbl.pickTotals(['Total', '', '', '', '', `${rows.length} entries`, '', Math.round(totals.litres * 10) / 10, '', Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, '', '', Math.round(totals.amount * 100) / 100]),
   });
 

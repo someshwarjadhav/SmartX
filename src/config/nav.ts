@@ -57,6 +57,7 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
   '/reports/variance': GitCompareArrows,
   '/reports/cleaning': FileText,
   '/reports/eko-calibration': SlidersHorizontal,
+  '/reports/eko-correction': GitCompareArrows,
   '/transactions/vlc-milk-entry': Milk,
   '/transactions/farmer-milk-entry': Droplets,
   '/transactions/manage-collection': ClipboardList,

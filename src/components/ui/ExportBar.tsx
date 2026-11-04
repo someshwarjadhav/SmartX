@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from './Button';
 
@@ -17,14 +17,22 @@ interface Props {
 }
 
 export const ExportBar: React.FC<Props> = ({ actions, disabled }) => {
-  const [busy, setBusy] = useState<string | null>(null);
+  // every button keeps its own "running" flag: pressing one never greys out or blocks the others
+  const [running, setRunning] = useState<ReadonlySet<string>>(() => new Set());
+  const lock = useRef<Set<string>>(new Set());
 
   const run = async (action: ExportAction) => {
-    setBusy(action.id);
+    if (lock.current.has(action.id)) return; // double click on the SAME button only
+    lock.current.add(action.id);
+    setRunning(new Set(lock.current));
     try {
       await action.run();
     } finally {
-      setBusy(null);
+      // keep the spinner visible for a moment so a very fast export still gives feedback
+      window.setTimeout(() => {
+        lock.current.delete(action.id);
+        setRunning(new Set(lock.current));
+      }, 450);
     }
   };
 
@@ -38,9 +46,9 @@ export const ExportBar: React.FC<Props> = ({ actions, disabled }) => {
             size="sm"
             variant={a.variant}
             icon={<Icon size={15} aria-hidden />}
-            loading={busy === a.id}
-            disabled={disabled || (busy !== null && busy !== a.id)}
-            onClick={() => run(a)}
+            loading={running.has(a.id)}
+            disabled={disabled}
+            onClick={() => void run(a)}
           >
             {a.label}
           </Button>

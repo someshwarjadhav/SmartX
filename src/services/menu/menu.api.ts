@@ -229,6 +229,7 @@ const ROUTES: Array<{ to: string; aliases: string[] }> = [
   },
   { to: "/reports/cleaning", aliases: ["cleaningreport", "cleaning"] },
   { to: "/reports/eko-calibration", aliases: ["ekocalibration"] },
+  { to: "/reports/eko-correction", aliases: ["ekocorrection", "eko-correction"] },
   {
     to: "/transactions/vlc-milk-entry",
     aliases: ["vlcmilkentry", "bmcmilkentry", "vlcmilkcollection"],

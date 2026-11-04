@@ -311,16 +311,30 @@ export function gatewayPostJson(
   return p;
 }
 
+export interface TextOptions {
+  /** abort = the request is dropped (queued ones never leave the browser) */
+  signal?: AbortSignal;
+  /** shorter timeout for small requests, so a hung one frees its slot early */
+  timeoutMs?: number;
+}
+
 export async function gatewayText(
   endpoint: string,
   init: RequestInit = {},
   priority: Priority = 0,
   absolute = false,
+  opts: TextOptions = {},
 ): Promise<string> {
+  const { signal, timeoutMs = REQUEST_TIMEOUT_MS } = opts;
+  if (signal?.aborted) throw new ApiError("Cancelled.", "cancelled");
   await acquire({ priority });
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
   try {
+    // dropped while it was waiting in the queue: do not send it at all
+    if (signal?.aborted) throw new ApiError("Cancelled.", "cancelled");
     const res = await fetch(absolute ? endpoint : urlFor(endpoint), {
       ...init,
       headers: {
@@ -349,9 +363,10 @@ export async function gatewayText(
     return text;
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (signal?.aborted) throw new ApiError("Cancelled.", "cancelled");
     if (controller.signal.aborted)
       throw new ApiError(
-        `The server took longer than ${REQUEST_TIMEOUT_MS / 1000} seconds to answer.`,
+        `The server took longer than ${timeoutMs / 1000} seconds to answer.`,
         "timeout",
       );
     throw new ApiError(
@@ -360,6 +375,7 @@ export async function gatewayText(
     );
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
     release();
     memo.clear();
   }

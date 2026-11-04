@@ -11,7 +11,7 @@ import {
   CardTitle,
   ReportBar,
   Reveal,
-  type ExportKind,
+  type BarKind,
 } from "../../../components/operations/ReportKit";
 import { CentreField } from "../../../components/operations/ReportFilters";
 import { useCentreOptions } from "../../../hooks/useCentres";
@@ -36,6 +36,12 @@ import {
   exportPDF,
   type ExportCol,
 } from "../../../lib/portal/export";
+import {
+  downloadFarmerBills,
+  printFarmerBills,
+  type BillPrintInfo,
+} from "../../../lib/portal/farmerBillPrint";
+import { getSession } from "../../../services/session";
 
 const dmy = (s: string) => s.split("-").reverse().join("-");
 const SHIFT_KEYS: Array<keyof BillShift> = ["wt", "fat", "snf", "rate", "amt"];
@@ -271,10 +277,30 @@ const FarmerBill: React.FC = () => {
     }
   };
 
-  const run = (kind: ExportKind) => {
+  const run = (kind: BarKind) => {
     if (!ready) return;
     const name = `farmer-bill-${applied.from}-to-${applied.to}`;
-    const rows = billExportRows(bills);
+    if (kind === "print" || kind === "download") {
+      const label = vlcLabel(applied.vlc);
+      const info: BillPrintInfo = {
+        dairy: getSession()?.mccName || "SmartX Dairy",
+        villageId: applied.vlc,
+        villageName: label.split(" | ")[0] || label,
+        from: dmy(applied.from),
+        to: dmy(applied.to),
+      };
+      if (kind === "print") {
+        if (printFarmerBills(bills, info, name)) toast("Print dialog opened");
+        else toast("Allow pop-ups to print the bill", "warn");
+      } else {
+        downloadFarmerBills(bills, info, name)
+          .then(() => toast("Farmer bill PDF downloaded"))
+          .catch(() => toast("The bill PDF could not be created", "warn"));
+      }
+      return;
+    }
+    // Excel / CSV: the farmer name is written on every line (filter / sort / pivot work per farmer); the printed bill shows it once
+    const rows = billExportRows(bills, kind !== "pdf");
     if (kind === "pdf") {
       const sumOf = (label: string) =>
         bills.reduce(
@@ -374,7 +400,7 @@ const FarmerBill: React.FC = () => {
           <ReportBar
             count={total}
             disabled={!ready}
-            kinds={["xls", "pdf", "csv"]}
+            kinds={["print"]}
             onExport={run}
           />
         </Card>

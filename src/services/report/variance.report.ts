@@ -1,61 +1,8 @@
-import type { FarmerRow } from './farmer.mapper.ts';
-import type { VlccRow } from './vlcc.mapper.ts';
+/** Variance report: VLC (vendor) side compared with the farmer side. */
+import type { FarmerRow } from '../mappers/farmer.mapper.ts';
+import type { VlccRow } from '../mappers/vlcc.mapper.ts';
 import { isoFromTrdate } from '../utils/date';
 import type { Kind, ShiftName } from '../utils/milk';
-
-
-export interface UnionRow {
-  key: string;
-  union: string;
-  society: string;
-  vlccid: string;
-  farmers: number;
-  liter: number;
-  fat: number;
-  snf: number;
-  rate: number;
-  amount: number;
-}
-
-export function unionwise(rows: FarmerRow[], unionOf: (vlccid: string) => string, societyOf: (vlccid: string) => string): UnionRow[] {
-  const by = new Map<string, { farmers: Set<string>; liter: number; fw: number; sw: number; amount: number }>();
-  for (const r of rows) {
-    const b = by.get(r.vlccid) ?? { farmers: new Set<string>(), liter: 0, fw: 0, sw: 0, amount: 0 };
-    b.farmers.add(r.farmerId);
-    b.liter += r.liter;
-    b.fw += r.liter * r.fat;
-    b.sw += r.liter * r.snf;
-    b.amount += r.amount;
-    by.set(r.vlccid, b);
-  }
-  return [...by.entries()]
-    .map(([vlccid, b]) => ({
-      key: vlccid,
-      union: unionOf(vlccid),
-      society: societyOf(vlccid),
-      vlccid,
-      farmers: b.farmers.size,
-      liter: b.liter,
-      fat: b.liter ? b.fw / b.liter : 0,
-      snf: b.liter ? b.sw / b.liter : 0,
-      rate: b.liter ? b.amount / b.liter : 0,
-      amount: b.amount,
-    }))
-    .sort((a, b) => a.union.localeCompare(b.union) || a.society.localeCompare(b.society));
-}
-
-export function unionTotals(rows: UnionRow[]) {
-  let liter = 0, fw = 0, sw = 0, amount = 0, farmers = 0;
-  for (const r of rows) {
-    liter += r.liter;
-    fw += r.liter * r.fat;
-    sw += r.liter * r.snf;
-    amount += r.amount;
-    farmers += r.farmers;
-  }
-  return { societies: rows.length, farmers, liter, amount, fat: liter ? fw / liter : 0, snf: liter ? sw / liter : 0, rate: liter ? amount / liter : 0 };
-}
-
 
 
 export interface Side { qty: number; fat: number; snf: number; rate: number; amount: number }
@@ -144,32 +91,4 @@ export function varianceTotals(rows: VarianceRow[]): VarianceTotals {
   const diff = zero();
   (Object.keys(diff) as Array<keyof SideTotals>).forEach((k) => { diff[k] = r2(vendor[k] - farmer[k]); });
   return { vendor, farmer, diff };
-}
-
-
-export interface StatusRow { vlccid: string; village: string; active: boolean; liter: number; fat: number; snf: number; lastDate: string }
-
-export function vlcStatus(ids: string[], rows: VlccRow[], villageOf: (id: string) => string): StatusRow[] {
-  const by = new Map<string, { liter: number; fw: number; sw: number; last: string; lastIso: string }>();
-  for (const r of rows) {
-    const b = by.get(r.vlccid) ?? { liter: 0, fw: 0, sw: 0, last: '', lastIso: '' };
-    b.liter += r.liter;
-    b.fw += r.liter * r.fat;
-    b.sw += r.liter * r.snf;
-    const iso = isoFromTrdate(r.date) ?? r.date;
-    if (r.liter > 0 && iso >= b.lastIso) { b.lastIso = iso; b.last = r.date; }
-    by.set(r.vlccid, b);
-  }
-  return ids.map((id) => {
-    const b = by.get(id);
-    return {
-      vlccid: id,
-      village: villageOf(id),
-      active: !!b && b.liter > 0,
-      liter: b?.liter ?? 0,
-      fat: b && b.liter ? b.fw / b.liter : 0,
-      snf: b && b.liter ? b.sw / b.liter : 0,
-      lastDate: b?.last ?? '',
-    };
-  });
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
-import { ApiError } from '../services/http/errors';
+import { ApiError, isCancelled } from '../services/http/errors';
 import { FRESH_FOR_MS } from '../services/config';
 import { clearRequestMemo } from '../services/http/client';
 import { type Emit, type QueryData } from '../services/http/fanout';
@@ -19,16 +19,19 @@ export interface QueryState<R> {
   retry: () => void;
 }
 
-type Fetcher<R> = (emit: Emit<R>) => Promise<QueryData<R>>;
+/** `signal` is aborted when nobody looks at this query any more: fetchers pass it on so queued requests are dropped. */
+type Fetcher<R> = (emit: Emit<R>, signal: AbortSignal) => Promise<QueryData<R>>;
 interface Entry<R> {
   state: Omit<QueryState<R>, 'retry'>;
   listeners: Set<() => void>;
   fetcher: Fetcher<R>;
   inflight: boolean;
+  abort: AbortController | null;
 }
 
 const store = new Map<string, Entry<unknown>>();
 const PREFIX = 'smartx:';
+const ABORT_AFTER_MS = 600;
 
 function readCache<R>(key: string): { at: number; rows: R[]; note?: string } | null {
   try {
@@ -40,11 +43,37 @@ function readCache<R>(key: string): { at: number; rows: R[]; note?: string } | n
     return null;
   }
 }
-function writeCache<R>(key: string, rows: R[], note?: string) {
+function pruneCache() {
   try {
-    localStorage.setItem(PREFIX + key, JSON.stringify({ at: Date.now(), rows, note }));
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith(PREFIX))
+      .forEach((k) => localStorage.removeItem(k));
   } catch {
+    /* no localStorage */
   }
+}
+/** Saving a big report to localStorage takes a moment: do it when the browser is idle, never while rows are being drawn. */
+const later = (fn: () => void) => {
+  const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+  if (ric) ric(fn, { timeout: 3000 });
+  else window.setTimeout(fn, 200);
+};
+function writeCache<R>(key: string, rows: R[], note?: string) {
+  if (rows.length > 40000) return;
+  later(() => {
+    try {
+      const payload = JSON.stringify({ at: Date.now(), rows, note });
+      try {
+        localStorage.setItem(PREFIX + key, payload);
+      } catch {
+        // storage full: old saved reports are only a cache, clear them and save this one
+        pruneCache();
+        localStorage.setItem(PREFIX + key, payload);
+      }
+    } catch {
+      /* still no room: the report just is not cached */
+    }
+  });
 }
 
 export function clearSmartxCache() {
@@ -66,17 +95,22 @@ function notify(e: Entry<unknown>) {
 function run<R>(key: string, entry: Entry<R>, force = false) {
   if (entry.inflight) return;
   if (force) { clearRequestMemo(); }
+  const ctl = new AbortController();
+  entry.abort = ctl;
   entry.inflight = true;
   const prev = entry.state;
+  // rows that are already on screen (saved copy / earlier load) stay exactly as they are until the new answer is complete,
+  // so the table never shrinks to the first few rows and grows again (that was the blinking)
+  const holdOld = prev.rows.length > 0;
   entry.state = { ...prev, fetching: true, error: null, done: 0, total: 0 };
   notify(entry as Entry<unknown>);
 
   const emit: Emit<R> = (p) => {
-
+    if (ctl.signal.aborted) return;
     const hasRows = p.rows.length > 0;
     entry.state = {
       ...entry.state,
-      ...(hasRows ? { status: 'ready' as const, rows: p.rows, stale: false } : {}),
+      ...(hasRows && !holdOld ? { status: 'ready' as const, rows: p.rows, stale: false } : {}),
       failed: p.failed,
       total: p.total,
       done: p.done,
@@ -85,15 +119,29 @@ function run<R>(key: string, entry: Entry<R>, force = false) {
     notify(entry as Entry<unknown>);
   };
 
-  Promise.resolve().then(() => entry.fetcher(emit)).then(
+  // nobody wants this answer any more (page left / filters changed): put the entry back as it was
+  const dropped = () => {
+    entry.inflight = false;
+    entry.abort = null;
+    entry.state = prev;
+    notify(entry as Entry<unknown>);
+    // somebody came back while it was being dropped
+    if (entry.listeners.size > 0) run(key, entry);
+  };
+
+  Promise.resolve().then(() => entry.fetcher(emit, ctl.signal)).then(
     (data) => {
+      if (ctl.signal.aborted) return dropped();
       entry.inflight = false;
+      entry.abort = null;
       entry.state = { status: 'ready', rows: data.rows, fetching: false, stale: false, failed: data.failed, total: data.total, done: data.done, error: null, updatedAt: Date.now(), note: data.note ?? null };
       if (data.failed === 0) writeCache(key, data.rows, data.note);
       notify(entry as Entry<unknown>);
     },
     (err) => {
+      if (ctl.signal.aborted || isCancelled(err)) return dropped();
       entry.inflight = false;
+      entry.abort = null;
       const hasRows = entry.state.rows.length > 0;
       entry.state = {
         ...entry.state,
@@ -127,6 +175,7 @@ function entryFor<R>(key: string, fetcher: Fetcher<R>): Entry<R> {
       listeners: new Set(),
       fetcher,
       inflight: false,
+      abort: null,
     };
     store.set(key, e as Entry<unknown>);
   }
@@ -158,9 +207,16 @@ export function useQuery<R>(key: string | null, fetcher: Fetcher<R>): QueryState
   const snapshot = useSyncExternalStore(subscribe, () => entry?.state ?? null);
 
   useEffect(() => {
-    if (!entry || !scoped) return;
+    if (!entry || !scoped) return undefined;
     const fresh = entry.state.updatedAt !== null && !entry.state.stale && Date.now() - entry.state.updatedAt < FRESH_FOR_MS;
     if (!fresh) run(scoped, entry);
+    return () => {
+      // the page was left or the filters changed: after a short grace time (React re-mounts in dev) stop the requests of this
+      // query nobody is looking at, so they do not hold the 10 request slots in front of the report that is wanted now
+      window.setTimeout(() => {
+        if (entry.listeners.size === 0) entry.abort?.abort();
+      }, ABORT_AFTER_MS);
+    };
   }, [entry, scoped]);
 
   const retry = useCallback(() => {

@@ -22,7 +22,7 @@ import { fetchVlccCollection } from '../../../services/vlcc/vlcc.api.ts';
 import { fetchFarmerCollection } from '../../../services/farmer/farmer.api.ts';
 import { mapVlcc } from '../../../services/mappers/vlcc.mapper.ts';
 import { mapFarmers } from '../../../services/mappers/farmer.mapper.ts';
-import { variance, varianceTotals, type SideTotals, type VarianceRow } from '../../../services/mappers/report.mapper.ts';
+import { variance, varianceTotals, type SideTotals, type VarianceRow } from '../../../services/report/variance.report.ts';
 import { vlccTitle } from '../../../services/vlcc/names';
 import type { RawFarmerRow, RawVlccRow } from '../../../services/types/raw';
 

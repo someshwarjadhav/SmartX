@@ -37,6 +37,7 @@ const VlcStatus = lazy(() => import("../pages/operations/reports/VlcStatus"));
 const VarianceReport = lazy(() => import("../pages/operations/reports/VarianceReport"));
 const CleaningReport = lazy(() => import("../pages/operations/reports/CleaningReport"));
 const EkoCalibration = lazy(() => import("../pages/operations/reports/EkoCalibration"));
+const EkoCorrection = lazy(() => import("../pages/operations/reports/EkoCorrection"));
 const VlcMilkEntry = lazy(() => import("../pages/operations/transactions/VlcMilkEntry"));
 const FarmerMilkEntry = lazy(
   () => import("../pages/operations/transactions/FarmerMilkEntry"),
@@ -159,6 +160,7 @@ const App: React.FC = () => {
                   <EkoCalibration />
                 }
               />
+              <Route path="reports/eko-correction" element={<EkoCorrection />} />
 
               {/* Transactions */}
               <Route

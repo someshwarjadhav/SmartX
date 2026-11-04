@@ -20,7 +20,7 @@ import { PlantMccField, SubmitButton } from '../../../components/operations/Repo
 import { useQuery } from '../../../hooks/useQuery';
 import { fetchVlccCollection } from '../../../services/vlcc/vlcc.api.ts';
 import { mapVlcc } from '../../../services/mappers/vlcc.mapper.ts';
-import { vlcStatus, type StatusRow } from '../../../services/mappers/report.mapper.ts';
+import { vlcStatus, type StatusRow } from '../../../services/report/vlcStatus.report.ts';
 import { vlccTitle } from '../../../services/vlcc/names';
 import type { MilkCode, RawVlccRow, ShiftCode } from '../../../services/types/raw';
 

@@ -44,6 +44,7 @@ const FarmerMilkEntry = lazy(() => import('../pages/operations/transactions/Farm
 const ManageCollection = lazy(() => import('../pages/operations/transactions/ManageCollection'));
 const CleaningReport = lazy(() => import('../pages/operations/reports/CleaningReport'));
 const EkoCalibration = lazy(() => import('../pages/operations/reports/EkoCalibration'));
+const EkoCorrection = lazy(() => import('../pages/operations/reports/EkoCorrection'));
 const Quality = lazy(() => import('../pages/operations/Quality'));
 const Pipeline = lazy(() => import('../pages/operations/Pipeline'));
 const MobileAppSettings = lazy(() => import('../pages/operations/settings/MobileAppSettings'));
@@ -66,6 +67,8 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/reports/variance': VarianceReport,
   '/reports/cleaning': CleaningReport,
   '/reports/eko-calibration': EkoCalibration,
+  '/reports/eko-correction': EkoCorrection,
+  '/portal/base/eko-correction': EkoCorrection,
   '/transactions/vlc-milk-entry': VlcMilkEntry,
   '/transactions/farmer-milk-entry': FarmerMilkEntry,
   '/transactions/manage-collection': ManageCollection,

@@ -110,6 +110,23 @@ function stillEncrypted(reply: unknown): boolean {
   });
 }
 
+/**
+ * Console note for every DPU reply. Pretty-printing a big decrypted reply (thousands of rows) into the console froze the
+ * page for seconds, so only a short summary is printed; the full JSON is printed only if localStorage "smartx:debug" = "1".
+ */
+function logReply(label: string, reply: unknown): void {
+  try {
+    if (localStorage.getItem('smartx:debug') === '1') {
+      console.log(`${label} - decrypted JSON:\n${JSON.stringify(reply, null, 2)}`);
+      return;
+    }
+  } catch {
+    /* no localStorage */
+  }
+  const n = Array.isArray(reply) ? reply.length : undefined;
+  console.debug(`${label} - reply ready${n === undefined ? '' : ` (${n} rows)`}`);
+}
+
 async function dpuSend(path: string, init: RequestInit, priority: Priority): Promise<unknown> {
   const label = `[dpu] ${init.method ?? 'GET'} ${path}`;
   const text = await gatewayText(dpuUrl(path), init, priority, true);
@@ -121,12 +138,7 @@ async function dpuSend(path: string, init: RequestInit, priority: Priority): Pro
       'parse',
     );
   }
-  // decrypted JSON, printed as plain text so it can be copied straight from the console (F12 > Console)
-  try {
-    console.log(`${label} - decrypted JSON:\n${JSON.stringify(reply, null, 2)}`);
-  } catch {
-    console.log(`${label} - decrypted reply:`, reply);
-  }
+  logReply(label, reply);
   return reply;
 }
 
@@ -165,11 +177,7 @@ async function dpuWrite(path: string, init: RequestInit, priority: Priority): Pr
     console.error(`${label} - reply could not be decrypted (check VITE_ENCRYPTION_KEY). Raw reply:`, text.slice(0, 500));
     throw new ApiError('The DPU reply is encrypted and could not be decrypted. Check VITE_ENCRYPTION_KEY in .env.local.', 'parse');
   }
-  try {
-    console.log(`${label} - decrypted JSON:\n${JSON.stringify(reply, null, 2)}`);
-  } catch {
-    console.log(`${label} - decrypted reply:`, reply);
-  }
+  logReply(label, reply);
   return reply;
 }
 

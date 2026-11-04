@@ -10,6 +10,12 @@ const portalProxy = {
     secure: false,
     rewrite: (path: string) => path.replace(/^\/api/, ''),
   },
+  '/ekoapi': {
+    target: 'http://apix.shivinfotech.co.in',
+    changeOrigin: true,
+    secure: false,
+    rewrite: (path: string) => path.replace(/^\/ekoapi/, ''),
+  },
   '/stipl': {
     target: 'https://stipldrive.ddns.net',
     changeOrigin: true,

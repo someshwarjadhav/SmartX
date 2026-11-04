@@ -19,7 +19,7 @@ import { useQuery } from '../../../hooks/useQuery';
 import { useCenters } from '../../../hooks/useSessionData';
 import { getSession } from '../../../services/session';
 import { vlccTitle } from '../../../services/vlcc/names';
-import { fetchPortalReport, type PortalRow } from '../../../services/report/portalReport.api.ts';
+import { fetchPortalReport, type PortalRow } from '../../../services/report/cleaningReport.api.ts';
 import type { ShiftCode } from '../../../services/types/raw';
 
 interface Props {

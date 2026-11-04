@@ -16,7 +16,7 @@ import { DEFAULT_PAGE_SIZE, GLOBALLABELS } from '../../../lib/portal/global';
 import { SubmitButton } from '../../../components/operations/ReportFilters';
 import { useSamples } from '../../../hooks/useSmartxData';
 import { useCenters } from '../../../hooks/useSessionData';
-import { unionTotals, unionwise, type UnionRow } from '../../../services/mappers/report.mapper.ts';
+import { unionTotals, unionwise, type UnionRow } from '../../../services/report/unionwise.report.ts';
 import { vlccTitle } from '../../../services/vlcc/names';
 import { pick } from '../../../services/utils/loose';
 
