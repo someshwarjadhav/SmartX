@@ -205,6 +205,7 @@ export async function dpuSave(
     if (/^(error|fail|exception)/i.test(reply.trim())) throw new ApiError(reply.trim(), 'server');
     return reply.trim();
   }
+  if (typeof reply === 'number') return String(reply); // e.g. updateMilkEntry answers with just the new rate
   if (!isObj(reply)) return '';
   const inner = reply.data ?? reply.Data;
   const message = String(reply.Message ?? reply.message ?? (typeof inner === 'string' ? inner : '') ?? '').trim();

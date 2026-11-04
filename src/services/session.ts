@@ -67,3 +67,17 @@ export function stationFor(ids: string[]): string {
   const own = [...new Set(ids.map((id) => s.stationByVlcc[id]).filter(Boolean))];
   return own.length ? own.join(',') : s.stationId;
 }
+
+
+export function patchSessionVlcc(v: { villageId: string; name?: string; customId?: string }) {
+  const s = current;
+  if (!s || !v.villageId) return;
+  if (!s.vlccIds.includes(v.villageId)) s.vlccIds = [...s.vlccIds, v.villageId];
+  if (v.name) s.vlccNames = { ...s.vlccNames, [v.villageId]: v.name };
+  if (v.customId) s.stationByVlcc = { ...s.stationByVlcc, [v.villageId]: v.customId };
+  Object.assign(GLOBALS, {
+    customsessionid: s.vlccIds.join(','),
+    sessionid: s.vlccIds[0] ?? null,
+    id: s.vlccIds[0] ?? null,
+  });
+}

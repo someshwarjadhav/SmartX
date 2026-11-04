@@ -70,6 +70,7 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
   '/billing/cash-payment-summary': Banknote,
   '/billing/standard-deduction': Banknote,
   '/billing/vlc-standard-deduction': Banknote,
+  '/billing/deduction-entry': Banknote,
   '/billing/cattlefeed-farmer-bill': Receipt,
   '/billing/vlc-milk-bill': Receipt,
   '/settings/mobile-app': Settings,
