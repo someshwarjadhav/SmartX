@@ -1,3 +1,4 @@
+import { toSylk } from './sylk';
 
 export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money' | 'num2' | 'general';
 
@@ -190,23 +191,40 @@ export function reportPalette(): Palette {
 /*  CSV                                                                */
 /* ------------------------------------------------------------------ */
 
-const csvCell = (v: string | number): string => {
-  const s = String(v ?? '');
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
-
-/** Plain numbers (no thousands separator / currency symbol) so Excel and other tools read them as numbers. */
-function csvValue(v: string | number, type: ColType | undefined): string | number {
-  const d = DECIMALS[type ?? 'text'];
-  return typeof v === 'number' && d !== undefined ? v.toFixed(d) : v;
+/**
+ * Dates in a CSV are turned into "04-Nov-26": Excel reads that as a real date and shows it in a narrow column.
+ * "04 Nov 2026" / "04-11-2026" were read as dates too but shown in a long format, so the column showed ######### .
+ */
+const MON_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function csvDate(v: string): string | null {
+  const t = v.trim();
+  let d: string | undefined;
+  let m: number | undefined;
+  let y: string | undefined;
+  let hit = /^(\d{1,2})[ -]([A-Za-z]{3})[a-z]*[ -](\d{4})$/.exec(t); // 04 Nov 2026 / 04-Nov-2026
+  if (hit) {
+    d = hit[1];
+    m = MON_SHORT.findIndex((x) => x.toLowerCase() === hit![2]!.toLowerCase()) + 1;
+    y = hit[3];
+  } else if ((hit = /^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/.exec(t))) { // 04-11-2026 / 04.11.2026 / 04/11/2026
+    d = hit[1];
+    m = Number(hit[2]);
+    y = hit[3];
+  } else if ((hit = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t))) { // 2026-11-04
+    y = hit[1];
+    m = Number(hit[2]);
+    d = hit[3];
+  }
+  if (!d || !y || !m || m < 1 || m > 12) return null;
+  return `${d.padStart(2, '0')}-${MON_SHORT[m - 1]}-${y.slice(2)}`;
 }
 
 export function exportCSV(t: ExportTable): void {
-  const line = (r: Array<string | number>) => r.map((v, i) => csvCell(csvValue(v, t.columns[i]?.type))).join(',');
-  const lines = [t.columns.map((c) => csvCell(c.header)).join(','), ...t.rows.map(line)];
+  // .csv file name, but written so Excel opens it with every column as wide as its longest value (see lib/sylk.ts)
   const tot = totalsOf(t);
-  if (tot) lines.push(line(tot));
-  save(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }), `${t.filename}.csv`);
+  const plain = (r: Array<string | number>) => r.map((v) => (typeof v === 'number' ? v : csvDate(v) ?? v));
+  const rows = [...t.rows, ...(tot && t.rows.length > 0 ? [tot] : [])].map(plain);
+  save(new Blob([toSylk(t.columns.map((c) => c.header), rows)], { type: 'text/csv;charset=utf-8' }), `${t.filename}.csv`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -244,10 +262,22 @@ function buildSheet(XLSX: typeof import('xlsx'), t: ExportTable, titleBlock: boo
   if (totals) aoa.push(totals);
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-  // widths
+  // widths: every column is as wide as its longest value (names, dates, amounts as they will be shown) or its heading,
+  // so nothing is cut off or shown as ####. Headings get a little extra room for the filter arrow.
+  const widthOf = (v: string | number | undefined, type: ColType | undefined): number => {
+    if (v === undefined || v === null || v === '') return 0;
+    if (typeof v === 'number') {
+      const d = DECIMALS[type ?? 'text'];
+      const txt = d === undefined ? String(v) : num(v, d);
+      return type === 'money' ? txt.length + 1 : txt.length;
+    }
+    return String(v).length;
+  };
   ws['!cols'] = t.columns.map((c, i) => {
-    const longest = Math.max(c.header.length, ...t.rows.map((r) => String(r[i] ?? '').length));
-    return { wch: Math.min(40, Math.max(10, longest + 3)) };
+    let longest = c.header.length + 3;
+    for (const r of t.rows) longest = Math.max(longest, widthOf(r[i], c.type));
+    if (totals) longest = Math.max(longest, widthOf(totals[i], c.type));
+    return { wch: Math.min(70, Math.max(9, longest + 2)) };
   });
 
   // merges: title lines, header groups, grouped (vertical) cells

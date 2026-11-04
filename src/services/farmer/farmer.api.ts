@@ -5,7 +5,7 @@ import { adaptiveCollection, collectionWaves, fanOut, needSession, type Collecti
 import type { RawFarmerRow, RawLoose } from '../types/raw';
 import type { QueryData } from '../http/fanout';
 import { apiDate, eachDay } from '../utils/date';
-import { ApiError } from '../http/errors';
+import { ApiError, isCancelled } from '../http/errors';
 
 
 export const DPU_FARMER_COLLECTION = true;
@@ -121,53 +121,78 @@ export function rowsOfReply(reply: unknown): RawLoose[] {
 const dpuMilkCodes = (m: CollectionParams['milk']): string[] =>
   m !== 'ALL' ? [m] : ALL_MILK_CODE ? [ALL_MILK_CODE] : FARMER_MILK_CODES;
 
-async function dpuCall(body: Record<string, string>): Promise<unknown> {
+async function dpuCall(body: Record<string, string>, priority: Priority = 1, signal?: AbortSignal, timeoutMs?: number): Promise<unknown> {
   const text = await gatewayText(
     DPU_FARMER_COLLECTION_URL,
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-    1,
+    priority,
     true,
+    { ...(signal ? { signal } : {}), ...(timeoutMs ? { timeoutMs } : {}) },
   );
   const reply = openDpuReply(parseGatewayText(text));
   return reply;
 }
 
-function fetchDpuFarmerCollection(p: CollectionParams, emit?: Emit<RawFarmerRow>) {
-  needSession();
-  const jobs = p.vlccIds.flatMap((id) =>
-    dpuMilkCodes(p.milk).map((code) => async () => {
-      const read = async (from: string, to: string): Promise<RawFarmerRow[]> =>
-        rowsOfReply(
-          await dpuCall({ id, stationid: id, shift: p.shift, milktype: code, fromdate: apiDate(from), todate: apiDate(to) }),
-        ).map((r) => toRawFarmer(r, id, code, p.shift));
-      // one retry, then (for a date range) day by day: a long range can come back cut off by the server,
-      // and a failed request would otherwise silently drop that centre from the totals.
-      const once = async (from: string, to: string): Promise<RawFarmerRow[]> => {
-        try {
-          return await read(from, to);
-        } catch {
-          await new Promise((r) => setTimeout(r, 200));
-          return read(from, to);
-        }
-      };
-      let rows: RawFarmerRow[];
-      try {
-        rows = await once(p.from, p.to);
-      } catch (e) {
-        if (p.from >= p.to) throw e;
-        rows = (await Promise.all(eachDay(p.from, p.to).map((d) => once(d, d)))).flat();
-      }
-      // the pages match rows to centres by vlccid: keep it one of the ids that were asked for
-      for (const r of rows) if (!p.vlccIds.includes(String(r.vlccid))) r.vlccid = id;
-      return rows;
-    }),
-  );
-  return fanOut<RawFarmerRow>([jobs], emit, true);
+/** Most requests one report may have in flight at once for its date range (the browser sends 10 at a time). */
+const MAX_RANGE_REQUESTS = 30;
+/** A small (one centre, a few days) request that has not answered after this long is retried instead of hanging for 90 s. */
+const CHUNK_TIMEOUT_MS = 45_000;
+
+/** Splits a date range into the day windows that are asked in parallel. */
+export function dateChunks(from: string, to: string, windows: number): Array<[string, string]> {
+  const days = eachDay(from, to);
+  const size = Math.max(1, Math.ceil(days.length / Math.max(1, windows)));
+  const out: Array<[string, string]> = [];
+  for (let i = 0; i < days.length; i += size) out.push([days[i]!, days[Math.min(days.length, i + size) - 1]!]);
+  return out.length ? out : [[from, to]];
 }
 
-export const fetchFarmerCollection = (p: CollectionParams, emit?: Emit<RawFarmerRow>) =>
+function fetchDpuFarmerCollection(p: CollectionParams, emit?: Emit<RawFarmerRow>, signal?: AbortSignal) {
+  needSession();
+  const priority = p.priority ?? 1;
+  const codes = dpuMilkCodes(p.milk);
+  // One centre (the normal report): the date range is cut into day windows that are asked at the same time, so the first
+  // rows are on screen after one short request and the whole range is ready much sooner than one long request - which the
+  // server may also cut off. Many centres (dashboard): one request per centre and milk type, as before.
+  const windows = Math.max(1, Math.floor(MAX_RANGE_REQUESTS / Math.max(1, p.vlccIds.length * codes.length)));
+  const chunks = dateChunks(p.from, p.to, windows);
+  const split = chunks.length > 1;
+  const jobs = chunks.flatMap(([from, to]) =>
+    p.vlccIds.flatMap((id) =>
+      codes.map((code) => async () => {
+        const read = async (f: string, t: string): Promise<RawFarmerRow[]> =>
+          rowsOfReply(
+            await dpuCall({ id, stationid: id, shift: p.shift, milktype: code, fromdate: apiDate(f), todate: apiDate(t) }, priority, signal, split ? CHUNK_TIMEOUT_MS : undefined),
+          ).map((r) => toRawFarmer(r, id, code, p.shift));
+        // one retry, then (for a window of several days) day by day: a failed request would otherwise silently drop data
+        const once = async (f: string, t: string): Promise<RawFarmerRow[]> => {
+          try {
+            return await read(f, t);
+          } catch (e) {
+            if (isCancelled(e)) throw e;
+            await new Promise((r) => setTimeout(r, 200));
+            return read(f, t);
+          }
+        };
+        let rows: RawFarmerRow[];
+        try {
+          rows = await once(from, to);
+        } catch (e) {
+          if (isCancelled(e) || from >= to) throw e;
+          rows = (await Promise.all(eachDay(from, to).map((d) => once(d, d)))).flat();
+        }
+        // the pages match rows to centres by vlccid: keep it one of the ids that were asked for
+        for (const r of rows) if (!p.vlccIds.includes(String(r.vlccid))) r.vlccid = id;
+        return rows;
+      }),
+    ),
+  );
+  return fanOut<RawFarmerRow>([jobs], emit, true, signal);
+}
+
+export const fetchFarmerCollection = (p: CollectionParams, emit?: Emit<RawFarmerRow>, signal?: AbortSignal) =>
   DPU_FARMER_COLLECTION
-    ? fetchDpuFarmerCollection(p, emit)
+    ? fetchDpuFarmerCollection(p, emit, signal)
     : adaptiveCollection<RawFarmerRow>('/home/farmercollection', p, emit);
 
 export const fetchFarmerMilkEntry = (p: CollectionParams & { rateId: string }, emit?: Emit<RawLoose>) =>

@@ -1,5 +1,6 @@
 import type * as React from "react";
 import type { ReactNode } from "react";
+import { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -8,6 +9,7 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  Printer,
   Radio,
   RefreshCw,
 } from "lucide-react";
@@ -18,6 +20,8 @@ import { nf } from "../../lib/portal/format";
 import { cn } from "../../lib/portal/cn";
 
 export type ExportKind = "xls" | "pdf" | "csv";
+/** Buttons the report bar can show: the three export kinds plus Print / Download (Farmer Bill). */
+export type BarKind = ExportKind | "print" | "download";
 
 export const IconBadge: React.FC<{
   icon: LucideIcon;
@@ -167,28 +171,49 @@ export const ReportDataBadge: React.FC<{ state: ReportSourceState }> = ({
   );
 };
 
-const LABEL: Record<ExportKind, string> = {
+const LABEL: Record<BarKind, string> = {
   xls: "Excel",
   pdf: "PDF / Print",
   csv: "CSV",
+  print: "Print",
+  download: "Download",
 };
-const ICON: Record<ExportKind, ReactNode> = {
+const ICON: Record<BarKind, ReactNode> = {
   xls: <FileSpreadsheet size={15} />,
   pdf: <FileText size={15} />,
   csv: <Download size={15} />,
+  print: <Printer size={15} />,
+  download: <Download size={15} />,
 };
 
-export const ReportBar: React.FC<{
+export function ReportBar<K extends BarKind = ExportKind>({ count, hideCount, disabled, kinds, onExport, left, source, labels }: {
   count: number;
   hideCount?: boolean;
   disabled: boolean;
-  kinds: ExportKind[];
-  onExport: (k: ExportKind) => void;
+  kinds: K[];
+  onExport: (k: K) => void;
   left?: ReactNode;
   source?: ReactNode;
   /** Optional button captions, e.g. { pdf: "Print Bill" }. */
-  labels?: Partial<Record<ExportKind, string>>;
-}> = ({ count, hideCount, disabled, kinds, onExport, left, source, labels }) => (
+  labels?: Partial<Record<K, string>>;
+}) {
+  // each button has its own lock: pressing one never greys out the others
+  const locked = useRef<Set<K>>(new Set());
+  const [busy, setBusy] = useState<ReadonlySet<K>>(() => new Set());
+  const exportOnce = (kind: K) => {
+    if (disabled || locked.current.has(kind)) return;
+    locked.current.add(kind);
+    setBusy(new Set(locked.current));
+    try {
+      onExport(kind);
+    } finally {
+      window.setTimeout(() => {
+        locked.current.delete(kind);
+        setBusy(new Set(locked.current));
+      }, 700);
+    }
+  };
+  return (
   <div className="flex flex-col gap-3 border-b border-line bg-soft/50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
     <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
       {left}
@@ -199,11 +224,12 @@ export const ReportBar: React.FC<{
       {kinds.map((k) => (
         <motion.div key={k} whileHover={{ y: -2 }} whileTap={{ scale: 0.96 }}>
           <Button
+            type="button"
             size="sm"
             variant={k === "pdf" ? "danger" : k === "csv" ? "outline" : "primary"}
             icon={ICON[k]}
-            onClick={() => onExport(k)}
-            disabled={disabled}
+            onClick={() => exportOnce(k)}
+            disabled={disabled || busy.has(k)}
           >
             {labels?.[k] ?? LABEL[k]}
           </Button>
@@ -211,4 +237,5 @@ export const ReportBar: React.FC<{
       ))}
     </div>
   </div>
-);
+  );
+}

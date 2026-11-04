@@ -162,6 +162,8 @@ export function isRouteAllowed(
   pathname: string,
 ): boolean {
   if (ALWAYS_OPEN_ROUTES.includes(pathname)) return true;
+  if (pathname === "/portal/base/eko-correction")
+    return sections.some((s) => s.items.some((i) => i.to === "/reports/eko-correction"));
   return sections.some((s) =>
     s.items.some(
       (i) =>

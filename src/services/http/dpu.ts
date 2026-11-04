@@ -124,6 +124,27 @@ function stillEncrypted(reply: unknown): boolean {
   });
 }
 
+/**
+ * Console note for every DPU reply. Pretty-printing a big decrypted reply (thousands of rows) into the console froze the
+ * page for seconds, so only a short summary is printed; the full JSON is printed only if localStorage "smartx:debug" = "1".
+ */
+function logReply(label: string, reply: unknown): void {
+  try {
+    if (localStorage.getItem("smartx:debug") === "1") {
+      console.log(
+        `${label} - decrypted JSON:\n${JSON.stringify(reply, null, 2)}`,
+      );
+      return;
+    }
+  } catch {
+    /* no localStorage */
+  }
+  const n = Array.isArray(reply) ? reply.length : undefined;
+  console.debug(
+    `${label} - reply ready${n === undefined ? "" : ` (${n} rows)`}`,
+  );
+}
+
 const SHOW = 400;
 const cut = (t: string, n = SHOW) =>
   t.length > n ? `${t.slice(0, n)}... (${t.length} chars)` : t;
@@ -202,14 +223,7 @@ async function dpuSend(
       "parse",
     );
   }
- 
-  try {
-    // console.log(
-    //   `${label} <<< DECRYPTED JSON:\n${JSON.stringify(reply, null, 2)}`,
-    // );
-  } catch {
-    console.log(`${label} - decrypted reply:`, reply);
-  }
+  logReply(label, reply);
   return reply;
 }
 
@@ -266,13 +280,7 @@ async function dpuWrite(
       "parse",
     );
   }
-  try {
-    console.log(
-      `${label} <<< DECRYPTED JSON:\n${JSON.stringify(reply, null, 2)}`,
-    );
-  } catch {
-    console.log(`${label} - decrypted reply:`, reply);
-  }
+  logReply(label, reply);
   return reply;
 }
 

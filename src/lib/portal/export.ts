@@ -1,9 +1,10 @@
+import { toSylk } from '../sylk';
+
 export interface ExportCol<T = unknown> {
   header: string;
   value: (row: T) => string | number;
 }
 
-const esc = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
 const htmlEsc = (value: string | number) => String(value).replace(/[&<>"']/g, (char) => {
   const entities: Record<string, string> = {
     '&': '&amp;',
@@ -26,11 +27,9 @@ function download(name: string, mime: string, content: string) {
 }
 
 export function exportCSV<T>(name: string, cols: ExportCol<T>[], rows: T[]) {
-  const head = cols.map((column) => esc(column.header)).join(',');
-  const body = rows.map((row) => cols.map((column) => esc(column.value(row))).join(',')).join('\n');
-  download(`${name}.csv`, 'text/csv;charset=utf-8', '\ufeff' + head + '\n' + body);
+  // .csv file name, but written so Excel opens it with every column as wide as its longest value (see lib/sylk.ts)
+  download(`${name}.csv`, 'text/csv;charset=utf-8', toSylk(cols.map((c) => c.header), rows.map((r) => cols.map((c) => cellValue(c.value(r))))));
 }
-
 
 const cellValue = (v: string | number): string | number => {
   if (typeof v === 'number') return v;
@@ -44,20 +43,16 @@ export async function exportExcel<T>(name: string, cols: ExportCol<T>[], rows: T
   const XLSX = await import('xlsx');
   const head = cols.map((c) => c.header);
   const body = rows.map((r) => cols.map((c) => cellValue(c.value(r))));
-  const aoa: Array<Array<string | number>> = [
-    ['SMARTX'],
-    [name],
-    [`Generated ${new Date().toLocaleString('en-IN')}`],
-    [],
-    head,
-    ...(body.length ? body : [['No records in this report.']]),
-    [],
-    ['SmartX · Data from the SmartX portal'],
-  ];
+  // only the column headings and the data rows - no title / generated / footer lines
+  const aoa: Array<Array<string | number>> = [head, ...body];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = head.map((h, i) => ({
-    wch: Math.min(40, Math.max(String(h).length, ...body.map((r) => String(r[i] ?? '').length), 8) + 2),
-  }));
+  // every column as wide as its longest value / heading, so names and amounts are never cut off
+  const textOf = (v: string | number | undefined): string => (typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: 4 }) : String(v ?? ''));
+  ws['!cols'] = head.map((h, i) => {
+    let longest = String(h).length + 3;
+    for (const r of body) longest = Math.max(longest, textOf(r[i]).length);
+    return { wch: Math.min(70, Math.max(9, longest + 2)) };
+  });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ') || 'Report');
   XLSX.writeFile(wb, `${name}.xlsx`);

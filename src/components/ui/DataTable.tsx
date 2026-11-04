@@ -1,5 +1,4 @@
 import type * as React from 'react';
-import { motion } from 'framer-motion';
 import { cn } from '../../lib/cn';
 import { TableLoader } from './TableLoader';
 
@@ -26,7 +25,6 @@ interface Props<T> {
   isSelected?: (row: T) => boolean;
 }
 
-const ANIMATED_ROWS = 12;
 const ALIGN: Record<Align, string> = { left: 'text-left', right: 'text-right', center: 'text-center' };
 
 const labelOf = <T,>(c: Column<T>): string => c.mobileLabel ?? (typeof c.header === 'string' ? c.header : c.key);
@@ -52,35 +50,24 @@ export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false
             </tr>
           </thead>
           <tbody className="divide-y divide-line/60">
-            {rows.map((row, i) => {
-              const cells = columns.map((c) => (
-                <td key={c.key} className={cn('px-3 py-3 first:pl-5 last:pr-5', ALIGN[c.align ?? 'left'], c.className)}>
-                  {c.cell(row)}
-                </td>
-              ));
-              const cls = cn('transition-colors hover:bg-brand/5', isSelected?.(row) && 'bg-brand/[0.06]');
-              // 100 / 200 / 300 rows per page: animating every row makes the page slow, so only the first rows animate
-              return i < ANIMATED_ROWS ? (
-                <motion.tr key={rowKey(row)} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.02 }} className={cls}>
-                  {cells}
-                </motion.tr>
-              ) : (
-                <tr key={rowKey(row)} className={cls}>
-                  {cells}
-                </tr>
-              );
-            })}
+            {rows.map((row) => (
+              // plain rows: a fade-in on every row made the table flash each time rows were added or a page was changed
+              <tr key={rowKey(row)} className={cn('transition-colors hover:bg-brand/5', isSelected?.(row) && 'bg-brand/[0.06]')}>
+                {columns.map((c) => (
+                  <td key={c.key} className={cn('px-3 py-3 first:pl-5 last:pr-5', ALIGN[c.align ?? 'left'], c.className)}>
+                    {c.cell(row)}
+                  </td>
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
       <ul className="divide-y divide-line/70 md:hidden">
-        {rows.slice(0, 300).map((row, i) => (
-          <motion.li
+        {rows.slice(0, 300).map((row) => (
+          <li
             key={rowKey(row)}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: Math.min(i, 8) * 0.03 }}
             className={cn('px-4 py-3.5', isSelected?.(row) && 'bg-brand/[0.06]')}
           >
             {(title || action) && (
@@ -97,7 +84,7 @@ export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false
                 </div>
               ))}
             </dl>
-          </motion.li>
+          </li>
         ))}
       </ul>
     </>

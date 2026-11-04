@@ -1,7 +1,7 @@
 import type * as React from 'react';
 import { Sparkles } from 'lucide-react';
 import PortalReportPage from './PortalReportPage';
-import { CLEANING_REPORT_PATH } from '../../../services/report/portalReport.api.ts';
+import { CLEANING_REPORT_PATH } from '../../../services/report/cleaningReport.api.ts';
 
 const CleaningReport: React.FC = () => (
   <PortalReportPage

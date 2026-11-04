@@ -1,8 +1,18 @@
 import { clearRequestMemo, gatewayGet, gatewayText } from "../http/client";
-import { ApiError } from "../http/errors";
+import { dpuGet, dpuSaveAttempts, encryptedShapes, type SaveAttempt } from "../http/dpu";
+import { ApiError, EmptyReplyError } from "../http/errors";
 import { apiDate } from "../utils/date";
 import { isObj, pickValue, type Obj } from "../utils/loose";
 import { num } from "../utils/parse";
+
+/**
+ * Farmer Bill on the DPU API (https://dpu.shivinfotech.co.in/api):
+ *   GET  /Login/MilkBillProcessma?id=0&fromdate=<date>&todate=<date>&stationid=<vlc id>   -> bill JSON per farmer
+ *   POST /Login/getMilkBillFreeze   (body = BillFreeze)                                  -> freeze the bill
+ * Same calls as the old portal (/home/MilkBillProcessma and /dairy/dairy/getMilkBillFreeze), only the path moved to /Login.
+ */
+export const FARMER_BILL_PATH = "/Login/MilkBillProcessma";
+export const BILL_FREEZE_PATH = "/Login/getMilkBillFreeze";
 
 export interface BillFreeze {
   AutoRowNum: number;
@@ -14,32 +24,92 @@ export interface BillFreeze {
   json: string;
 }
 
+const NO_RECORD = /no\s*(record|data)|not\s*found/i;
+/** Server-side file-permission failure of the DPU host (it cannot write its bill cache file). */
+const SERVER_FILE_ERROR = /access to the path|is denied|permission/i;
+
+const billQuery = (from: string, to: string, stationId: string) =>
+  `id=0&fromdate=${encodeURIComponent(apiDate(from))}&todate=${encodeURIComponent(apiDate(to))}&stationid=${encodeURIComponent(stationId)}`;
+
+/**
+ * Optional escape hatch, OFF by default: VITE_FARMER_BILL_LEGACY_FALLBACK=1 in .env.local lets the old portal answer
+ * only when the DPU host fails with its file-permission error. Without it the bill always comes from the DPU API.
+ */
+const LEGACY_FALLBACK = import.meta.env.VITE_FARMER_BILL_LEGACY_FALLBACK === "1";
+
+const getLegacyBill = (qs: string): Promise<unknown> => gatewayGet(`/home/MilkBillProcessma?${qs}`, 0);
+
+const fileErrorMessage = (serverText: string) =>
+  `${serverText.replace(/\s+/g, " ").trim()} The DPU server cannot use its bill folder - the server team must give the DPU app pool "Modify" permission on it.`;
+
+/** Looks at a DPU reply: returns the bill JSON, or throws when the server sent a message instead of a bill. */
+function checkReply(reply: unknown): unknown {
+  if (typeof reply === "string") {
+    const text = reply.trim();
+    if (!text) return {};
+    if (/^[{[]/.test(text)) return reply;
+    if (NO_RECORD.test(text)) return {};
+    throw new ApiError(text, "server");
+  }
+  if (isObj(reply)) {
+    const ok = reply.Success ?? reply.success;
+    const message = String(reply.Message ?? reply.message ?? "").trim();
+    // { Success: false, Message: "No Record !" } = no bill for this period; any other refusal is an error
+    if (ok === false) {
+      if (!message || NO_RECORD.test(message)) return {};
+      throw new ApiError(message, "server");
+    }
+  }
+  return reply;
+}
+
 export async function getPrintTableData(
   from: string,
   to: string,
   stationId: string,
 ): Promise<unknown> {
-  const q = `/home/MilkBillProcessma?id=0&fromdate=${encodeURIComponent(apiDate(from))}&todate=${encodeURIComponent(apiDate(to))}&stationid=${encodeURIComponent(stationId)}`;
+  const qs = billQuery(from, to, stationId);
   clearRequestMemo();
   try {
-    return await gatewayGet(q, 0);
+    return checkReply(await dpuGet(`${FARMER_BILL_PATH}?${qs}`, 0));
   } catch (e) {
-    if (e instanceof ApiError && e.kind === "parse" && /empty/i.test(e.message))
-      return {};
-    throw e;
+    if (e instanceof EmptyReplyError) return {};
+    if (!(e instanceof ApiError) || e.kind === "auth" || !SERVER_FILE_ERROR.test(e.message)) throw e;
+    if (!LEGACY_FALLBACK) throw new ApiError(fileErrorMessage(e.message), "server");
+    console.warn("[farmer bill] DPU MilkBillProcessma is denied, using the old portal call:", e.message);
+    try {
+      return checkReply(await getLegacyBill(qs));
+    } catch (legacy) {
+      if (legacy instanceof EmptyReplyError) return {};
+      throw new ApiError(fileErrorMessage(e.message), "server");
+    }
   }
 }
 
+/** Freeze the bill. The plain JSON body is sent first; if the server refuses it, the encrypted { Payload } form is tried. */
 export async function postBillFreeze(data: BillFreeze): Promise<string> {
-  return gatewayText(
-    "/dairy/dairy/getMilkBillFreeze",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    },
-    0,
-  );
+  const attempts: SaveAttempt[] = [{ label: "json", path: BILL_FREEZE_PATH, body: data }];
+  try {
+    for (const body of encryptedShapes(data)) attempts.push({ label: "payload", path: BILL_FREEZE_PATH, body });
+  } catch {
+    /* no encryption key configured: only the plain body is tried */
+  }
+  try {
+    const message = await dpuSaveAttempts("FarmerBillFreeze", attempts);
+    clearRequestMemo();
+    return message;
+  } catch (e) {
+    if (!(e instanceof ApiError) || !SERVER_FILE_ERROR.test(e.message)) throw e;
+    if (!LEGACY_FALLBACK) throw new ApiError(fileErrorMessage(e.message), "server");
+    console.warn("[farmer bill] DPU getMilkBillFreeze is denied, using the old portal call:", e.message);
+    const text = await gatewayText(
+      "/dairy/dairy/getMilkBillFreeze",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) },
+      0,
+    );
+    clearRequestMemo();
+    return text;
+  }
 }
 
 export interface BillShift {

@@ -13,6 +13,7 @@ import { fetchDpuFarmerMaster, type MasterFarmerOption } from '../services/farme
 import { getDpuCenter, parseCenters } from '../services/center/center.api.ts';
 import type { Center } from '../services/mappers/center.mapper.ts';
 import { isoFromTrdate } from '../services/utils/date';
+import { time24 } from '../lib/format';
 import type { RawFarmerRow, RawVlccRow } from '../services/types/raw';
 
 export interface LiveReportState<T> {
@@ -111,61 +112,90 @@ const apiShift = (shift?: Shift | 'both') => shift === 'Morning' ? 'M' as const 
 const smartKind = (kind: string | null): MilkKind => kind === 'cow' || kind === 'buffalo' ? kind : 'mix';
 const smartShift = (shift: string | null): Shift => shift === 'Evening' ? 'Evening' : 'Morning';
 
-function useRawFarmerRows(filter: LiveFilter, keyPrefix: string): { q: QueryState<RawFarmerRow>; rows: CollectionEntry[] } {
+const KIND_RANK: Record<string, number> = { cow: 0, buffalo: 1, mix: 2 };
+
+/** Same order everywhere: date, Morning before Evening, milk type, farmer number, time. */
+const rowOrder = (r: CollectionEntry): string => {
+  const id = /^\d+$/.test(r.farmerId) ? String(Number(r.farmerId)).padStart(8, '0') : r.farmerId;
+  return `${r.date}|${r.shift === 'Morning' ? 0 : 1}|${KIND_RANK[r.kind] ?? 3}|${id}|${time24(r.time)}`;
+};
+
+function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolean): { q: QueryState<RawFarmerRow>; rows: CollectionEntry[] } {
   const session = getSession();
   const centers = useReportCenters();
   const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : filter.vlccIds?.length ? filter.vlccIds : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
   const idKey = ids.join(',');
-  const queryKey = ids.length ? `${keyPrefix}:${filter.from}:${filter.to}:${filter.shift ?? 'both'}:${filter.milk ?? 'both'}:${idKey}` : null;
-  const q = useQuery<RawFarmerRow>(queryKey, (emit) => fetchFarmerCollection({
+  // a page that is not submitted yet (enabled = false) must not ask the server anything
+  const queryKey = enabled && ids.length ? `${keyPrefix}:${filter.from}:${filter.to}:${filter.shift ?? 'both'}:${filter.milk ?? 'both'}:${idKey}` : null;
+  const q = useQuery<RawFarmerRow>(queryKey, (emit, signal) => fetchFarmerCollection({
     from: filter.from,
     to: filter.to,
     shift: apiShift(filter.shift),
     milk: apiMilk(filter.milk),
     vlccIds: ids,
-  }, emit));
+  }, emit, signal));
   const names = useMemo(() => new Map(centers.map((c) => [c.id, c.name || c.label || c.id])), [centers]);
-  const rows = useMemo(() => mapFarmers(q.rows).map((r, i): CollectionEntry => ({
-    id: r.key || `${r.vlccid}:${r.farmerId}:${r.sampleNo}:${i}`,
-    stationId: r.vlccid,
-    plant: r.vlccid.slice(0, 3) || session?.mccId || '',
-    date: toISO(r.date),
-    time: r.time || '',
-    shift: smartShift(r.shift),
-    farmerId: r.farmerId,
-    farmer: r.farmerName,
-    centre: names.get(r.vlccid) || r.village || r.vlccid,
-    kind: smartKind(r.milk),
-    litres: r.liter,
-    fat: r.fat,
-    snf: r.snf,
-    rate: r.rate,
-    amount: r.amount,
-    sampleNo: r.sampleNo,
-    kg: r.kg,
-    clr: r.clr,
-    water: r.water,
-    village: r.village,
-    stationCode: r.stationCode || undefined,
-    branchId: r.branchId || undefined,
-  })), [q.rows, names, session?.mccId]);
+  const rows = useMemo(() => {
+    const used = new Map<string, number>();
+    const list = mapFarmers(q.rows).map((r): CollectionEntry => {
+      const date = toISO(r.date);
+      const shift = smartShift(r.shift);
+      const kind = smartKind(r.milk);
+      // the row id must not depend on the position in the list: rows arrive in parts, and a changing id made every row redraw
+      const base = `${r.vlccid}|${r.farmerId}|${date}|${shift}|${kind}|${r.sampleNo}|${r.time}|${r.liter}|${r.amount}`;
+      const n = used.get(base) ?? 0;
+      used.set(base, n + 1);
+      return {
+        id: n ? `${base}#${n}` : base,
+        stationId: r.vlccid,
+        plant: r.vlccid.slice(0, 3) || session?.mccId || '',
+        date,
+        time: r.time || '',
+        shift,
+        farmerId: r.farmerId,
+        farmer: r.farmerName,
+        centre: names.get(r.vlccid) || r.village || r.vlccid,
+        kind,
+        litres: r.liter,
+        fat: r.fat,
+        snf: r.snf,
+        rate: r.rate,
+        amount: r.amount,
+        sampleNo: r.sampleNo,
+        kg: r.kg,
+        clr: r.clr,
+        water: r.water,
+        village: r.village,
+        stationCode: r.stationCode || undefined,
+        branchId: r.branchId || undefined,
+      };
+    });
+    const keyed = list.map((r) => [rowOrder(r), r] as const);
+    keyed.sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
+    return keyed.map((x) => x[1]);
+  }, [q.rows, names, session?.mccId]);
   return { q, rows };
 }
 
+const NO_ROWS: never[] = [];
+
 export function useMilkFarmerEntries(filter: LiveFilter, enabled = true): LiveReportState<CollectionEntry> {
-  const { q, rows } = useRawFarmerRows(filter, 'smartx-designed-farmer-report');
+  const { q, rows } = useRawFarmerRows(filter, 'smartx-designed-farmer-report', enabled);
   const session = getSession();
+  // depends on the filter VALUES (not on the filter object, which is a new object on every render): the result list keeps the
+  // same identity between renders, so clicking a dropdown or button does not recalculate / redraw the whole report
+  const { from, to, shift, milk, vlccId } = filter;
   const filtered = useMemo(() => rows.filter((r) =>
-    r.date >= filter.from && r.date <= filter.to &&
-    (!filter.shift || filter.shift === 'both' || r.shift === filter.shift) &&
-    (!filter.milk || filter.milk === 'both' || r.kind === filter.milk) &&
-    (!filter.vlccId || filter.vlccId === 'all' || r.stationId === filter.vlccId)
-  ), [rows, filter]);
-  const shown = enabled && session?.vlccIds?.length ? filtered : [];
+    r.date >= from && r.date <= to &&
+    (!shift || shift === 'both' || r.shift === shift) &&
+    (!milk || milk === 'both' || r.kind === milk) &&
+    (!vlccId || vlccId === 'all' || r.stationId === vlccId)
+  ), [rows, from, to, shift, milk, vlccId]);
+  const shown = enabled && session?.vlccIds?.length ? filtered : NO_ROWS;
   const busy = enabled && !!session?.vlccIds?.length && (q.status === 'loading' || q.fetching);
   return {
     rows: shown,
-    // rows are shown as soon as the first centre answers; the loader only covers the time before that
+    // rows are shown as soon as the first answer arrives; the loader only covers the time before that
     loading: busy && shown.length === 0,
     fetching: busy,
     done: q.done,

@@ -1,3 +1,4 @@
+/** Cleaning Report API (one request per VLC, merged). Eko Calibration / Eko Correction have their own files. */
 import { directGet, gatewayGet } from '../http/client';
 import { ApiError } from '../http/errors';
 import { fanOut, needSession, waves, type Emit, type QueryData } from '../http/fanout';
@@ -6,7 +7,6 @@ import type { ShiftCode } from '../types/raw';
 import { apiDate } from '../utils/date';
 
 export const CLEANING_REPORT_PATH = import.meta.env.VITE_CLEANING_REPORT_PATH || '/dairy/dairy/cleaningReport';
-export const EKO_CALIBRATION_PATH = import.meta.env.VITE_EKO_CALIBRATION_PATH || '/dairy/dairy/getekocleaningdata';
 
 const ALTERNATES: Record<string, string[]> = {};
 
@@ -67,9 +67,7 @@ function rowsOf(json: unknown): PortalRow[] {
 
 
 const query = (path: string, id: string, from: string, to: string) =>
-  /getekocleaningdata/i.test(path)
-    ? `${path}?vlccid=${encodeURIComponent(id)}`
-    : `${path}?stationid=${encodeURIComponent(id)}&fromdate=${encodeURIComponent(apiDate(from))}&todate=${encodeURIComponent(apiDate(to))}`;
+  `${path}?stationid=${encodeURIComponent(id)}&fromdate=${encodeURIComponent(apiDate(from))}&todate=${encodeURIComponent(apiDate(to))}`;
 
 
 async function ask(path: string, id: string, from: string, to: string): Promise<PortalRow[]> {

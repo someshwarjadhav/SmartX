@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_SHOW_CUSTOMER_ID?: string;
   readonly VITE_FARMER_MILK_CODES?: string;
   readonly VITE_RATE_ID?: string;
+  readonly VITE_FARMER_BILL_LEGACY_FALLBACK?: string;
   readonly VITE_DEV_EMAIL?: string;
   readonly VITE_DEV_PASSWORD?: string;
 }

@@ -1,21 +1,15 @@
-import type * as React from 'react';
-import { SlidersHorizontal } from 'lucide-react';
-import PortalReportPage from './PortalReportPage';
-import { EKO_CALIBRATION_PATH } from '../../../services/report/portalReport.api.ts';
+import { SlidersHorizontal } from "lucide-react";
+import EkoDataReport from "../../../components/operations/EkoDataReport";
+import { EKO_CALIBRATION_FIELDS, getEkoCleaningData } from "../../../services/report/ekoCalibration.api";
 
-const EkoCalibration: React.FC = () => (
-  <PortalReportPage
-    title="Eko Calibration"
-    subtitle="Eko analyser calibration records of your centres for the chosen dates and shift."
-    endpoint={EKO_CALIBRATION_PATH}
-    slug="eko-calibration"
-    icon={SlidersHorizontal}
-    centreLabel="VLC Name"
-    allCentres={false}
-    withDates={false}
-    submitLabel="Show"
-    note="Calibration records are loaded from the SmartX portal using the selected filters."
-  />
-);
-
-export default EkoCalibration;
+export default function EkoCalibration() {
+  return (
+    <EkoDataReport
+      title="Eko Calibration"
+      subtitle="View and export Eko calibration / cleaning records for a selected VLC."
+      icon={SlidersHorizontal}
+      fields={EKO_CALIBRATION_FIELDS}
+      load={getEkoCleaningData}
+    />
+  );
+}
