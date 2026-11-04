@@ -1,7 +1,8 @@
 import type * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ArrowRight, CalendarDays, Search, SearchX, SlidersHorizontal } from 'lucide-react';
 import { useMilkFarmerEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
+import { withFormulaTotals } from '../../lib/exporters';
 import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -79,7 +80,7 @@ const UnionwiseFilters: React.FC<FilterProps> = ({ value, onChange, onSubmit, er
       </div>
 
       <div className="flex items-end xl:col-span-6">
-        <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
+        <Button type="submit" size="lg" disabled={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
           Submit
         </Button>
       </div>
@@ -106,6 +107,7 @@ const COLUMNS: Column<UnionRow>[] = [
 ];
 
 const UnionwiseCollection: React.FC = () => {
+  const resultsRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
   const [submitted, setSubmitted] = useState(false);
@@ -113,8 +115,9 @@ const UnionwiseCollection: React.FC = () => {
   const toast = useToast();
   const centres = useMilkCenterOptions();
   const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both' }, submitted);
+  const fetching = live.fetching;
   const loading = live.loading;
-  const rows = useMemo(() => { const groups = new Map<string, typeof live.rows>(); for (const r of live.rows) { const key = `${r.plant}|${r.stationId}`; groups.set(key, [...(groups.get(key) ?? []), r]); } return [...groups].map(([key, list]) => { const first=list[0]; const qty=list.reduce((a,r)=>a+r.litres,0); const amount=list.reduce((a,r)=>a+r.amount,0); return { id:key, union:centres.find((c) => c.mccId === first?.plant)?.plantName || first?.plant || '', society:centres.find((c) => c.id === first?.stationId)?.label || first?.centre || first?.stationId || '', farmer:new Set(list.map((r)=>r.farmerId)).size, qty, avgFat:qty?list.reduce((a,r)=>a+r.fat*r.litres,0)/qty:0, avgSnf:qty?list.reduce((a,r)=>a+r.snf*r.litres,0)/qty:0, avgRate:qty?amount/qty:0, amount }; }); }, [live.rows, centres]);
+  const rows = useMemo(() => { const groups = new Map<string, typeof live.rows>(); for (const r of live.rows) { const key = `${r.plant}|${r.stationId}`; groups.set(key, [...(groups.get(key) ?? []), r]); } return [...groups].map(([key, list]) => { const first=list[0]; const qty=list.reduce((a,r)=>a+r.litres,0); const amount=list.reduce((a,r)=>a+r.amount,0); return { id:key, union:centres.find((c) => c.mccId === first?.plant)?.plantName || first?.plant || '', society:centres.find((c) => c.id === first?.stationId)?.name || first?.centre || first?.stationId || '', farmer:new Set(list.map((r)=>r.farmerId)).size, qty, avgFat:qty?list.reduce((a,r)=>a+r.fat*r.litres,0)/qty:0, avgSnf:qty?list.reduce((a,r)=>a+r.snf*r.litres,0)/qty:0, avgRate:qty?amount/qty:0, amount }; }); }, [live.rows, centres]);
   const pager = usePagination(rows);
 
   const submit = () => {
@@ -126,6 +129,8 @@ const UnionwiseCollection: React.FC = () => {
     if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
     setApplied(draft);
     setSubmitted(true);
+    // bring the results (and the loader) up so nothing has to be scrolled
+    window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     pager.reset();
   };
 
@@ -133,7 +138,7 @@ const UnionwiseCollection: React.FC = () => {
   const buildTable = (): ExportTable => {
     const qty = rows.reduce((a, r) => a + r.qty, 0);
     const amount = rows.reduce((a, r) => a + r.amount, 0);
-    return {
+    return withFormulaTotals({
       filename: `unionwise-collection-${applied.fromDate}-${applied.toDate}`,
       title: 'Unionwise collection',
       subtitle: `${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
@@ -143,7 +148,7 @@ const UnionwiseCollection: React.FC = () => {
       ] as ExportTable['columns']),
       rows: rows.map((r) => tbl.pick<string | number>([r.union, r.society, r.farmer, r.qty, r.avgFat, r.avgSnf, r.avgRate, r.amount])),
       totals: tbl.pickTotals(['Total', `${rows.length} societies`, rows.reduce((a, r) => a + r.farmer, 0), Math.round(qty * 10) / 10, '', '', qty ? Math.round((amount / qty) * 100) / 100 : 0, Math.round(amount * 100) / 100]),
-    };
+    });
   };
 
   const actions: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print', 'csv'] });
@@ -152,11 +157,12 @@ const UnionwiseCollection: React.FC = () => {
     <div className="space-y-4 sm:space-y-5">
       <PageHeader title="Unionwise Collection" subtitle="Totals by union and society, with average fat, SNF and rate." />
 
-      <UnionwiseFilters value={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
+      <UnionwiseFilters value={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={fetching} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
       <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />
 
+      <div ref={resultsRef} className="scroll-mt-20">
       <Panel bodyClassName="!p-0">
         {!submitted ? (
           <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
@@ -169,7 +175,7 @@ const UnionwiseCollection: React.FC = () => {
           pageSize={pager.pageSize}
           onPageSize={pager.setPageSize}
           sizeLabel="Result per page"
-          actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
+          actions={<ExportBar actions={actions} disabled={fetching || rows.length === 0} />}
         />
 
         {loading ? (
@@ -177,7 +183,7 @@ const UnionwiseCollection: React.FC = () => {
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range." />
         ) : (
-          <DataTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Unionwise collection" loading={loading} minWidth={820} />
+          <DataTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Unionwise collection" minWidth={820} />
         )}
 
         {!loading && rows.length > 0 && (
@@ -186,6 +192,7 @@ const UnionwiseCollection: React.FC = () => {
           </>
         )}
       </Panel>
+      </div>
 
       <Toast message={toast.message} onClose={toast.close} />
     </div>

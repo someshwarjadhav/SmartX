@@ -17,7 +17,12 @@ import type { RawFarmerRow, RawVlccRow } from '../services/types/raw';
 
 export interface LiveReportState<T> {
   rows: T[];
+  /** true only while there is nothing to show yet (first rows arrive -> the table appears) */
   loading: boolean;
+  /** true while requests are still running, even if some rows are already on screen */
+  fetching: boolean;
+  /** requests finished so far (done of total) for the progress strip */
+  done: number;
   error: string | null;
   retry: () => void;
   updatedAt: number | null;
@@ -31,6 +36,8 @@ export interface LiveFilter {
   shift?: Shift | 'both';
   milk?: MilkKind | 'both';
   vlccId?: string | 'all';
+  /** ask only these centres (used when a page already knows which centres it needs, e.g. one plant) */
+  vlccIds?: string[];
 }
 /* ---------- Centres for the report dropdowns (DPU FarmerCollectionDpu) ---------- */
 
@@ -107,7 +114,7 @@ const smartShift = (shift: string | null): Shift => shift === 'Evening' ? 'Eveni
 function useRawFarmerRows(filter: LiveFilter, keyPrefix: string): { q: QueryState<RawFarmerRow>; rows: CollectionEntry[] } {
   const session = getSession();
   const centers = useReportCenters();
-  const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
+  const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : filter.vlccIds?.length ? filter.vlccIds : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
   const idKey = ids.join(',');
   const queryKey = ids.length ? `${keyPrefix}:${filter.from}:${filter.to}:${filter.shift ?? 'both'}:${filter.milk ?? 'both'}:${idKey}` : null;
   const q = useQuery<RawFarmerRow>(queryKey, (emit) => fetchFarmerCollection({
@@ -139,6 +146,8 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string): { q: QueryStat
     clr: r.clr,
     water: r.water,
     village: r.village,
+    stationCode: r.stationCode || undefined,
+    branchId: r.branchId || undefined,
   })), [q.rows, names, session?.mccId]);
   return { q, rows };
 }
@@ -152,9 +161,14 @@ export function useMilkFarmerEntries(filter: LiveFilter, enabled = true): LiveRe
     (!filter.milk || filter.milk === 'both' || r.kind === filter.milk) &&
     (!filter.vlccId || filter.vlccId === 'all' || r.stationId === filter.vlccId)
   ), [rows, filter]);
+  const shown = enabled && session?.vlccIds?.length ? filtered : [];
+  const busy = enabled && !!session?.vlccIds?.length && (q.status === 'loading' || q.fetching);
   return {
-    rows: enabled && session?.vlccIds?.length ? filtered : [],
-    loading: enabled && !!session?.vlccIds?.length && (q.status === 'loading' || q.fetching),
+    rows: shown,
+    // rows are shown as soon as the first centre answers; the loader only covers the time before that
+    loading: busy && shown.length === 0,
+    fetching: busy,
+    done: q.done,
     error: !session?.vlccIds?.length ? 'No centre IDs were returned by the login/session API.' : q.error?.message ?? null,
     retry: q.retry,
     updatedAt: q.updatedAt,
@@ -180,7 +194,7 @@ export interface LiveVlccRow {
 export function useMilkVlccEntries(filter: LiveFilter, enabled = true): LiveReportState<LiveVlccRow> {
   const session = getSession();
   const centers = useReportCenters();
-  const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
+  const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : filter.vlccIds?.length ? filter.vlccIds : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
   const idKey = ids.join(',');
   const key = enabled && ids.length ? `smartx-designed-vlcc-report:${filter.from}:${filter.to}:${filter.shift ?? 'both'}:${filter.milk ?? 'both'}:${idKey}` : null;
   const q = useQuery<RawVlccRow>(key, (emit) => fetchVlccCollection({
@@ -201,9 +215,13 @@ export function useMilkVlccEntries(filter: LiveFilter, enabled = true): LiveRepo
     milk: smartKind(r.milk),
     shift: smartShift(r.shift),
   })), [q.rows, names]);
+  const shown = enabled ? rows.filter((r) => r.date >= filter.from && r.date <= filter.to && (!filter.shift || filter.shift === 'both' || r.shift === filter.shift) && (!filter.milk || filter.milk === 'both' || r.milk === filter.milk) && (!filter.vlccId || filter.vlccId === 'all' || r.vlccid === filter.vlccId)) : [];
+  const busy = enabled && ids.length > 0 && (q.status === 'loading' || q.fetching);
   return {
-    rows: enabled ? rows.filter((r) => r.date >= filter.from && r.date <= filter.to && (!filter.shift || filter.shift === 'both' || r.shift === filter.shift) && (!filter.milk || filter.milk === 'both' || r.milk === filter.milk) && (!filter.vlccId || filter.vlccId === 'all' || r.vlccid === filter.vlccId)) : [],
-    loading: enabled && ids.length > 0 && (q.status === 'loading' || q.fetching),
+    rows: shown,
+    loading: busy && shown.length === 0,
+    fetching: busy,
+    done: q.done,
     error: !session?.vlccIds?.length ? 'No centre IDs were returned by the login/session API.' : q.error?.message ?? null,
     retry: q.retry,
     updatedAt: q.updatedAt,
@@ -224,17 +242,37 @@ export function useMilkCenterOptions(): CentreOpt[] {
     const list = centers.length
       ? centers.map((c) => ({ id: c.id, name: c.name || c.label || '', mccId: c.id.slice(0, 3) || mcc }))
       : (session?.vlccIds ?? []).map((id) => ({ id, name: session?.vlccNames?.[id] || '', mccId: id.slice(0, 3) || mcc }));
-    return list.map((c) => ({ ...c, plantName: plant(c.mccId), label: centreLabel(c.id, c.name) }));
+    // VLC dropdowns show "NAME | ID" (id comes from the getCenter API)
+    return list.map((c) => {
+      const name = c.name.trim();
+      const label = !name || name === c.id ? c.id : `${name} | ${c.id}`;
+      return { ...c, plantName: plant(c.mccId), label };
+    });
   }, [centers, session?.vlccIds, session?.vlccNames, session?.mccId, session?.mccName]);
 }
 
-/** Plant/MCC dropdown: shows the plant (route) name, the value stays the MCC id. */
+/** Plant/MCC dropdown: only the plant (route) name, e.g. "MAIN ROUTE" - no id, no "All". The value stays the MCC id. */
 export function usePlantOptions(centres: CentreOpt[]): { value: string; label: string }[] {
   return useMemo(() => {
     const seen = new Map<string, string>();
     for (const c of centres) if (!seen.has(c.mccId)) seen.set(c.mccId, c.plantName);
-    return [{ value: 'all', label: 'All MCCs' }, ...[...seen].map(([value, name]) => ({ value, label: name && name !== value ? `${name} | ${value}` : value }))];
+    return [...seen].map(([value, name]) => ({ value, label: name || value }));
   }, [centres]);
+}
+
+/**
+ * Plant -> VLC dropdowns of every report: no "All" row, the first plant and its first centre are selected by default.
+ * `plant` / `centre` are what the person picked ('' = nothing picked yet); the returned values are always a real option.
+ */
+export function useReportScope(centres: CentreOpt[], plant: string, centre: string) {
+  const plantOptions = usePlantOptions(centres);
+  const plantValue = plantOptions.some((o) => o.value === plant) ? plant : plantOptions[0]?.value ?? '';
+  const centreOptions = useMemo(
+    () => centres.filter((c) => c.mccId === plantValue).map((c) => ({ value: c.id, label: c.label })),
+    [centres, plantValue],
+  );
+  const centreValue = centreOptions.some((o) => o.value === centre) ? centre : centreOptions[0]?.value ?? '';
+  return { plantOptions, centreOptions, plant: plantValue, centre: centreValue };
 }
 
 /* ---------- Farmer dropdown: DPU FarmerMaster (loads before Submit) ---------- */

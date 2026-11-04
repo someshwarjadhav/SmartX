@@ -49,7 +49,7 @@ export const COLUMN_ALIASES: Record<string, string[]> = {
   kind: ['milktype', 'milk'],
   farmerId: ['farmerid', 'farmercode'],
   name: ['name', 'farmername'],
-  centre: ['centre', 'centrevlc', 'vlc', 'vlcname'],
+  centre: ['centre', 'centrevlc', 'vlc', 'vlcname', 'stationname'],
   village: ['village', 'villagename', 'vlcname', 'vlcc'],
   litres: ['liter', 'litre', 'litres', 'qty'],
   kg: ['kg', 'weight'],

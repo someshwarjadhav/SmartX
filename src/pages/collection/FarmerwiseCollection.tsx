@@ -1,8 +1,9 @@
 import type * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ArrowRight, CalendarDays, Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Users } from 'lucide-react';
 import type { CollectionEntry } from '../../data/farmerCollection';
-import { useMilkFarmerEntries, useMilkCenterOptions, usePlantOptions, useFarmerMasterOptions, farmerKey } from '../../hooks/useMilkReportData';
+import { useMilkFarmerEntries, useMilkCenterOptions, useReportScope, useFarmerMasterOptions, farmerKey } from '../../hooks/useMilkReportData';
+import { withFormulaTotals } from '../../lib/exporters';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
 import { ReportLoader } from '../../components/ui/ReportLoader';
@@ -66,7 +67,7 @@ const SEGMENT = 'w-full [&>button]:h-9 [&>button]:flex-1';
 
 const FarmerwiseFilters: React.FC<FilterProps> = ({ value, plantOptions, centreOptions, farmerOptions, onChange, onSubmit, error, loading }) => {
 
-  const changePlant = (plant: string) => onChange({ plant, vlcId: 'all', farmerId: 'all' });
+  const changePlant = (plant: string) => onChange({ plant, vlcId: '', farmerId: 'all' });
 
   return (
     <section aria-label="User Info" className="overflow-hidden rounded-2xl border border-line bg-panel shadow-card">
@@ -106,7 +107,7 @@ const FarmerwiseFilters: React.FC<FilterProps> = ({ value, plantOptions, centreO
         </div>
 
         <div className="sm:col-span-2 xl:col-span-12">
-          <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
+          <Button type="submit" size="lg" disabled={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
             Submit
           </Button>
         </div>
@@ -119,8 +120,9 @@ const FarmerwiseFilters: React.FC<FilterProps> = ({ value, plantOptions, centreO
 
 const defaults = (): Filters => {
   const today = toISO(new Date());
-  const plant = 'all';
-  return { plant, vlcId: 'all', farmerId: 'all', milkType: 'cow', shift: 'Morning', fromDate: today, toDate: today };
+  // plant / VLC '' = first plant and its first centre (no "All" row)
+  const plant = '';
+  return { plant, vlcId: '', farmerId: 'all', milkType: 'cow', shift: 'Morning', fromDate: today, toDate: today };
 };
 
 const weighted = (rows: CollectionEntry[], pick: (r: CollectionEntry) => number, litres: number): number =>
@@ -152,43 +154,46 @@ const COLUMNS: Column<CollectionEntry>[] = [
     ),
     mobile: 'title',
   },
-  { key: 'centre', header: 'Centre (VLC)', cell: (r) => <span className="whitespace-nowrap">{r.centre}</span>, mobile: 'hidden' },
+  { key: 'centre', header: 'Station Name', cell: (r) => <span className="whitespace-nowrap">{r.centre}</span>, mobile: 'hidden' },
   { key: 'litres', header: 'Liter', align: 'right', cell: (r) => <span className="tnum font-semibold">{nf(r.litres, 1)}</span> },
   { key: 'kg', header: 'Kg', align: 'right', cell: (r) => <span className="tnum">{nf(r.kg ?? 0, 1)}</span>, mobile: 'hidden' },
   { key: 'fat', header: 'Fat', align: 'right', cell: (r) => <span className="tnum">{nf(r.fat, 1)}</span> },
   { key: 'snf', header: 'Snf', align: 'right', cell: (r) => <span className="tnum">{nf(r.snf, 1)}</span> },
-  { key: 'clr', header: 'CLR', align: 'right', cell: (r) => <span className="tnum">{nf(r.clr ?? 0, 1)}</span>, mobile: 'hidden' },
+  { key: 'clr', header: 'Clr', align: 'right', cell: (r) => <span className="tnum">{nf(r.clr ?? 0, 1)}</span>, mobile: 'hidden' },
   { key: 'rate', header: 'Rate', align: 'right', cell: (r) => <span className="tnum">₹{nf(r.rate, 2)}</span> },
   { key: 'amount', header: 'Amount', align: 'right', cell: (r) => <span className="tnum font-bold">₹{nf(r.amount, 2)}</span> },
 ];
 
 
 const FarmerwiseCollection: React.FC = () => {
+  const resultsRef = useRef<HTMLDivElement>(null);
   const centres = useMilkCenterOptions();
-  const plantOptions = usePlantOptions(centres);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType }, submitted);
+  const scope = useReportScope(centres, draft.plant, draft.vlcId);
+  const plantOptions = scope.plantOptions;
+  const centreOptions = scope.centreOptions;
+  const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId || 'all' }, submitted && !!applied.vlcId);
+  const fetching = live.fetching;
   const loading = live.loading;
-  const centreOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...centres.filter((c) => draft.plant === 'all' || c.mccId === draft.plant).map((c) => ({ value: c.id, label: c.label }))], [centres, draft.plant]);
-  const farmerVlccIds = useMemo(() => (draft.vlcId !== 'all' ? [draft.vlcId] : centres.filter((c) => draft.plant === 'all' || c.mccId === draft.plant).map((c) => c.id)), [draft.vlcId, draft.plant, centres]);
+  const farmerVlccIds = useMemo(() => (scope.centre ? [scope.centre] : []), [scope.centre]);
   const centreNames = useMemo(() => Object.fromEntries(centres.map((c) => [c.id, c.name || c.id])), [centres]);
   const { options: masterFarmers, loading: farmersLoading } = useFarmerMasterOptions(farmerVlccIds, centreNames);
   // only if the farmer master gave nobody: farmers of the chosen VLC are read from its collection
-  const pre = useMilkFarmerEntries({ from: draft.fromDate, to: draft.toDate, shift: 'both', milk: 'both', vlccId: draft.vlcId }, draft.vlcId !== 'all' && !farmersLoading && masterFarmers.length === 0);
+  const pre = useMilkFarmerEntries({ from: draft.fromDate, to: draft.toDate, shift: 'both', milk: 'both', vlccId: scope.centre || 'all' }, !!scope.centre && !farmersLoading && masterFarmers.length === 0);
   const farmerOptions = useMemo(() => {
     // farmer master (id | name) first; farmers seen in the loaded collection are added if the master missed them
     const have = new Set(masterFarmers.map((o) => o.value));
     const extra = [...pre.rows, ...live.rows]
-      .filter((r) => (draft.vlcId === 'all' || r.stationId === draft.vlcId) && !have.has(farmerKey(r.stationId, r.farmerId)))
+      .filter((r) => r.stationId === scope.centre && !have.has(farmerKey(r.stationId, r.farmerId)))
       .map((r) => ({ value: farmerKey(r.stationId, r.farmerId), label: `${r.farmerId} | ${r.farmer}` }))
       .filter((o, i, a) => a.findIndex((x) => x.value === o.value) === i);
     return [{ value: 'all', label: farmersLoading ? 'Loading farmers…' : 'All Farmers' }, ...masterFarmers, ...extra];
-  }, [masterFarmers, farmersLoading, pre.rows, live.rows, draft.vlcId]);
-  const rows = useMemo(() => live.rows.filter((r) => (applied.plant === 'all' || r.plant === applied.plant) && (applied.vlcId === 'all' || r.stationId === applied.vlcId) && (applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
+  }, [masterFarmers, farmersLoading, pre.rows, live.rows, scope.centre]);
+  const rows = useMemo(() => live.rows.filter((r) => (!applied.plant || r.plant === applied.plant) && (!applied.vlcId || r.stationId === applied.vlcId) && (applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
 
   const pager = usePagination(rows);
 
@@ -208,21 +213,28 @@ const FarmerwiseCollection: React.FC = () => {
       setError('From date cannot be after To date');
       return;
     }
+    if (!scope.centre) {
+      setError('No VLC found for this plant');
+      return;
+    }
     setError(undefined);
-    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
-    setApplied(draft);
+    const next = { ...draft, plant: scope.plant, vlcId: scope.centre };
+    if (submitted && JSON.stringify(applied) === JSON.stringify(next)) { live.retry(); }
+    setApplied(next);
     setSubmitted(true);
+    // bring the results (and the loader) up so nothing has to be scrolled
+    window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     pager.reset();
   };
 
   const tbl = useReportTable('farmerwisecollection', COLUMNS);
-  const buildTable = (): ExportTable => ({
+  const buildTable = (): ExportTable => withFormulaTotals({
     filename: `farmerwise-collection-${applied.fromDate}-${applied.toDate}`,
     title: 'Farmerwise collection',
-    subtitle: `${applied.plant}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
+    subtitle: `${centres.find((c) => c.mccId === applied.plant)?.plantName ?? ''}  |  ${centres.find((c) => c.id === applied.vlcId)?.label ?? ''}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
     columns: tbl.pick([
       { header: 'Station Id' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Milk Type' }, { header: 'Farmer Id' }, { header: 'Name' },
-      { header: 'Centre (VLC)' }, { header: 'Liter', type: 'dec1' }, { header: 'Kg', type: 'dec1' }, { header: 'Fat', type: 'dec1' }, { header: 'Snf', type: 'dec1' }, { header: 'CLR', type: 'dec1' }, { header: 'Rate', type: 'money' }, { header: 'Amount', type: 'money' },
+      { header: 'Station Name' }, { header: 'Liter', type: 'dec1' }, { header: 'Kg', type: 'dec1' }, { header: 'Fat', type: 'dec1' }, { header: 'Snf', type: 'dec1' }, { header: 'Clr', type: 'dec1' }, { header: 'Rate', type: 'money' }, { header: 'Amount', type: 'money' },
     ] as ExportTable['columns']),
     rows: rows.map((r) => tbl.pick<string | number>([r.stationId, fmtDate(r.date), r.shift, r.kind, r.farmerId, r.farmer, r.centre, r.litres, r.kg ?? 0, r.fat, r.snf, r.clr ?? 0, r.rate, r.amount])),
     totals: tbl.pickTotals(['Total', '', '', '', '', `${rows.length} entries`, '', Math.round(totals.litres * 10) / 10, '', Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, '', '', Math.round(totals.amount * 100) / 100]),
@@ -241,11 +253,12 @@ const FarmerwiseCollection: React.FC = () => {
         <StatCard index={3} tone="danger" label="Total Farmer" note="Pouring in this range" icon={Users} value={totals.farmers} format={(n) => nf(Math.round(n))} />
       </div>
 
-      <FarmerwiseFilters value={draft} plantOptions={plantOptions} centreOptions={centreOptions} farmerOptions={farmerOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
+      <FarmerwiseFilters value={{ ...draft, plant: scope.plant, vlcId: scope.centre }} plantOptions={plantOptions} centreOptions={centreOptions} farmerOptions={farmerOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={fetching} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
       <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />
 
+      <div ref={resultsRef} className="scroll-mt-20">
       <Panel bodyClassName="!p-0">
         {!submitted ? (
           <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
@@ -258,7 +271,7 @@ const FarmerwiseCollection: React.FC = () => {
           pageSize={pager.pageSize}
           onPageSize={pager.setPageSize}
           sizeLabel="Result per page"
-          actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
+          actions={<ExportBar actions={actions} disabled={fetching || rows.length === 0} />}
         />
 
         {loading ? (
@@ -266,7 +279,7 @@ const FarmerwiseCollection: React.FC = () => {
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another farmer, date range, shift or milk type." />
         ) : (
-          <DataTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmerwise collection" loading={loading} minWidth={1100} />
+          <DataTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmerwise collection" minWidth={1100} />
         )}
 
         {!loading && rows.length > 0 && (
@@ -275,6 +288,7 @@ const FarmerwiseCollection: React.FC = () => {
           </>
         )}
       </Panel>
+      </div>
 
       <Toast message={toast.message} onClose={toast.close} />
     </div>

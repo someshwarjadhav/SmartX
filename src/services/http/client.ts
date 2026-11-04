@@ -165,7 +165,7 @@ async function send(
         return await sendOnce(endpoint, init, fields, url);
       } catch (e) {
         if (attempt === 0 && retryable(e)) {
-          await sleep(700);
+          await sleep(250);
           continue;
         }
         throw e;

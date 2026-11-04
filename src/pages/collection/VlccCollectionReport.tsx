@@ -1,17 +1,17 @@
 import type * as React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ArrowRight, CalendarDays, Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Store, Sun } from 'lucide-react';
-import { useMilkVlccEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
+import { useMilkVlccEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
 import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
-import { DataTable, type Column } from '../../components/ui/DataTable';
+import { GroupedTable, type GroupColumn } from '../../components/ui/GroupedTable';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
-import type { ExportTable } from '../../lib/exporters';
+import { withFormulaTotals, type ExportTable, type MergeSpec } from '../../lib/exporters';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useReportTable } from '../../hooks/useSessionData';
@@ -24,7 +24,7 @@ import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
 import { cn } from '../../lib/cn';
-import { fmtDate, nf, toISO } from '../../lib/format';
+import { fmtDate, fmtDateLong, nf, toISO } from '../../lib/format';
 
 /* ---------- Types ---------- */
 
@@ -36,6 +36,7 @@ const SHIFT_FILTER_OPTIONS: { value: ShiftFilter; label: string }[] = [...SHIFT_
 
 /** Filter keys = API request params (VLC Name -> vlcId, Milk Type -> milkType, Shift -> shift, From/To Date). */
 interface Filters {
+  plant: string;
   vlcId: string;
   milkType: KindFilter;
   shift: ShiftFilter;
@@ -64,6 +65,7 @@ interface VlccRow {
 
 interface FilterProps {
   value: Filters;
+  plantOptions: { value: string; label: string }[];
   onChange: (patch: Partial<Filters>) => void;
   onSubmit: () => void;
   error?: string;
@@ -73,7 +75,7 @@ interface FilterProps {
 const SEGMENT = 'w-full [&>button]:h-9 [&>button]:flex-1';
 
 
-const VlccFilters: React.FC<FilterProps & { options: { value: string; label: string }[] }> = ({ value, options, onChange, onSubmit, error, loading }) => (
+const VlccFilters: React.FC<FilterProps & { options: { value: string; label: string }[] }> = ({ value, plantOptions, options, onChange, onSubmit, error, loading }) => (
   <section aria-label="User Info" className="overflow-hidden rounded-2xl border border-line bg-panel shadow-card">
     <header className="flex items-center gap-3 border-b border-line bg-gradient-to-r from-brand/10 via-brand/[0.03] to-transparent px-4 py-3.5 sm:px-5">
       <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand text-brand-ink shadow-card">
@@ -81,7 +83,7 @@ const VlccFilters: React.FC<FilterProps & { options: { value: string; label: str
       </span>
       <div>
         <h2 className="font-display text-base font-semibold leading-tight">User Info</h2>
-        <p className="text-xs text-mute">Pick the VLC, milk, shift and dates, then press Submit.</p>
+        <p className="text-xs text-mute">Pick the plant, VLC, milk, shift and dates, then press Submit.</p>
       </div>
     </header>
 
@@ -93,7 +95,8 @@ const VlccFilters: React.FC<FilterProps & { options: { value: string; label: str
       }}
       className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
     >
-      <SelectField wrapperClassName="xl:col-span-6" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId })} options={options} />
+      <SelectField wrapperClassName="xl:col-span-3" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant, vlcId: '' })} options={plantOptions} />
+      <SelectField wrapperClassName="xl:col-span-3" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId })} options={options} />
       <Field label="Milk Type" className="xl:col-span-3">
         <Segmented<KindFilter> label="Milk Type" value={value.milkType} onChange={(milkType) => onChange({ milkType })} options={KIND_FILTER_OPTIONS} className={SEGMENT} />
       </Field>
@@ -108,7 +111,7 @@ const VlccFilters: React.FC<FilterProps & { options: { value: string; label: str
       </div>
 
       <div className="flex items-end sm:col-span-2 xl:col-span-6">
-        <Button type="submit" size="lg" loading={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
+        <Button type="submit" size="lg" disabled={loading} icon={<Search size={16} aria-hidden />} className="group h-11 w-full bg-gradient-to-r from-brand to-glow">
           Submit
         </Button>
       </div>
@@ -120,23 +123,18 @@ const VlccFilters: React.FC<FilterProps & { options: { value: string; label: str
 
 const defaults = (): Filters => {
   const today = toISO(new Date());
-  return { vlcId: 'all', milkType: 'both', shift: 'both', fromDate: today, toDate: today };
+  // plant / VLC '' = first plant and its first centre (no "All" row)
+  return { plant: '', vlcId: '', milkType: 'both', shift: 'both', fromDate: today, toDate: today };
 };
 
-const COLUMNS: Column<VlccRow>[] = [
-  { key: 'station', header: 'Station Id', cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationId}</span>, mobile: 'hidden' },
-  {
-    key: 'village',
-    header: 'Village',
-    cell: (r) => (
-      <div className="min-w-0">
-        <p className="truncate font-semibold">{r.village}</p>
-        <p className="tnum text-xs font-normal text-mute md:hidden">Station {r.stationId}</p>
-      </div>
-    ),
-    mobile: 'title',
-  },
-  { key: 'date', header: 'Date', cell: (r) => <span className="tnum whitespace-nowrap">{fmtDate(r.date)}</span> },
+/** STIPL layout: Station Id + Village are ONE merged cell for the whole centre, Date is merged over its shifts. */
+const stationKey = (r: VlccRow): string => r.stationId;
+const dateKey = (r: VlccRow): string => `${r.stationId}|${r.date}`;
+
+const COLUMNS: GroupColumn<VlccRow>[] = [
+  { key: 'station', header: 'Station Id', group: stationKey, cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationId}</span> },
+  { key: 'village', header: 'Village', group: stationKey, cell: (r) => <span className="font-semibold">{r.village}</span> },
+  { key: 'date', header: 'Date', group: dateKey, cell: (r) => <span className="tnum whitespace-nowrap">{fmtDateLong(r.date)}</span> },
   {
     key: 'shift',
     header: 'Shift',
@@ -147,27 +145,29 @@ const COLUMNS: Column<VlccRow>[] = [
       </span>
     ),
   },
-  { key: 'totalLiter', header: 'Total Liter', align: 'right', cell: (r) => <span className="tnum font-semibold">{nf(r.totalLiter, 1)}</span> },
+  { key: 'totalLiter', header: 'Total Liter', align: 'right', cell: (r) => <span className="tnum font-semibold">{nf(r.totalLiter, 2)}</span> },
   { key: 'avgFat', header: 'Avg Fat', align: 'right', cell: (r) => <span className="tnum">{nf(r.avgFat, 2)}</span> },
   { key: 'avgSnf', header: 'Avg SNF', align: 'right', cell: (r) => <span className="tnum">{nf(r.avgSnf, 2)}</span> },
-  { key: 'avgRate', header: 'Avg Rate', align: 'right', cell: (r) => <span className="tnum">₹{nf(r.avgRate, 2)}</span> },
-  { key: 'totalAmount', header: 'Total Amount', align: 'right', cell: (r) => <span className="tnum font-bold">₹{nf(r.totalAmount, 2)}</span> },
+  { key: 'avgRate', header: 'Avg Rate', align: 'right', cell: (r) => <span className="tnum">{nf(r.avgRate, 2)}</span> },
+  { key: 'totalAmount', header: 'Total Amount', align: 'right', cell: (r) => <span className="tnum font-bold">{nf(r.totalAmount, 2)}</span> },
 ];
 
 const VlccCollectionReport: React.FC = () => {
+  const resultsRef = useRef<HTMLDivElement>(null);
   const centres = useMilkCenterOptions();
-  const vlcOptions = useMemo(() => [{ value: 'all', label: 'All' }, ...centres.map((c) => ({ value: c.id, label: c.label }))], [centres]);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId }, submitted);
+  const scope = useReportScope(centres, draft.plant, draft.vlcId);
+  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId || 'all' }, submitted && !!applied.vlcId);
+  const fetching = live.fetching;
   const loading = live.loading;
   const rows = useMemo(() => {
     const groups = new Map<string, typeof live.rows>();
     for (const r of live.rows) { const key = `${r.vlccid}|${r.date}|${r.shift}`; groups.set(key, [...(groups.get(key) ?? []), r]); }
-    return [...groups].map(([id, list]) => { const first = list[0]; const litres = list.reduce((a, r) => a + r.liter, 0); const amount = list.reduce((a, r) => a + r.amount, 0); return { id, stationId: first?.vlccid ?? '', village: first?.village ?? '', date: first?.date ?? '', shift: first?.shift ?? 'Morning', totalLiter: litres, avgFat: litres ? list.reduce((a, r) => a + r.fat*r.liter, 0)/litres : 0, avgSnf: litres ? list.reduce((a, r) => a + r.snf*r.liter, 0)/litres : 0, avgRate: litres ? amount/litres : 0, totalAmount: amount }; }).sort((a,b)=>b.date.localeCompare(a.date)||a.stationId.localeCompare(b.stationId)||a.shift.localeCompare(b.shift));
+    return [...groups].map(([id, list]) => { const first = list[0]; const litres = list.reduce((a, r) => a + r.liter, 0); const amount = list.reduce((a, r) => a + r.amount, 0); return { id, stationId: first?.vlccid ?? '', village: first?.village ?? '', date: first?.date ?? '', shift: first?.shift ?? 'Morning', totalLiter: litres, avgFat: litres ? list.reduce((a, r) => a + r.fat*r.liter, 0)/litres : 0, avgSnf: litres ? list.reduce((a, r) => a + r.snf*r.liter, 0)/litres : 0, avgRate: litres ? amount/litres : 0, totalAmount: amount }; }).sort((a,b)=>a.stationId.localeCompare(b.stationId)||a.date.localeCompare(b.date)||(a.shift === b.shift ? 0 : a.shift === 'Morning' ? -1 : 1));
   }, [live.rows]);
   const pager = usePagination(rows);
 
@@ -187,25 +187,43 @@ const VlccCollectionReport: React.FC = () => {
       setError('From date cannot be after To date');
       return;
     }
+    if (!scope.centre) {
+      setError('No VLC found for this plant');
+      return;
+    }
     setError(undefined);
-    if (submitted && JSON.stringify(applied) === JSON.stringify(draft)) { live.retry(); }
-    setApplied(draft);
+    const next = { ...draft, plant: scope.plant, vlcId: scope.centre };
+    if (submitted && JSON.stringify(applied) === JSON.stringify(next)) { live.retry(); }
+    setApplied(next);
     setSubmitted(true);
+    // bring the results (and the loader) up so nothing has to be scrolled
+    window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     pager.reset();
   };
 
   const tbl = useReportTable('vlcccollection', COLUMNS);
-  const buildTable = (): ExportTable => ({
-    filename: `vlcc-collection-report-${applied.fromDate}-${applied.toDate}`,
-    title: 'Vlcc collection report',
-    subtitle: `${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
-    columns: tbl.pick([
-      { header: 'Station Id' }, { header: 'Village' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Total Liter', type: 'dec1' },
-      { header: 'Avg Fat', type: 'dec2' }, { header: 'Avg SNF', type: 'dec2' }, { header: 'Avg Rate', type: 'money' }, { header: 'Total Amount', type: 'money' },
-    ] as ExportTable['columns']),
-    rows: rows.map((r) => tbl.pick<string | number>([r.stationId, r.village, fmtDate(r.date), r.shift, r.totalLiter, r.avgFat, r.avgSnf, r.avgRate, r.totalAmount])),
-    totals: tbl.pickTotals(['Total', `${rows.length} rows`, '', '', Math.round(totals.litres * 10) / 10, Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, totals.litres ? Math.round((totals.amount / totals.litres) * 100) / 100 : 0, Math.round(totals.amount * 100) / 100]),
-  });
+  const buildTable = (): ExportTable => {
+    const keys = tbl.columns.map((c) => c.key);
+    const at = (k: string): number => keys.indexOf(k);
+    const parent = ['station', 'village'].map(at).filter((i) => i >= 0);
+    // Station Id / Village merge over the whole centre, Date over its shifts (Excel + PDF)
+    const merge: MergeSpec[] = [
+      ...parent.map((col) => ({ col, by: parent })),
+      ...(at('date') >= 0 ? [{ col: at('date'), by: [...parent, at('date')] }] : []),
+    ];
+    return withFormulaTotals({
+      filename: `vlcc-collection-report-${applied.fromDate}-${applied.toDate}`,
+      title: 'Vlcc collection report',
+      subtitle: `${centres.find((c) => c.mccId === applied.plant)?.plantName ?? ''}  |  ${centres.find((c) => c.id === applied.vlcId)?.label ?? ''}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
+      columns: tbl.pick([
+        { header: 'Station Id' }, { header: 'Village' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Total Liter', type: 'dec2' },
+        { header: 'Avg Fat', type: 'dec2' }, { header: 'Avg SNF', type: 'dec2' }, { header: 'Avg Rate', type: 'dec2' }, { header: 'Total Amount', type: 'dec2' },
+      ] as ExportTable['columns']),
+      rows: rows.map((r) => tbl.pick<string | number>([r.stationId, r.village, fmtDateLong(r.date), r.shift, r.totalLiter, r.avgFat, r.avgSnf, r.avgRate, r.totalAmount])),
+      totals: tbl.pickTotals(['Total', `${rows.length} rows`, '', '', 0, 0, 0, 0, 0]),
+      merge,
+    });
+  };
 
   const actions: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print'] });
 
@@ -220,11 +238,12 @@ const VlccCollectionReport: React.FC = () => {
         <StatCard index={3} tone="danger" label="Total VLC" note="Reporting in this range" icon={Store} value={totals.vlcs} format={(n) => nf(Math.round(n))} />
       </div>
 
-      <VlccFilters value={draft} options={vlcOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
+      <VlccFilters value={{ ...draft, plant: scope.plant, vlcId: scope.centre }} plantOptions={scope.plantOptions} options={scope.centreOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={fetching} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
       <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />
 
+      <div ref={resultsRef} className="scroll-mt-20">
       <Panel bodyClassName="!p-0">
         {!submitted ? (
           <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
@@ -237,7 +256,7 @@ const VlccCollectionReport: React.FC = () => {
           pageSize={pager.pageSize}
           onPageSize={pager.setPageSize}
           sizeLabel="Result per page"
-          actions={<ExportBar actions={actions} disabled={loading || rows.length === 0} />}
+          actions={<ExportBar actions={actions} disabled={fetching || rows.length === 0} />}
         />
 
         {loading ? (
@@ -245,7 +264,7 @@ const VlccCollectionReport: React.FC = () => {
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another VLC, date range, shift or milk type." />
         ) : (
-          <DataTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Vlcc collection report" loading={loading} minWidth={900} />
+          <GroupedTable columns={tbl.columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Vlcc collection report" minWidth={900} />
         )}
 
         {!loading && rows.length > 0 && (
@@ -254,6 +273,7 @@ const VlccCollectionReport: React.FC = () => {
           </>
         )}
       </Panel>
+      </div>
 
       <Toast message={toast.message} onClose={toast.close} />
     </div>

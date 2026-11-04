@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 
-export const PAGE_SIZES = [10, 50, 100];
-export const DEFAULT_PAGE_SIZE = PAGE_SIZES[0] ?? 10;
+/** Same page sizes as the STIPL portal: 100 / 200 / 300 rows (100 by default). Every report table uses these. */
+export const PAGE_SIZES = [100, 200, 300];
+export const DEFAULT_PAGE_SIZE = PAGE_SIZES[0] ?? 100;
 
 export function usePagination<T>(items: T[], initialSize = DEFAULT_PAGE_SIZE) {
   const [page, setPage] = useState(1);

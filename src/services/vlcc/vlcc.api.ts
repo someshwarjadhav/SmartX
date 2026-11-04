@@ -77,7 +77,7 @@ export function fetchVlccCollection(p: CollectionParams, emit?: Emit<RawVlccRow>
       try {
         return await readRange(id, code, fallbackId, from, to);
       } catch {
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 200));
         return readRange(id, code, fallbackId, from, to);
       }
     };

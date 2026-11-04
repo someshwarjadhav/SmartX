@@ -245,26 +245,26 @@
 }
 .tl-ring {
   transform-origin: 32px 32px;
-  animation: tl-spin 1.1s linear infinite;
+  animation: tl-spin 0.7s linear infinite;
 }
 .tl-ring-2 {
   transform-origin: 32px 32px;
-  animation: tl-spin 1.8s linear infinite reverse;
+  animation: tl-spin 1.1s linear infinite reverse;
 }
 .tl-halo {
-  animation: tl-halo 2s ease-in-out infinite;
+  animation: tl-halo 1.2s ease-in-out infinite;
 }
 .tl-drop {
-  animation: tl-drop 1.4s ease-in-out infinite;
+  animation: tl-drop 0.9s ease-in-out infinite;
 }
 .tl-bar {
-  animation: tl-bar 1.4s ease-in-out infinite;
+  animation: tl-bar 0.9s ease-in-out infinite;
 }
 .tl-hint {
   animation: tl-hint 0.45s ease-out both;
 }
 .tl-card {
-  animation: tl-card 0.3s ease-out both;
+  animation: tl-card 0.15s ease-out both;
 }
 @media (prefers-reduced-motion: reduce) {
   .tl-ring,
