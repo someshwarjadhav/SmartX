@@ -48,6 +48,7 @@ const CashPaymentSummary = lazy(() => import("../pages/operations/billing/CashPa
 const BankPaymentSummary = lazy(() => import("../pages/operations/billing/BankPaymentSummary"));
 const CattleFeedFarmerBill = lazy(() => import("../pages/operations/billing/CattleFeedFarmerBill"));
 const ManageCollection = lazy(() => import('../pages/operations/transactions/ManageCollection'));
+const SaleEntry = lazy(() => import('../pages/operations/transactions/SaleEntry'));
 const MobileAppSettings = lazy(
   () => import("../pages/operations/settings/MobileAppSettings"),
 );
@@ -100,7 +101,6 @@ const SessionGate: React.FC = () => {
   return ready ? <Outlet /> : <PageLoader />;
 };
 
-// Har page ka guard: route sidebar (getMenu API) mein ho tabhi khulega, warna NotFound.
 const RouteGate: React.FC = () => {
   const { pathname } = useLocation();
   const sections = useNav();
@@ -178,6 +178,12 @@ const App: React.FC = () => {
                 path="transactions/manage-collection"
                 element={
                   <ManageCollection />
+                }
+              />
+              <Route
+                path="transactions/sale-entry"
+                element={
+                  <SaleEntry />
                 }
               />
 
