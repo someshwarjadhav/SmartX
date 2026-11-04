@@ -1,6 +1,6 @@
-import { BASE_URL } from "../config";
-import { clearRequestMemo, directGet, gatewayGet } from "../http/client";
+import { clearRequestMemo } from "../http/client";
 import { dpuGet, dpuSaveAttempts, encryptedShapes, type SaveAttempt } from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
 import { ApiError } from "../http/errors";
 import { encryptXorPayload } from "../../lib/portal/crypto";
 import { isObj, norm, pick, type Obj } from "../utils/loose";
@@ -47,21 +47,6 @@ export function rowsOf(json: unknown): Obj[] {
     }
   }
   return [];
-}
-
-async function rateGet(endpoint: string): Promise<unknown> {
-  try {
-    return await gatewayGet(endpoint, 0);
-  } catch (first) {
-    if (first instanceof ApiError && first.kind === "auth") throw first;
-    try {
-      const root = BASE_URL || "https://smartx.shivinfotech.co.in";
-      const base = /^https?:/i.test(root) ? root : `${window.location.origin}${root}`;
-      return await directGet(`${base}/gateway/Interceptor?path=${endpoint}`, 0);
-    } catch {
-      throw first;
-    }
-  }
 }
 
 export interface SavedRate {
@@ -159,14 +144,16 @@ export function gridFromRecords(records: Obj[]): RateGrid {
   return { snfs, rows };
 }
 
+// DPU API: GET https://dpu.shivinfotech.co.in/api/Login/ShowRateWeb?stationid=&edate=&milktype=&rateid=
 export async function showRate(
   stationId: string,
   isoDate: string,
   milkType: string,
   rangeType: string,
 ): Promise<RateGrid> {
-  const json = await rateGet(
-    `/dairy/dairy/ShowRateWeb?stationid=${q(stationId)}&edate=${q(isoDate)}&milktype=${q(milkType)}&rateid=${q(rangeType)}`,
+  const json = await dpuGet(
+    `${DPU.showRateWeb}?stationid=${q(stationId)}&edate=${q(isoDate)}&milktype=${q(milkType)}&rateid=${q(rangeType)}`,
+    0,
   );
   const records = rowsOf(json);
   if (!records.length) return emptyGrid();
@@ -310,8 +297,10 @@ export interface RateStatusRow {
 const dayOnly = (d: string) => /^(\d{4}-\d{2}-\d{2})/.exec(d.trim())?.[1] ?? d.trim();
 
 export async function getRateStatus(mccid: string, plantid: string, type: string): Promise<RateStatusRow[]> {
-  const json = await rateGet(
-    `/dairy/dairy/getRateStatus?mccid=${q(mccid)}&plantid=${q(plantid)}&type=${q(type)}`,
+  // DPU API: GET https://dpu.shivinfotech.co.in/api/Login/GetRateStatus?mccid=&plantid=&type=
+  const json = await dpuGet(
+    `${DPU.getRateStatus}?mccid=${q(mccid)}&plantid=${q(plantid)}&type=${q(type)}`,
+    0,
   );
   return rowsOf(json).map((r): RateStatusRow => {
     const vid = pick(r, ["vid", "villageid", "vlccid", "vlcid", "stationid"]);
