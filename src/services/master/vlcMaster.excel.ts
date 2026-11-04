@@ -26,7 +26,7 @@ export async function exportVlcMaster(
       r.contact,
       r.active ? "Active" : "Inactive",
       r.pcbNo,
-      r.ekoPass,
+      r.ekoPass || "0",
     ]),
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);

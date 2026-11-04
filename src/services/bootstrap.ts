@@ -1,7 +1,7 @@
 import { GLOBALS } from '../lib/portal/global';
 import { DATA_KEY, LOGIN_KEY, vaultClear, vaultLoad, vaultSave } from '../lib/portal/vault';
 import { mapLoginResponse, type LoginProfile } from './auth/auth.api.ts';
-import { getCenter, parseCenters } from './center/center.api.ts';
+import { getCenter, getDpuCenter, parseCenters } from './center/center.api.ts';
 import { parseMenu, getMenu, type MenuNode } from './menu/menu.api.ts';
 import { EMPTY_REPORT_CONFIG, getReportAccess, parseReportConfig, type ReportConfig } from './report/report.api.ts';
 import { setSession } from './session';
@@ -156,4 +156,34 @@ export function clearSessionData() {
   rawData = null;
   vaultClear();
   Object.assign(GLOBALS, { userid: null, stationid: null });
+}
+
+
+export async function refreshSessionCenters(): Promise<void> {
+  const record = getSavedLoginRecord();
+  if (!record) return;
+  let profile: LoginProfile;
+  try {
+    profile = mapLoginResponse(record, vaultLoad<StoredLogin>(LOGIN_KEY)?.username || '');
+  } catch {
+    return;
+  }
+  const ids = [profile.centerStationId, profile.vlccIds?.join(','), profile.mccId, profile.stationId]
+    .map((x) => (x ?? '').trim())
+    .filter((x, i, all) => x && all.indexOf(x) === i);
+  for (const id of ids) {
+    try {
+      const centers = await getDpuCenter(id);
+      const parsed = parseCenters(centers);
+      if (!parsed.length) continue;
+      data = { ...data, centers: parsed };
+      rawData = { ...(rawData ?? { centers: null, menu: null, report: null }), centers };
+      vaultSave(DATA_KEY, { userId: profile.userId ?? '', raw: rawData } satisfies StoredData);
+      applySession(profile);
+      listeners.forEach((fn) => fn());
+      return;
+    } catch (e) {
+      console.debug('[vlc] centre refresh skipped:', e instanceof Error ? e.message : e);
+    }
+  }
 }

@@ -40,3 +40,6 @@ export const DEV_EMAIL = import.meta.env.DEV ? import.meta.env.VITE_DEV_EMAIL ||
 export const DEV_PASSWORD = import.meta.env.DEV ? import.meta.env.VITE_DEV_PASSWORD || '' : '';
 
 export const PORTAL_URL = (import.meta.env.VITE_PORTAL_URL || 'https://smartx.shivinfotech.co.in/prodigy/#').replace(/\/+$/, '');
+
+
+export const SHOW_CUSTOMER_ID = (import.meta.env.VITE_SHOW_CUSTOMER_ID ?? 'true').toString().toLowerCase() !== 'false';
