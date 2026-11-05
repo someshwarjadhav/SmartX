@@ -5,7 +5,11 @@ import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
-import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
+import {
+  CardTitle,
+  ReportPage,
+  Reveal,
+} from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { useSmoothLoading } from "../../../hooks/useSmoothLoading";
 import { useCentreOptions } from "../../../hooks/useCentres";
@@ -48,7 +52,7 @@ const DeductionEntry: React.FC = () => {
   const [to, setTo] = useState(todayISO());
 
   const [rows, setRows] = useState<DeductionRow[]>([]);
-  // what is typed in each "Ded Amount" box, by farmer id
+
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -68,7 +72,6 @@ const DeductionEntry: React.FC = () => {
     setLoading(false);
   };
 
-  // the deduction types belong to the chosen VLC
   useEffect(() => {
     if (!vlcId) return;
     let alive = true;
@@ -99,17 +102,25 @@ const DeductionEntry: React.FC = () => {
 
   const show = async () => {
     if (!vlcId || !typeCode || loading) return;
-    if (!from || !to) return toast("Please choose the From and To dates", "warn");
+    if (!from || !to)
+      return toast("Please choose the From and To dates", "warn");
     if (from > to) return toast("From Date cannot be after To Date", "warn");
     clearRequestMemo();
     reset();
     setLoading(true);
     const mine = ticket.current;
     try {
-      const list = await getDeductions({ vlcid: vlcId, reftype: typeCode, from, to });
+      const list = await getDeductions({
+        vlcid: vlcId,
+        reftype: typeCode,
+        from,
+        to,
+      });
       if (mine !== ticket.current) return;
       setRows(list);
-      setTyped(Object.fromEntries(list.map((r) => [r.farmerId, two(r.deduction)])));
+      setTyped(
+        Object.fromEntries(list.map((r) => [r.farmerId, two(r.deduction)])),
+      );
       setLoaded(true);
     } catch (e) {
       console.error("[DeductionEntry] load FAILED:", e);
@@ -132,7 +143,10 @@ const DeductionEntry: React.FC = () => {
 
   const totals = useMemo(
     () => ({
-      deduction: view.reduce((s, v) => s + (v.calc.error ? 0 : toNum(v.text)), 0),
+      deduction: view.reduce(
+        (s, v) => s + (v.calc.error ? 0 : toNum(v.text)),
+        0,
+      ),
       payable: view.reduce((s, v) => s + v.calc.payable, 0),
     }),
     [view],
@@ -141,7 +155,6 @@ const DeductionEntry: React.FC = () => {
   const setText = (id: string, value: string) =>
     setTyped((t) => ({ ...t, [id]: value }));
 
-  // Enter / leaving the box: a wrong amount is refused and set back to 0 (like the old portal), a good one is tidied to 2 decimals
   const commit = (id: string) => {
     const v = view.find((x) => x.row.farmerId === id);
     if (!v) return;
@@ -164,7 +177,8 @@ const DeductionEntry: React.FC = () => {
   const submit = async () => {
     if (saving || !loaded || view.length === 0) return;
     const bad = view.find((v) => v.calc.error);
-    if (bad) return toast(`Farmer ${bad.row.farmerId}: ${bad.calc.error}`, "warn");
+    if (bad)
+      return toast(`Farmer ${bad.row.farmerId}: ${bad.calc.error}`, "warn");
     setSaving(true);
     try {
       const reply = await saveDeductions({
@@ -189,9 +203,11 @@ const DeductionEntry: React.FC = () => {
     <ReportPage title="Deduction Entry">
       <Reveal delay={0.05}>
         <Card>
-          <CardHeader title={<CardTitle icon={Wallet}>Bill Deduction</CardTitle>} />
-          <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-6 xl:grid-cols-4">
-            <Field label="VLC Name" className="sm:col-span-1 xl:col-span-2">
+          <CardHeader
+            title={<CardTitle icon={Wallet}>Bill Deduction</CardTitle>}
+          />
+          <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
+            <Field label="VLC Name" className="sm:col-span-1 lg:col-span-2">
               <Select
                 value={vlcId}
                 onChange={(e) => {
@@ -206,7 +222,10 @@ const DeductionEntry: React.FC = () => {
                 ))}
               </Select>
             </Field>
-            <Field label="Deduction Type" className="sm:col-span-1 xl:col-span-2">
+            <Field
+              label="Deduction Type"
+              className="sm:col-span-1 lg:col-span-2"
+            >
               <Select
                 value={typeCode}
                 disabled={typesLoading || types.length === 0}
@@ -216,7 +235,9 @@ const DeductionEntry: React.FC = () => {
                 }}
               >
                 {types.length === 0 && (
-                  <option value="">{typesLoading ? "Loading…" : "No type found"}</option>
+                  <option value="">
+                    {typesLoading ? "Loading…" : "No type found"}
+                  </option>
                 )}
                 {types.map((t) => (
                   <option key={t.code} value={t.code}>
@@ -246,9 +267,9 @@ const DeductionEntry: React.FC = () => {
                 }}
               />
             </Field>
-            <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
+            <div className="grid grid-cols-2 items-end gap-3 sm:col-span-2 sm:gap-4 lg:self-end">
               <Button
-                className="w-full"
+                className="h-11 w-full min-w-0 px-3 sm:px-4"
                 icon={<Eye size={16} />}
                 loading={loading}
                 disabled={!vlcId || !typeCode || !from || !to}
@@ -257,7 +278,7 @@ const DeductionEntry: React.FC = () => {
                 Show
               </Button>
               <Button
-                className="w-full bg-ok text-white hover:bg-ok/90"
+                className="h-11 w-full min-w-0 bg-ok px-3 text-white hover:bg-ok/90 sm:px-4"
                 icon={<Save size={16} />}
                 loading={saving}
                 disabled={!loaded || view.length === 0}
@@ -280,7 +301,11 @@ const DeductionEntry: React.FC = () => {
       )}
 
       {error && (
-        <ErrorBlock message={error} onRetry={() => void show()} busy={loading} />
+        <ErrorBlock
+          message={error}
+          onRetry={() => void show()}
+          busy={loading}
+        />
       )}
 
       {(showLoader || loaded) && (
@@ -319,14 +344,19 @@ const DeductionEntry: React.FC = () => {
                           className="mb-3 block rounded-xl border border-line bg-panel px-3 py-2 shadow-card xl:mb-0 xl:table-row xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:shadow-none xl:hover:bg-brand/[0.06]"
                         >
                           <td className={td} data-label="Farmer Id">
-                            <span className="font-semibold">{row.farmerId}</span>
+                            <span className="font-semibold">
+                              {row.farmerId}
+                            </span>
                           </td>
                           <td className={td} data-label="Farmer Name">
                             <span className="min-w-0 break-words text-right md:text-left">
                               {row.farmerName || "—"}
                             </span>
                           </td>
-                          <td className={cn(td, "xl:align-top")} data-label="Ded Amount">
+                          <td
+                            className={cn(td, "xl:align-top")}
+                            data-label="Ded Amount"
+                          >
                             <div className="w-40 max-w-full xl:w-36">
                               <Input
                                 data-ded-box
@@ -337,7 +367,9 @@ const DeductionEntry: React.FC = () => {
                                 aria-label={`Deduction for farmer ${row.farmerId}`}
                                 aria-invalid={calc.error ? true : undefined}
                                 value={text}
-                                onChange={(e) => setText(row.farmerId, e.target.value)}
+                                onChange={(e) =>
+                                  setText(row.farmerId, e.target.value)
+                                }
                                 onBlur={() => commit(row.farmerId)}
                                 onKeyDown={(e) => onKey(e, row.farmerId)}
                                 className={cn(
@@ -353,16 +385,28 @@ const DeductionEntry: React.FC = () => {
                               )}
                             </div>
                           </td>
-                          <td className={cn(td, "font-semibold tnum")} data-label="Payable Amount">
+                          <td
+                            className={cn(td, "font-semibold tnum")}
+                            data-label="Payable Amount"
+                          >
                             {two(calc.payable)}
                           </td>
-                          <td className={cn(td, "tnum")} data-label="Rem Ded Amount">
+                          <td
+                            className={cn(td, "tnum")}
+                            data-label="Rem Ded Amount"
+                          >
                             {two(calc.remaining)}
                           </td>
-                          <td className={cn(td, "tnum")} data-label="Bill Amount">
+                          <td
+                            className={cn(td, "tnum")}
+                            data-label="Bill Amount"
+                          >
                             {two(row.billAmount)}
                           </td>
-                          <td className={cn(td, "tnum")} data-label="Only Show Purpose Bill Amount">
+                          <td
+                            className={cn(td, "tnum")}
+                            data-label="Only Show Purpose Bill Amount"
+                          >
                             {two(row.billAmount)}
                           </td>
                         </tr>
