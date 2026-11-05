@@ -116,6 +116,8 @@ const PaymentVoucher: React.FC = () => {
         deductionType: deductionId,
         paymentMode: mode,
         ledgerId,
+        farmerCode: farmerPick?.masterCode,
+        ledgerType: lookups.ledgers.find((l) => l.value === ledgerId)?.type,
         narration,
       });
       toast.show(reply && reply.length < 80 ? reply : 'Payment voucher saved');
@@ -134,7 +136,7 @@ const PaymentVoucher: React.FC = () => {
     if (!toDelete || deleting) return;
     setDeleting(true);
     try {
-      await deletePaymentVoucher(toDelete.id);
+      await deletePaymentVoucher(toDelete.id, vlcId, date);
       toast.show('Payment voucher deleted');
       setToDelete(null);
       await loadList();
@@ -161,7 +163,7 @@ const PaymentVoucher: React.FC = () => {
       header: 'Action',
       align: 'center',
       mobile: 'action',
-      cell: (r) => <IconButton icon={Trash2} tone="danger" label={`Delete voucher ${r.id}`} disabled={!r.id} onClick={() => setToDelete(r)} />,
+      cell: (r) => <div className="flex justify-center"><IconButton icon={Trash2} tone="danger" className="!bg-danger/10 !text-danger hover:!bg-danger/20" label={`Delete voucher ${r.id}`} disabled={!r.id} onClick={() => setToDelete(r)} /></div>,
     },
   ];
 

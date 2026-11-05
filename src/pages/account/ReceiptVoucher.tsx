@@ -1,13 +1,15 @@
 import type * as React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileSpreadsheet, Landmark, ReceiptText, Save } from 'lucide-react';
+import { FileSpreadsheet, Landmark, ReceiptText, Save, Trash2 } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
 import { FormSection } from '../../components/ui/FormSection';
+import { IconButton } from '../../components/ui/IconButton';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Pagination } from '../../components/ui/Pagination';
 import { Panel } from '../../components/ui/Panel';
@@ -23,7 +25,7 @@ import { useVoucherLookups } from '../../hooks/useVoucherLookups';
 import { exportExcel, type ExportTable } from '../../lib/exporters';
 import { fmtDate, nf, toISO } from '../../lib/format';
 import { cn } from '../../lib/cn';
-import { getLedgers, getReceiptVouchers, saveReceiptVoucher } from '../../services/account/receiptVoucher.api';
+import { deleteReceiptVoucher, getLedgers, getReceiptVouchers, saveReceiptVoucher } from '../../services/account/receiptVoucher.api';
 import { PAYMENT_MODES, isIsoDate, type VoucherRow } from '../../services/account/voucher.common';
 
 const money = (n: number): string => `₹${nf(n, 2)}`;
@@ -55,6 +57,8 @@ const ReceiptVoucher: React.FC = () => {
 
   const [rows, setRows] = useState<VoucherRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [toDelete, setToDelete] = useState<VoucherRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const vlcId = vlc || centreOptions[0]?.value || '';
   const lookups = useVoucherLookups(vlcId, { loadLedgers: getLedgers }, mode);
@@ -109,6 +113,8 @@ const ReceiptVoucher: React.FC = () => {
         amount,
         paymentMode: mode,
         ledgerId,
+        farmerCode: farmerPick?.masterCode,
+        ledgerType: lookups.ledgers.find((l) => l.value === ledgerId)?.type,
         accountNo,
         narration,
       });
@@ -125,6 +131,21 @@ const ReceiptVoucher: React.FC = () => {
     }
   };
 
+  const confirmDelete = async () => {
+    if (!toDelete || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteReceiptVoucher(toDelete.id, vlcId, date);
+      toast.show('Receipt voucher deleted');
+      setToDelete(null);
+      await loadList();
+    } catch (err) {
+      toast.show(messageOf(err, 'Could not delete the receipt voucher'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const centreLabel = centreOptions.find((c) => c.value === vlcId)?.label ?? '';
   const ledgerLabel = lookups.ledgers.find((l) => l.value === ledgerId)?.label ?? '';
   const showDate = (s: string): string => (s ? (isIsoDate(s) ? fmtDate(s) : s) : '—');
@@ -132,17 +153,25 @@ const ReceiptVoucher: React.FC = () => {
   const columns: Column<VoucherRow>[] = [
     { key: 'id', header: 'Receipt No', cell: (r) => <span className="tnum font-semibold">{dash(r.id)}</span>, mobile: 'title' },
     { key: 'date', header: 'Date', cell: (r) => <span className="tnum">{showDate(r.date)}</span> },
+    { key: 'farmerId', header: 'Farmer Id', cell: (r) => <span className="tnum">{dash(r.farmerId)}</span> },
     { key: 'name', header: 'Name', cell: (r) => dash(r.farmerName || r.name) },
-    { key: 'amount', header: 'Amount', align: 'right', mobile: 'action', cell: (r) => <span className="tnum font-semibold">{money(r.amount)}</span> },
+    { key: 'amount', header: 'Amount', align: 'right', cell: (r) => <span className="tnum font-semibold">{money(r.amount)}</span> },
+    {
+      key: 'action',
+      header: 'Action',
+      align: 'center',
+      mobile: 'action',
+      cell: (r) => <div className="flex justify-center"><IconButton icon={Trash2} tone="danger" className="!bg-danger/10 !text-danger hover:!bg-danger/20" label={`Delete receipt ${r.id}`} disabled={!r.id} onClick={() => setToDelete(r)} /></div>,
+    },
   ];
 
   const buildTable = (): ExportTable => ({
     filename: `receipt-voucher-${date}`,
     title: 'Receipt voucher',
     subtitle: `${centreLabel} · ${date}`,
-    columns: [{ header: 'Receipt No' }, { header: 'Date' }, { header: 'Name' }, { header: 'Amount', type: 'money' }],
-    rows: rows.map((r) => [r.id, r.date, r.farmerName || r.name, r.amount]),
-    totals: ['Total', '', '', total],
+    columns: [{ header: 'Receipt No' }, { header: 'Date' }, { header: 'Farmer Id' }, { header: 'Name' }, { header: 'Amount', type: 'money' }],
+    rows: rows.map((r) => [r.id, r.date, r.farmerId, r.farmerName || r.name, r.amount]),
+    totals: ['Total', '', '', '', total],
   });
 
   const exportAction: ExportAction = {
@@ -283,10 +312,23 @@ const ReceiptVoucher: React.FC = () => {
         {!loading && rows.length === 0 ? (
           <EmptyState icon={ReceiptText} title="No receipt vouchers" text="Receipts saved for this centre and date will appear here." />
         ) : (
-          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.key} ariaLabel="Receipt vouchers" minWidth={640} loading={loading && rows.length === 0} />
+          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.key} ariaLabel="Receipt vouchers" minWidth={720} loading={loading && rows.length === 0} />
         )}
         {rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />}
       </Panel>
+
+      <ConfirmDialog open={!!toDelete} title="Delete this receipt?" busy={deleting} onConfirm={() => void confirmDelete()} onCancel={() => setToDelete(null)}>
+        {toDelete && (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <dt className="text-mute">Receipt No</dt>
+            <dd className="tnum font-semibold">{dash(toDelete.id)}</dd>
+            <dt className="text-mute">Farmer</dt>
+            <dd className="font-semibold">{dash([toDelete.farmerId, toDelete.farmerName].filter(Boolean).join(' | '))}</dd>
+            <dt className="text-mute">Amount</dt>
+            <dd className="tnum font-semibold">{money(toDelete.amount)}</dd>
+          </dl>
+        )}
+      </ConfirmDialog>
 
       <Toast message={toast.message} onClose={toast.close} />
     </div>
