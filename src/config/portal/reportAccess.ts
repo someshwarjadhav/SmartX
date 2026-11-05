@@ -23,7 +23,7 @@ export const PAGE_EKO_MILK_SETTINGS = "/settings/eko-milk-settings";
 export const PAGE_BANK_PAYMENT_SUMMARY = "/billing/bank-payment-summary";
 export const PAGE_CATTLEFEED_FARMER_BILL = "/billing/cattlefeed-farmer-bill";
 
-export const ALWAYS_OPEN_ROUTES: string[] = ["/", "/settings", "/contact"];
+export const ALWAYS_OPEN_ROUTES: string[] = ["/", "/settings", "/profile", "/contact"];
 
 export const EXTENDED_BILL_MARKER = PAGE_CATTLEFEED_FARMER_BILL;
 

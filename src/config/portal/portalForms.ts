@@ -83,6 +83,7 @@ export const NAV_MODULES: NavModule[] = [
         "Member Sync Async",
         "/administrator/dpu-sync-async",
         "dpu-sync-async",
+        "/administrator/dpu-sync-async", // NEW
       ),
       form(
         "Rate Sync Async",

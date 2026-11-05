@@ -15,6 +15,7 @@ import {
   Milk,
   Radio,
   Receipt,
+  RefreshCw, // NEW
   Settings,
   ShieldAlert,
   ShoppingCart,
@@ -80,6 +81,7 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
   "/settings/eko-milk-settings": SlidersHorizontal,
   "/administrator/user-access": LockOpen,
   "/administrator/bill-unfreeze": LockOpen,
+  "/administrator/dpu-sync-async": RefreshCw, // NEW
   "/farmers": UsersRound,
   "/centers": Store,
   "/rates": Tags,

@@ -31,10 +31,10 @@ const CashPaymentSummary = lazy(() => import('../pages/operations/billing/CashPa
 const BankPaymentSummary = lazy(() => import('../pages/operations/billing/BankPaymentSummary'));
 const StandardDeduction = lazy(() => import('../pages/operations/billing/StandardDeduction'));
 const VlcStandardDeduction = lazy(() => import('../pages/operations/billing/VlcStandardDeduction'));
-const DeductionEntry = lazy(() => import('../pages/operations/billing/DeductionEntry'));
 const CattleFeedFarmerBill = lazy(() => import('../pages/operations/billing/CattleFeedFarmerBill'));
 const VlcMilkBill = lazy(() => import('../pages/operations/billing/VlcMilkBill'));
 const BillUnfreeze = lazy(() => import('../pages/operations/administrator/BillUnfreeze'));
+const DpuSyncAsync = lazy(() => import('../pages/operations/administrator/DpuSyncAsync'));
 const ReceiptVoucher = lazy(() => import('../pages/account/ReceiptVoucher'));
 const PaymentVoucher = lazy(() => import('../pages/account/PaymentVoucher'));
 const VlcMaster = lazy(() => import('../pages/operations/masters/VlcMaster'));
@@ -89,7 +89,6 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/billing/cash-payment-summary': CashPaymentSummary,
   '/billing/standard-deduction': StandardDeduction,
   '/billing/vlc-standard-deduction': VlcStandardDeduction,
-  '/billing/deduction-entry': DeductionEntry,
   '/billing/cattlefeed-farmer-bill': CattleFeedFarmerBill,
   '/billing/vlc-milk-bill': VlcMilkBill,
   '/portal/account/receipt-voucher': ReceiptVoucher,
@@ -99,6 +98,7 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/settings/eko-milk-settings': EkoMilkSettings,
   '/administrator/user-access': UserAccess,
   '/administrator/bill-unfreeze': BillUnfreeze,
+  '/administrator/dpu-sync-async': DpuSyncAsync, 
   '/quality': Quality,
   '/pipeline': Pipeline,
   '/portal/*': PortalForm,

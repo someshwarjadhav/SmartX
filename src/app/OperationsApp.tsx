@@ -44,7 +44,7 @@ const FarmerMilkEntry = lazy(
 );
 const StandardDeduction = lazy(() => import("../pages/operations/billing/StandardDeduction"));
 const VlcStandardDeduction = lazy(() => import("../pages/operations/billing/VlcStandardDeduction"));
-const DeductionEntry = lazy(() => import("../pages/operations/billing/DeductionEntry"));
+
 const CashPaymentSummary = lazy(() => import("../pages/operations/billing/CashPaymentSummary"));
 const BankPaymentSummary = lazy(() => import("../pages/operations/billing/BankPaymentSummary"));
 const CattleFeedFarmerBill = lazy(() => import("../pages/operations/billing/CattleFeedFarmerBill"));
@@ -222,7 +222,7 @@ const App: React.FC = () => {
               <Route path="billing/farmer-bill" element={<FarmerBill />} />
               <Route path="billing/standard-deduction" element={<StandardDeduction />} />
               <Route path="billing/vlc-standard-deduction" element={<VlcStandardDeduction />} />
-              <Route path="billing/deduction-entry" element={<DeductionEntry />} />
+              
               <Route path="billing/cash-payment-summary" element={<CashPaymentSummary />} />
               <Route
                 path="billing/bank-payment-summary"
