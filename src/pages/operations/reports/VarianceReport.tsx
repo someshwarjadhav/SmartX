@@ -25,6 +25,7 @@ import { mapFarmers } from '../../../services/mappers/farmer.mapper.ts';
 import { variance, varianceTotals, type SideTotals, type VarianceRow } from '../../../services/report/variance.report.ts';
 import { vlccTitle } from '../../../services/vlcc/names';
 import type { RawFarmerRow, RawVlccRow } from '../../../services/types/raw';
+import { validateDateRange } from "../../../lib/dateRange";
 
 
 const Diff: React.FC<{ v: number; d?: number }> = ({ v, d = 2 }) => (
@@ -184,7 +185,7 @@ const VarianceReport: React.FC = () => {
             <CentreField className="sm:col-span-2" allValue={ALL_CENTRES} value={vlcc} onChange={setVlcc} />
             <Field label={GLOBALLABELS.fromDate}><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
             <Field label={GLOBALLABELS.toDate}><Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
-            <SubmitButton className="sm:col-span-2 lg:col-span-4" loading={waiting && nothing} disabled={!vlcc || (vlcc === ALL_CENTRES && allIds.length === 0)} onClick={() => setApplied({ from, to, vlcc, ids: vlcc === ALL_CENTRES ? allIds : [vlcc] })} />
+            <SubmitButton className="sm:col-span-2 lg:col-span-4" loading={waiting && nothing} disabled={!vlcc || (vlcc === ALL_CENTRES && allIds.length === 0)} onClick={() => { const e = validateDateRange(from, to); if (e) return toast(e, 'warn'); setApplied({ from, to, vlcc, ids: vlcc === ALL_CENTRES ? allIds : [vlcc] }); }} />
           </div>
         </Card>
       </Reveal>

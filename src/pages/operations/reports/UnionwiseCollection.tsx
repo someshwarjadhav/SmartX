@@ -19,6 +19,7 @@ import { useCenters } from '../../../hooks/useSessionData';
 import { unionTotals, unionwise, type UnionRow } from '../../../services/report/unionwise.report.ts';
 import { vlccTitle } from '../../../services/vlcc/names';
 import { pick } from '../../../services/utils/loose';
+import { validateDateRange } from "../../../lib/dateRange";
 
 const UNION_KEYS = ['unionname', 'union', 'unitname', 'federationname', 'dairyunion'];
 
@@ -126,7 +127,7 @@ const UnionwiseCollection: React.FC = () => {
             <Field label={GLOBALLABELS.toDate}>
               <Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
             </Field>
-            <SubmitButton className="sm:col-span-2" loading={q.fetching && q.rows.length === 0} onClick={() => setApplied({ from, to })} />
+            <SubmitButton className="sm:col-span-2" loading={q.fetching && q.rows.length === 0} onClick={() => { const e = validateDateRange(from, to); if (e) return toast(e, 'warn'); setApplied({ from, to }); }} />
           </div>
         </Card>
       </Reveal>

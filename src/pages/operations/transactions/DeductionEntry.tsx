@@ -1,3 +1,4 @@
+import { validateDateRange } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Eye, PackageCheck, Save, Wallet } from "lucide-react";
@@ -102,9 +103,8 @@ const DeductionEntry: React.FC = () => {
 
   const show = async () => {
     if (!vlcId || !typeCode || loading) return;
-    if (!from || !to)
-      return toast("Please choose the From and To dates", "warn");
-    if (from > to) return toast("From Date cannot be after To Date", "warn");
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) return toast(rangeError, "warn");
     clearRequestMemo();
     reset();
     setLoading(true);

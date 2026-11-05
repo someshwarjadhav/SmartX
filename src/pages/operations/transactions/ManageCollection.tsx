@@ -30,6 +30,7 @@ import {
 } from "../../../services/transaction/manageCollection.api.ts";
 import { ApiError } from "../../../services/http/errors";
 import { norm } from "../../../services/utils/loose";
+import { validateDateRange } from "../../../lib/dateRange";
 
 const ALL = "ALL";
 const SHIFTS = GLOBALSSHIFT.shiftOptions.filter(
@@ -195,7 +196,9 @@ const ManageCollection: React.FC = () => {
   const range = from && to && from <= to;
 
   const show = async () => {
-    if (!range || loading) return;
+    if (loading) return;
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) return toast(rangeError, "warn");
     const f = { vlc, milk, shift, from, to };
 
     const targets = vlc === ALL ? ids : [vlc];

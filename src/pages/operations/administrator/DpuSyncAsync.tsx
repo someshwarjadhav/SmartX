@@ -34,15 +34,19 @@ const DpuSyncAsync: React.FC = () => {
   const [picked, setPicked] = useState("");
   const vlc = picked || options[0]?.id || "";
 
-
+  // centre whose farmers are on screen now
   const [applied, setApplied] = useState<string | null>(null);
   const [rows, setRows] = useState<SyncMember[]>([]);
-
+  // true once a tick was changed on screen and not yet sent to the server
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  
+  /**
+   * Submit:
+   *  1. update API  -> only when ticks were changed on screen: sends the ticked farmer ids of the centre shown
+   *  2. get API     -> fills the table below with the saved values
+   */
   const submit = async () => {
     if (loading || !vlc) return;
     setLoading(true);
@@ -68,7 +72,7 @@ const DpuSyncAsync: React.FC = () => {
 
     try {
       let list = await getSyncMembers(vlc);
-      
+      // The list reply has no recognisable Sync column: keep the ticks the user just saved
       if (sent && !updateFailed && applied === vlc && !list.some((r) => r.flagKnown)) {
         const keep = new Set(sent);
         list = list.map((r) => ({ ...r, synced: keep.has(r.id) }));
@@ -108,7 +112,7 @@ const DpuSyncAsync: React.FC = () => {
     }
   };
 
- 
+  // ticking only changes the screen; the server is called when Submit is pressed
   const tick = (ids: string[], on: boolean) => {
     setRows((prev) =>
       prev.map((r) => (ids.includes(r.id) ? { ...r, synced: on } : r)),
@@ -169,7 +173,7 @@ const DpuSyncAsync: React.FC = () => {
         ),
       },
     ],
-   
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, allOn, someOn, loading],
   );
 

@@ -1,3 +1,4 @@
+import { validateDateRange } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -541,8 +542,8 @@ const ShowRatesCard: React.FC<{
   const askUpdate = () => {
     if (!needChosen()) return;
     if (!target) return toast("Choose the target center", "warn");
-    if (!from || !to || from > to)
-      return toast("From Date must not be after To Date", "warn");
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) return toast(rangeError, "warn");
     setAction("update");
   };
 

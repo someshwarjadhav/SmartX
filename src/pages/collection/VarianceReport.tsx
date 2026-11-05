@@ -24,6 +24,8 @@ import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
 import { cn } from '../../lib/cn';
 import { fmtDate, fmtDateLong, nf, toISO } from '../../lib/format';
+import { validateDateRange, maxToDate } from '../../lib/dateRange';
+import { MSG } from '../../lib/messages';
 
 /* ---------- Types ---------- */
 
@@ -99,7 +101,7 @@ const VarianceFilters: React.FC<FilterProps> = ({ value, plantOptions, vlcOption
       <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-6">
         <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
         <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
-        <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
+        <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} max={maxToDate(value.fromDate)} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
       </div>
 
       <div className="sm:col-span-2 xl:col-span-12">
@@ -267,12 +269,15 @@ const VarianceReport: React.FC = () => {
   const loading = fetching && rows.length === 0;
 
   const submit = () => {
-    if (draft.fromDate > draft.toDate) {
-      setError('From date cannot be after To date');
+    const rangeError = validateDateRange(draft.fromDate, draft.toDate);
+    if (rangeError) {
+      setError(rangeError);
+      toast.show(rangeError, 'warn');
       return;
     }
     if (!scope.centre) {
-      setError('No VLC found for this plant');
+      setError(MSG.noCentreInPlant);
+      toast.show(MSG.noCentreInPlant, 'warn');
       return;
     }
     setError(undefined);

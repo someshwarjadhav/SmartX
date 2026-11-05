@@ -1,3 +1,4 @@
+import { validateDateRange } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useMemo, useRef, useState } from "react";
 import { Landmark, Search } from "lucide-react";
@@ -77,12 +78,9 @@ const BankPaymentSummary: React.FC = () => {
       toast("Select at least one VLC", "warn");
       return;
     }
-    if (!from || !to) {
-      toast("Select the From Date and To Date", "warn");
-      return;
-    }
-    if (from > to) {
-      toast("From Date cannot be after To Date", "warn");
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) {
+      toast(rangeError, "warn");
       return;
     }
     const mine = ++ticket.current;

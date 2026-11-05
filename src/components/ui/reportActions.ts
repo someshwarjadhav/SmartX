@@ -1,5 +1,7 @@
 import { FileSpreadsheet, FileText, Printer, Table2 } from 'lucide-react';
 import type { ExportAction } from './ExportBar';
+import type { ToastTone } from './Toast';
+import { MSG } from '../../lib/messages';
 import { exportCSV, exportExcel, exportPDF, exportPlainExcel, printTable, type ExportTable } from '../../lib/exporters';
 
 interface Options {
@@ -9,7 +11,7 @@ interface Options {
   count: number;
   /** word used in the toast: "entries", "rows"... */
   unit?: string;
-  toast: (message: string) => void;
+  toast: (message: string, tone?: ToastTone) => void;
   /**
    * Adds the "Old Excel Export" + "New Excel Export" pair (Farmer Collection).
    * Both are STIPL-style sheets (header on row 1, total row with SUM formulas), each with its own column layout.
@@ -23,9 +25,9 @@ export function reportActions({ build, count, unit = 'rows', toast, stiplExcel, 
   const go = (done: string, run: (t: ExportTable) => void | Promise<void>, builder: () => ExportTable = build) => async () => {
     try {
       await run(builder());
-      toast(done.replace('{n}', `${count} ${unit}`));
+      toast(done.replace('{n}', `${count} ${unit}`), 'ok');
     } catch {
-      toast('Export failed. Please try again.');
+      toast(MSG.exportFailed, 'error');
     }
   };
 

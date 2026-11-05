@@ -6,7 +6,6 @@ import {
 } from "../http/client";
 import { openDpuReply } from "../http/dpu";
 import { DPU_HOST } from "../http/dpuEndpoints";
-import { environment } from "../config";
 import { getSession } from "../session";
 import { ApiError, EmptyReplyError } from "../http/errors";
 import {
@@ -20,13 +19,17 @@ import {
 
 const BASE = `${DPU_HOST}/api/Login`;
 
+// DPU server APIs (same as the DPUSyncAsyncService of the DPU project):
+//   POST {DPU}/home/farmermaster          body { VillageIds: "7030974,7030978" }
+//   GET  {DPU}/home/UpdateFarmerBuff?villageid=..&farmerids=..
+// The /api/Login/... paths are only a fallback. STIPL is not used here any more.
 const LIST_URLS = [
-  `${environment.staticIP}/home/farmermaster`,
+  `${DPU_HOST}/home/farmermaster`,
   `${BASE}/FarmerMaster`,
 ];
 
 const UPDATE_URLS = [
-  `${environment.staticIP}/home/UpdateFarmerBuff`,
+  `${DPU_HOST}/home/UpdateFarmerBuff`,
   `${BASE}/UpdateFarmerBuff`,
 ];
 let workingUpdateUrl: string | null = null;
@@ -123,7 +126,7 @@ export async function getSyncMembers(villageId: string): Promise<SyncMember[]> {
           
           headers: {
             "Content-Type": "application/json",
-            ...(url.startsWith(DPU_HOST) ? authHeaders() : {}),
+            ...(url.startsWith(BASE) ? authHeaders() : {}),
           },
           body: JSON.stringify({ VillageIds: villageId }),
           cache: "no-store", 
@@ -186,7 +189,7 @@ export async function updateSyncMembers(
         {
           method: "GET",
           
-          headers: urls[i]!.startsWith(DPU_HOST) ? authHeaders() : {},
+          headers: urls[i]!.startsWith(BASE) ? authHeaders() : {},
           cache: "no-store",
         },
         1,

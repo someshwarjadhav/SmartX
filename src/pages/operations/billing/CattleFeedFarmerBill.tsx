@@ -1,3 +1,4 @@
+import { validateDateRange } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useRef, useState } from "react";
 import { Search, UserRound } from "lucide-react";
@@ -70,8 +71,8 @@ const CattleFeedFarmerBill: React.FC = () => {
 
   const submit = async () => {
     if (!vlc) return toast("Select a VLC", "warn");
-    if (!from || !to) return toast("Select the From Date and To Date", "warn");
-    if (from > to) return toast("From Date cannot be after To Date", "warn");
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) return toast(rangeError, "warn");
     const mine = ++ticket.current;
     setStatus("loading");
     setError("");
