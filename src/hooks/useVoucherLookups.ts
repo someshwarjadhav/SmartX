@@ -12,6 +12,7 @@ type Status = "loading" | "ready" | "error";
 
 export interface FarmerOption extends VoucherOption {
   account: string;
+  masterCode: string;
 }
 
 interface Loaders {
@@ -102,6 +103,7 @@ export function useVoucherLookups(
           ? `${farmerCode(f.farmerId)} | ${f.name}`
           : farmerCode(f.farmerId),
         account: cleanAccount(f.account),
+        masterCode: f.masterCode || f.farmerId,
       })),
     [farmers],
   );
