@@ -1,6 +1,7 @@
 import { BASE_URL } from "../config";
 import { directGet, gatewayGet, gatewayText } from "../http/client";
 import { ApiError, EmptyReplyError } from "../http/errors";
+import { encryptPayload } from "../../lib/portal/crypto";
 
 const gatewayRoot = (): string => {
   const root = BASE_URL || "https://smartx.shivinfotech.co.in";
@@ -181,4 +182,74 @@ export async function postVoucher(
     `The server rejected the voucher after ${tried} format${tried === 1 ? "" : "s"}. ${detail}`,
     "server",
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Live portal save format: POST ?path=/dairy/dairy/paymentvoucher      */
+/* body = form field  data=<AES "cipher:iv" of the JSON voucher object> */
+/* reply = {"Success":true,"Message":"Record Saved."}                   */
+/* ------------------------------------------------------------------ */
+
+const formAsUrlEncoded = (data: string): RequestInit => {
+  const p = new URLSearchParams();
+  p.append("data", data);
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: p.toString(),
+  };
+};
+
+const formAsMultipart = (data: string): RequestInit => {
+  const f = new FormData();
+  f.append("data", data);
+  return { method: "POST", body: f };
+};
+
+/**
+ * Save a voucher exactly the way the live portal does: ONE form post whose
+ * only field is `data` = the voucher JSON, AES-encrypted. Only the same
+ * payload is ever retried (multipart), never a different shape. If a failed
+ * attempt still stored the row, the day's count grows and the save is treated
+ * as done - a retry can never create a duplicate.
+ */
+export async function saveVoucherForm(
+  path: string,
+  fields: VoucherFields,
+  count: () => Promise<number>,
+  label: string,
+): Promise<string> {
+  console.info(`[${label}] SAVE -> POST ${path}  payload=${JSON.stringify(fields)}`);
+  const data = encryptPayload(fields);
+
+  let before = -1;
+  try {
+    before = await count();
+  } catch {
+    before = -1;
+  }
+
+  let lastError: unknown = null;
+  for (const build of [formAsUrlEncoded, formAsMultipart]) {
+    try {
+      const text = await sendPath(path, () => build(data));
+      assertNotError(text);
+      console.info(`[${label}] SAVE <- ${text.slice(0, 200)}`);
+      return text;
+    } catch (e) {
+      lastError = e;
+      console.warn(`[${label}] save attempt failed:`, e);
+      if (!retryable(e)) throw e;
+      if (before >= 0) {
+        try {
+          if ((await count()) > before) return "Saved";
+        } catch {
+          /* list may be failing too: carry on */
+        }
+      }
+    }
+  }
+  const detail =
+    lastError instanceof ApiError ? lastError.message : "unknown error";
+  throw new ApiError(`The server rejected the voucher. ${detail}`, "server");
 }
