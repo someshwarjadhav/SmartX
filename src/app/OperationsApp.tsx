@@ -37,19 +37,18 @@ const VlcStatus = lazy(() => import("../pages/operations/reports/VlcStatus"));
 const VarianceReport = lazy(() => import("../pages/operations/reports/VarianceReport"));
 const CleaningReport = lazy(() => import("../pages/operations/reports/CleaningReport"));
 const EkoCalibration = lazy(() => import("../pages/operations/reports/EkoCalibration"));
-const EkoCorrection = lazy(() => import("../pages/operations/reports/EkoCorrection"));
 const VlcMilkEntry = lazy(() => import("../pages/operations/transactions/VlcMilkEntry"));
 const FarmerMilkEntry = lazy(
   () => import("../pages/operations/transactions/FarmerMilkEntry"),
 );
 const StandardDeduction = lazy(() => import("../pages/operations/billing/StandardDeduction"));
 const VlcStandardDeduction = lazy(() => import("../pages/operations/billing/VlcStandardDeduction"));
-const DeductionEntry = lazy(() => import("../pages/operations/billing/DeductionEntry"));
 const CashPaymentSummary = lazy(() => import("../pages/operations/billing/CashPaymentSummary"));
 const BankPaymentSummary = lazy(() => import("../pages/operations/billing/BankPaymentSummary"));
 const CattleFeedFarmerBill = lazy(() => import("../pages/operations/billing/CattleFeedFarmerBill"));
 const ManageCollection = lazy(() => import('../pages/operations/transactions/ManageCollection'));
 const SaleEntry = lazy(() => import('../pages/operations/transactions/SaleEntry'));
+const DeductionEntry = lazy(() => import('../pages/operations/transactions/DeductionEntry'));
 const MobileAppSettings = lazy(
   () => import("../pages/operations/settings/MobileAppSettings"),
 );
@@ -102,6 +101,7 @@ const SessionGate: React.FC = () => {
   return ready ? <Outlet /> : <PageLoader />;
 };
 
+// Har page ka guard: route sidebar (getMenu API) mein ho tabhi khulega, warna NotFound.
 const RouteGate: React.FC = () => {
   const { pathname } = useLocation();
   const sections = useNav();
@@ -161,7 +161,6 @@ const App: React.FC = () => {
                   <EkoCalibration />
                 }
               />
-              <Route path="reports/eko-correction" element={<EkoCorrection />} />
 
               {/* Transactions */}
               <Route
@@ -186,6 +185,12 @@ const App: React.FC = () => {
                 path="transactions/sale-entry"
                 element={
                   <SaleEntry />
+                }
+              />
+              <Route
+                path="transactions/deduction-entry"
+                element={
+                  <DeductionEntry />
                 }
               />
 
@@ -222,7 +227,6 @@ const App: React.FC = () => {
               <Route path="billing/farmer-bill" element={<FarmerBill />} />
               <Route path="billing/standard-deduction" element={<StandardDeduction />} />
               <Route path="billing/vlc-standard-deduction" element={<VlcStandardDeduction />} />
-              <Route path="billing/deduction-entry" element={<DeductionEntry />} />
               <Route path="billing/cash-payment-summary" element={<CashPaymentSummary />} />
               <Route
                 path="billing/bank-payment-summary"
