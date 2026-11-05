@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo } from 'react';
 import {
   Activity,
   Banknote,
@@ -28,8 +28,8 @@ import {
   UsersRound,
   Workflow,
   type LucideIcon,
-} from "lucide-react";
-import { useNav, type NavSection } from "../components/layout/operations/nav";
+} from 'lucide-react';
+import { useNav, type NavSection } from '../components/layout/operations/nav';
 
 export interface NavItem {
   id: string;
@@ -47,6 +47,7 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+// Icons are only decoration. Which pages exist, their order and their names all come from the menu API.
 const ROUTE_ICON: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
   "/live": Radio,
@@ -91,6 +92,8 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
   "/contact": Headset,
 };
 
+/** Turns the menu-API sections into SmartX groups. Every route appears once, so no page is listed twice.
+ *  Nothing is added by hand: if the API does not return an entry, it is not shown. */
 export function toGroups(sections: NavSection[]): NavGroup[] {
   const seen = new Set<string>();
   const groups: NavGroup[] = [];
@@ -108,29 +111,24 @@ export function toGroups(sections: NavSection[]): NavGroup[] {
         built: leaf.built,
       });
     }
-    if (items.length)
-      groups.push({ id: s.id, title: s.title, icon: s.icon, items });
+    if (items.length) groups.push({ id: s.id, title: s.title, icon: s.icon, items });
   }
   return groups;
 }
 
+/** The sidebar, search palette and breadcrumb all read this one list. */
 export function useNavGroups(): NavGroup[] {
   const sections = useNav();
   return useMemo(() => toGroups(sections), [sections]);
 }
 
-export function findNavIn(
-  groups: NavGroup[],
-  pathname: string,
-): { group: NavGroup; item: NavItem } | null {
+export function findNavIn(groups: NavGroup[], pathname: string): { group: NavGroup; item: NavItem } | null {
   for (const group of groups) {
     const hit = group.items.find((i) => i.to === pathname);
     if (hit) return { group, item: hit };
   }
   for (const group of groups) {
-    const hit = group.items.find(
-      (i) => i.to !== "/" && pathname.startsWith(`${i.to}/`),
-    );
+    const hit = group.items.find((i) => i.to !== '/' && pathname.startsWith(`${i.to}/`));
     if (hit) return { group, item: hit };
   }
   return null;
