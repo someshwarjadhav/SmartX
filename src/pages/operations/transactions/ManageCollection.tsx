@@ -4,6 +4,7 @@ import { Check, Eye, ListChecks, Pencil, Trash2, X } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { Modal } from "../../../components/operations/ui/Modal";
 import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
@@ -550,7 +551,7 @@ const ManageCollection: React.FC = () => {
               </Select>
             </Field>
             <Field label="From Date">
-              <Input
+              <PastDateInput
                 type="date"
                 value={from}
                 max={todayISO()}
@@ -565,7 +566,7 @@ const ManageCollection: React.FC = () => {
                   : undefined
               }
             >
-              <Input
+              <PastDateInput
                 type="date"
                 value={to}
                 max={todayISO()}

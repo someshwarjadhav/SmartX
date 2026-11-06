@@ -12,7 +12,8 @@ import { todayISO } from '../../lib/portal/format';
 import { environment } from '../../services/config';
 import { isoFromTrdate } from '../../services/utils/date';
 import { sampleStamp } from '../../services/farmer/farmerBook';
-import { useSamples } from '../../hooks/useSmartxData';
+import { isLoadingQ, useSamples } from '../../hooks/useSmartxData';
+import { MilkLoader } from '../../components/operations/MilkLoader';
 import { vlccTitle } from '../../services/vlcc/names';
 import { getSession } from '../../services/session';
 import { refetchAll } from '../../hooks/useQuery';
@@ -81,7 +82,7 @@ const Pipeline: React.FC = () => {
 
       <Card>
         <CardHeader title="Latest data per centre" subtitle="From today's farmer samples on the portal" />
-        <div className="mt-3"><DataTable columns={cols} rows={latest} rowKey={(l) => l.id} pageSize={10} pageSizes={[10]} empty={<p className="px-6 py-10 text-center text-sm text-mute">No centre found for this login.</p>} /></div>
+        <div className="mt-3">{isLoadingQ(q) ? <MilkLoader label="Loading centres…" /> : <DataTable columns={cols} rows={latest} rowKey={(l) => l.id} pageSize={10} pageSizes={[10]} empty={<p className="px-6 py-10 text-center text-sm text-mute">No centre found for this login.</p>} />}</div>
       </Card>
 
       <Card>

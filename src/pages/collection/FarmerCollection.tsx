@@ -1,6 +1,6 @@
 import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Users } from 'lucide-react';
+import { Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Users } from 'lucide-react';
 import type { CollectionEntry } from '../../data/farmerCollection';
 import { useMilkFarmerEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
@@ -25,9 +25,10 @@ import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
 import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
-import { Field, SelectField, TextField } from '../../components/ui/Fields';
+import { Field, SelectField } from '../../components/ui/Fields';
+import { DateRangeFields } from '../../components/ui/DateRangeFields';
 import { Segmented } from '../../components/ui/Segmented';
-import { validateDateRange, maxToDate } from '../../lib/dateRange';
+import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
 import { MSG } from '../../lib/messages';
 
 /* ---------- Filter card ---------- */
@@ -91,10 +92,13 @@ const FarmerCollectionFilters: React.FC<FilterProps> = ({ value, plantOptions, c
           <Segmented<ShiftFilter> label="Shift" value={value.shift} onChange={(shift) => onChange({ shift })} options={SHIFT_FILTER_OPTIONS} className={SEGMENT} />
         </Field>
 
-        <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-6">
-          <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.from} max={value.to || undefined} onChange={(e) => onChange({ from: e.target.value })} />
-          <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
-          <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.to} min={value.from || undefined} max={maxToDate(value.from)} onChange={(e) => onChange({ to: e.target.value })} error={error} />
+        <div className="sm:col-span-2 xl:col-span-6">
+          <DateRangeFields
+            from={value.from}
+            to={value.to}
+            onChange={(patch) => onChange(patch)}
+            error={error}
+          />
         </div>
 
         <div className="flex items-end sm:col-span-2 xl:col-span-6">
@@ -303,7 +307,7 @@ const FarmerCollection: React.FC = () => {
   }, [rows]);
 
   const submit = () => {
-    const rangeError = validateDateRange(draft.from, draft.to);
+    const rangeError = validateDateRange(draft.from, draft.to) ?? validatePastLimit(draft.from);
     if (rangeError) {
       setError(rangeError);
       toast.show(rangeError, 'warn');

@@ -11,7 +11,8 @@ import { DataTable, type Column } from '../../components/operations/ui/DataTable
 import { StatCard } from '../../components/operations/ui/StatCard';
 import { PageHeader } from '../../components/operations/ui/PageHeader';
 import { KindChip } from '../../components/operations/KindChip';
-import { LoadingBlock, Notice } from '../../components/operations/Widget';
+import { Notice } from '../../components/operations/Widget';
+import { MilkLoader } from '../../components/operations/MilkLoader';
 import { vlccTitle } from '../../services/vlcc/names';
 import { flagOf, FLAG_META } from '../../lib/portal/quality';
 import { addDays, nf, todayISO } from '../../lib/portal/format';
@@ -78,7 +79,7 @@ const Quality: React.FC = () => {
     <div className="space-y-6">
       <PageHeader title="Quality watch" subtitle="Real samples from the portal that look thin or watered. Limits are set in Settings." actions={<Segmented value={days} onChange={setDays} options={[{ value: '1', label: 'Today' }, { value: '7', label: '7 days' }, { value: '30', label: '30 days' }]} />} />
       <Notice q={q} />
-      {isLoadingQ(q) ? <LoadingBlock height="h-72" q={q} /> : (
+      {isLoadingQ(q) ? <MilkLoader label="Loading quality data…" /> : (
         <>
           <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
             <StatCard label="Water suspected" value={count('water')} icon={<Droplet size={18} />} tone="text-danger" hint="SNF far below the limit" />

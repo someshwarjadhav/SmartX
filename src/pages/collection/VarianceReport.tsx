@@ -1,6 +1,6 @@
 import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, Search, SlidersHorizontal } from 'lucide-react';
+import { Search, SlidersHorizontal } from 'lucide-react';
 import { useMilkFarmerEntries, useMilkVlccEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
 import { GroupedTable, type GroupColumn } from '../../components/ui/GroupedTable';
 import type { Shift } from '../../data/masters';
@@ -13,7 +13,7 @@ import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
 import type { ExportTable } from '../../lib/exporters';
-import { SelectField, TextField } from '../../components/ui/Fields';
+import { SelectField } from '../../components/ui/Fields';
 import { KindChip } from '../../components/ui/KindChip';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Pagination } from '../../components/ui/Pagination';
@@ -24,7 +24,8 @@ import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
 import { cn } from '../../lib/cn';
 import { fmtDate, fmtDateLong, nf, toISO } from '../../lib/format';
-import { validateDateRange, maxToDate } from '../../lib/dateRange';
+import { DateRangeFields } from '../../components/ui/DateRangeFields';
+import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
 import { MSG } from '../../lib/messages';
 
 /* ---------- Types ---------- */
@@ -98,10 +99,18 @@ const VarianceFilters: React.FC<FilterProps> = ({ value, plantOptions, vlcOption
       <SelectField wrapperClassName="xl:col-span-3" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant, vlcId: '' })} options={plantOptions} />
       <SelectField wrapperClassName="xl:col-span-3" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId })} options={vlcOptions} />
 
-      <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-6">
-        <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
-        <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
-        <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} max={maxToDate(value.fromDate)} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
+      <div className="sm:col-span-2 xl:col-span-6">
+        <DateRangeFields
+          from={value.fromDate}
+          to={value.toDate}
+          onChange={({ from, to }) =>
+            onChange({
+              ...(from !== undefined ? { fromDate: from } : {}),
+              ...(to !== undefined ? { toDate: to } : {}),
+            })
+          }
+          error={error}
+        />
       </div>
 
       <div className="sm:col-span-2 xl:col-span-12">
@@ -269,7 +278,7 @@ const VarianceReport: React.FC = () => {
   const loading = fetching && rows.length === 0;
 
   const submit = () => {
-    const rangeError = validateDateRange(draft.fromDate, draft.toDate);
+    const rangeError = validateDateRange(draft.fromDate, draft.toDate) ?? validatePastLimit(draft.fromDate);
     if (rangeError) {
       setError(rangeError);
       toast.show(rangeError, 'warn');

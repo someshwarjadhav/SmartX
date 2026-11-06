@@ -7,7 +7,8 @@ import { Button } from '../../components/operations/ui/Button';
 import { Badge } from '../../components/operations/ui/Badge';
 import { PageHeader } from '../../components/operations/ui/PageHeader';
 import { KindChip } from '../../components/operations/KindChip';
-import { LoadingBlock, Notice } from '../../components/operations/Widget';
+import { Notice } from '../../components/operations/Widget';
+import { MilkLoader } from '../../components/operations/MilkLoader';
 import { nf, todayISO } from '../../lib/portal/format';
 import { isoFromTrdate } from '../../services/utils/date';
 import { sampleStamp } from '../../services/farmer/farmerBook';
@@ -42,7 +43,7 @@ const Centers: React.FC = () => {
     <div className="space-y-6">
       <PageHeader title="Centres" subtitle="Your village collection points (VLCs), with what each received today." actions={<Button variant="outline" icon={<RefreshCw size={16} />} loading={q.fetching} onClick={refetchAll}>Refresh</Button>} />
       <Notice q={q} />
-      {loading ? <LoadingBlock height="h-48" q={q} /> : (
+      {loading ? <MilkLoader label="Loading centres…" /> : (
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {centres.map((c, i) => (
             <motion.div key={c.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>

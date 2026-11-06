@@ -18,6 +18,7 @@ import { Modal } from "../../../components/operations/ui/Modal";
 import { Pager } from "../../../components/operations/ui/Pager";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
 import { ErrorBlock } from "../../../components/operations/Widget";
+import { MilkLoader } from "../../../components/operations/MilkLoader";
 import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
 import { useToast } from "../../../context/ToastContext";
 import { useCenters } from "../../../hooks/useSessionData";
@@ -338,12 +339,15 @@ const RecordsTable: React.FC<{
             })}
             {slice.length === 0 && (
               <tr>
-                <td
-                  colSpan={12}
-                  className={`${cell} py-8 text-center text-mute`}
-                >
-                  {loading ? "Loading records…" : emptyText}
-                </td>
+                {loading ? (
+                  <td colSpan={12} className="p-0">
+                    <MilkLoader label="Loading records…" />
+                  </td>
+                ) : (
+                  <td colSpan={12} className={`${cell} py-8 text-center text-mute`}>
+                    {emptyText}
+                  </td>
+                )}
               </tr>
             )}
           </tbody>
@@ -417,11 +421,12 @@ const RecordsTable: React.FC<{
             </div>
           );
         })}
-        {slice.length === 0 && (
-          <p className="py-6 text-center text-mute">
-            {loading ? "Loading records…" : emptyText}
-          </p>
-        )}
+        {slice.length === 0 &&
+          (loading ? (
+            <MilkLoader label="Loading records…" />
+          ) : (
+            <p className="py-6 text-center text-mute">{emptyText}</p>
+          ))}
       </div>
       <Pager
         total={rows.length}

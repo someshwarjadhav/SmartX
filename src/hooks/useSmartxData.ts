@@ -6,11 +6,11 @@ import { getSession } from '../services/session';
 import { useQuery, type QueryState } from './useQuery';
 import type { RawFarmerRow, RawLoose } from '../services/types/raw';
 
-export function useSamples(from: string, to: string, enabled = true, priority: 0 | 1 | 2 = 1): { q: QueryState<RawFarmerRow>; rows: FarmerRow[] } {
+export function useSamples(from: string, to: string, enabled = true, priority: 0 | 1 | 2 = 1, hideOld = false): { q: QueryState<RawFarmerRow>; rows: FarmerRow[] } {
   const ids = getSession()?.vlccIds ?? [];
   const idKey = ids.join(',');
   const q = useQuery<RawFarmerRow>(enabled ? `farmer:${from}:${to}:Z:ALL:${idKey}` : null, (emit) =>
-    fetchFarmerCollection({ from, to, shift: 'Z', milk: 'ALL', vlccIds: ids, priority }, emit));
+    fetchFarmerCollection({ from, to, shift: 'Z', milk: 'ALL', vlccIds: ids, priority }, emit), { hideOldWhileLoading: hideOld });
   const rows = useMemo(() => mapFarmers(q.rows), [q.rows]);
   return { q, rows };
 }

@@ -15,6 +15,7 @@ import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Modal } from "../../../components/operations/ui/Modal";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { RateGridTable } from "../../../components/operations/RateGridTable";
 import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
@@ -691,14 +692,14 @@ const ShowRatesCard: React.FC<{
             />
           </Field>
           <Field label="From Date">
-            <Input
+            <PastDateInput
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
             />
           </Field>
           <Field label="To Date">
-            <Input
+            <PastDateInput
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}

@@ -331,7 +331,7 @@ const PaymentVoucher: React.FC = () => {
         {!loading && rows.length === 0 ? (
           <EmptyState icon={HandCoins} title="No payment vouchers" text="Vouchers saved for this centre and date will appear here." />
         ) : (
-          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.key} ariaLabel="Payment vouchers" minWidth={860} loading={loading && rows.length === 0} />
+          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.key} ariaLabel="Payment vouchers" minWidth={860} loading={loading} />
         )}
         {rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />}
       </Panel>

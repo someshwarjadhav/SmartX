@@ -12,6 +12,7 @@ import { Pagination } from "../../components/ui/Pagination";
 import { AnimatedNumber } from "../../components/ui/AnimatedNumber";
 import { KindChip, KindDot } from "../../components/operations/KindChip";
 import { LoadingBlock, Notice } from "../../components/operations/Widget";
+import { MilkLoader } from '../../components/operations/MilkLoader';
 import { vlccTitle } from "../../services/vlcc/names";
 import { useData } from "../../context/DataContext";
 import { flagOf, FLAG_META } from "../../lib/portal/quality";
@@ -332,7 +333,7 @@ const LiveCollection: React.FC = () => {
           bodyClassName="px-0 pb-0 sm:pb-0 sm:px-0"
         >
           {feed.length === 0 ? (
-            loading ? <div className="px-4 pb-5"><LoadingBlock height="h-32" /></div> : <EmptyState icon={Radio} title="No entries yet" text="Nothing has been received from the centres today." />
+            loading ? <MilkLoader label="Loading entries…" /> : <EmptyState icon={Radio} title="No entries yet" text="Nothing has been received from the centres today." />
           ) : (
             <>
               <div className="hidden overflow-x-auto md:block">

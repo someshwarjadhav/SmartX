@@ -10,6 +10,8 @@ export interface QueryState<R> {
   rows: R[];
   fetching: boolean;
   stale: boolean;
+  /** old rows are being kept behind the scenes while a new answer is loading (not for display on form reports) */
+  held: boolean;
   failed: number;
   total: number;
   done: number;
@@ -102,7 +104,7 @@ function run<R>(key: string, entry: Entry<R>, force = false) {
   // rows that are already on screen (saved copy / earlier load) stay exactly as they are until the new answer is complete,
   // so the table never shrinks to the first few rows and grows again (that was the blinking)
   const holdOld = prev.rows.length > 0;
-  entry.state = { ...prev, fetching: true, error: null, done: 0, total: 0 };
+  entry.state = { ...prev, fetching: true, held: holdOld, error: null, done: 0, total: 0 };
   notify(entry as Entry<unknown>);
 
   const emit: Emit<R> = (p) => {
@@ -110,7 +112,7 @@ function run<R>(key: string, entry: Entry<R>, force = false) {
     const hasRows = p.rows.length > 0;
     entry.state = {
       ...entry.state,
-      ...(hasRows && !holdOld ? { status: 'ready' as const, rows: p.rows, stale: false } : {}),
+      ...(hasRows && !holdOld ? { status: 'ready' as const, rows: p.rows, stale: false, held: false } : {}),
       failed: p.failed,
       total: p.total,
       done: p.done,
@@ -134,7 +136,7 @@ function run<R>(key: string, entry: Entry<R>, force = false) {
       if (ctl.signal.aborted) return dropped();
       entry.inflight = false;
       entry.abort = null;
-      entry.state = { status: 'ready', rows: data.rows, fetching: false, stale: false, failed: data.failed, total: data.total, done: data.done, error: null, updatedAt: Date.now(), note: data.note ?? null };
+      entry.state = { status: 'ready', rows: data.rows, fetching: false, stale: false, held: false, failed: data.failed, total: data.total, done: data.done, error: null, updatedAt: Date.now(), note: data.note ?? null };
       if (data.failed === 0) writeCache(key, data.rows, data.note);
       notify(entry as Entry<unknown>);
     },
@@ -148,6 +150,7 @@ function run<R>(key: string, entry: Entry<R>, force = false) {
         status: hasRows ? 'ready' : 'error',
         fetching: false,
         stale: hasRows,
+        held: false,
         error: toApiError(err),
       };
       notify(entry as Entry<unknown>);
@@ -165,6 +168,7 @@ function entryFor<R>(key: string, fetcher: Fetcher<R>): Entry<R> {
         rows: cached?.rows ?? [],
         fetching: false,
         stale: !!cached,
+        held: false,
         failed: 0,
         total: 0,
         done: 0,
@@ -189,11 +193,19 @@ export function refetchAll() {
 }
 
 const IDLE: QueryState<never> = {
-  status: 'loading', rows: [], fetching: false, stale: false, failed: 0, total: 0, done: 0, error: null, updatedAt: null, note: null, retry: () => {},
+  status: 'loading', rows: [], fetching: false, stale: false, held: false, failed: 0, total: 0, done: 0, error: null, updatedAt: null, note: null, retry: () => {},
 };
 
 
-export function useQuery<R>(key: string | null, fetcher: Fetcher<R>): QueryState<R> {
+export interface QueryOptions {
+  /**
+   * For reports behind a filter form: while the answer for the submitted filters is loading, do NOT show the saved / earlier rows,
+   * show the loader instead. Rows appear only when the new data has arrived.
+   */
+  hideOldWhileLoading?: boolean;
+}
+
+export function useQuery<R>(key: string | null, fetcher: Fetcher<R>, options?: QueryOptions): QueryState<R> {
   const scoped = key ? `${getSession()?.scope ?? 'anon'}:${key}` : null;
   const entry = scoped ? entryFor(scoped, fetcher) : null;
 
@@ -223,5 +235,9 @@ export function useQuery<R>(key: string | null, fetcher: Fetcher<R>): QueryState
     if (entry && scoped) run(scoped, entry, true);
   }, [entry, scoped]);
 
-  return snapshot ? { ...snapshot, retry } : (IDLE as QueryState<R>);
+  if (!snapshot) return IDLE as QueryState<R>;
+  if (options?.hideOldWhileLoading && snapshot.fetching && snapshot.held) {
+    return { ...snapshot, status: 'loading', rows: [], failed: 0, retry };
+  }
+  return { ...snapshot, retry };
 }

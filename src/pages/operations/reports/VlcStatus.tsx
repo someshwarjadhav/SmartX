@@ -5,6 +5,7 @@ import { Activity, Droplets, FlaskConical, Search, Wifi, WifiOff } from 'lucide-
 import { Card, CardHeader } from '../../../components/operations/ui/Card';
 import { Badge } from '../../../components/operations/ui/Badge';
 import { Field, Input, Segmented, Select } from '../../../components/operations/ui/Fields';
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { StatCard } from '../../../components/operations/ui/StatCard';
 import { QueryBoundary } from '../../../components/operations/Widget';
 import { MilkLoader } from '../../../components/operations/MilkLoader';
@@ -84,7 +85,7 @@ const VlcStatus: React.FC = () => {
 
   const key = `vlcstatus:${applied.from}:${applied.to}:${applied.shift}:${applied.milk}:${applied.ids.join(',')}`;
   const q = useQuery<RawVlccRow>(hasAppliedCentre ? key : null, (emit) =>
-    fetchVlccCollection({ from: applied.from, to: applied.to, shift: applied.shift, milk: applied.milk, vlccIds: scopeIds, priority: 0 }, emit));
+    fetchVlccCollection({ from: applied.from, to: applied.to, shift: applied.shift, milk: applied.milk, vlccIds: scopeIds, priority: 0 }, emit), { hideOldWhileLoading: true });
 
   const mapped = useMemo(() => mapVlcc(q.rows), [q.rows]);
   const all = useMemo(() => vlcStatus(scopeIds, mapped, (id) => vlccTitle(id)),
@@ -162,8 +163,8 @@ const VlcStatus: React.FC = () => {
                 {GLOBALSSHIFT.shiftOptions.map((m) => <option key={m.Id} value={m.Id}>{m.Name}</option>)}
               </Select>
             </Field>
-            <Field label={GLOBALLABELS.fromDate}><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
-            <Field label={GLOBALLABELS.toDate}><Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
+            <Field label={GLOBALLABELS.fromDate}><PastDateInput type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
+            <Field label={GLOBALLABELS.toDate}><PastDateInput type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
             <SubmitButton className="sm:col-span-2 lg:col-span-1" loading={q.fetching && q.rows.length === 0} disabled={allIds.length === 0} onClick={() => { const e = validateDateRange(from, to); if (e) return toast(e, 'warn'); setApplied({ from, to, shift, milk, ids: allIds }); }} />
           </div>
         </Card>

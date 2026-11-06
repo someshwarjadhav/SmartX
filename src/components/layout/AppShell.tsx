@@ -3,7 +3,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { findNavIn, useNavGroups } from '../../config/nav';
-import { useAuth } from '../../context/AuthContext';
+// import { useAuth } from '../../context/AuthContext';
 import { PageLoader } from '../ui/PageLoader';
 import { CommandPalette } from './CommandPalette';
 import { Sidebar } from './Sidebar';
@@ -13,9 +13,9 @@ const COLLAPSE_KEY = 'smartx-collapsed';
 
 const AppShell: React.FC = () => {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  // const { user } = useAuth();
   const groups = useNavGroups();
-  const plant = user?.mccName || user?.dairyName || 'SmartX dairy';
+  // const plant = user?.mccName || user?.dairyName || 'SmartX dairy';
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSE_KEY) === '1';
@@ -90,7 +90,7 @@ const AppShell: React.FC = () => {
             </motion.div>
           </Suspense>
         </main>
-        <footer className="safe-bottom px-6 pb-6 pt-2 text-center text-xs text-mute">{plant} · SmartX · <Link to="/contact" className="font-semibold text-brand hover:underline">Contact support</Link></footer>
+        <footer className="safe-bottom px-6 pb-6 pt-2 text-center text-xs text-mute">SmartX · <Link to="/contact" className="font-semibold text-brand hover:underline">Contact support</Link></footer>
       </div>
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} />

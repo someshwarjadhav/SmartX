@@ -310,6 +310,7 @@ const ROUTES: Array<{ to: string; aliases: string[] }> = [
     aliases: ["vlcstatus", "vlccstatus", "vlcstatusreport"],
   },
   { to: "/reports/variance", aliases: ["variancereport", "variance"] },
+  { to: "/reports/cda", aliases: ["cdareport", "collectioncda"] },
   { to: "/settings", aliases: ["settings"] },
   {
     to: "/contact",

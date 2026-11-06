@@ -5,6 +5,7 @@ import { Eye, PackageCheck, Save, Wallet } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
   CardTitle,
@@ -248,7 +249,7 @@ const DeductionEntry: React.FC = () => {
             </Field>
 
             <Field label="From Date">
-              <Input
+              <PastDateInput
                 type="date"
                 value={from}
                 onChange={(e) => {
@@ -258,7 +259,7 @@ const DeductionEntry: React.FC = () => {
               />
             </Field>
             <Field label="To Date">
-              <Input
+              <PastDateInput
                 type="date"
                 value={to}
                 onChange={(e) => {

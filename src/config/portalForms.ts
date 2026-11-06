@@ -168,7 +168,12 @@ export const NAV_MODULES: NavModule[] = [
       form("Dispatch Report", "/base/dispatch-report", "dispatch-report"),
       form("Milk Sale Report", "/base/milk-sale-report", "milk-sale-report"),
       form("Collection CA", "/base/collection-ca", "collection-ca"),
-      form("Collection CDA", "/base/collection-cda", "collection-cda"),
+      form(
+        "Collection CDA",
+        "/base/collection-cda",
+        "collection-cda",
+        "/reports/cda",
+      ),
       form(
         "Cleaning Report",
         "/base/cleaning-report",

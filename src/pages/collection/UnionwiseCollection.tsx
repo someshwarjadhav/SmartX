@@ -1,6 +1,6 @@
 import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, Search, SearchX, SlidersHorizontal } from 'lucide-react';
+import { Search, SearchX, SlidersHorizontal } from 'lucide-react';
 import { useMilkFarmerEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import { withFormulaTotals } from '../../lib/exporters';
 import { ReportLoader } from '../../components/ui/ReportLoader';
@@ -11,7 +11,7 @@ import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
 import type { ExportTable } from '../../lib/exporters';
-import { TextField } from '../../components/ui/Fields';
+
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useReportTable } from '../../hooks/useSessionData';
 import { Pagination } from '../../components/ui/Pagination';
@@ -21,7 +21,8 @@ import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
 import { fmtDate, nf, toISO } from '../../lib/format';
-import { validateDateRange, maxToDate } from '../../lib/dateRange';
+import { DateRangeFields } from '../../components/ui/DateRangeFields';
+import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
 
 /* ---------- Types ---------- */
 
@@ -74,10 +75,18 @@ const UnionwiseFilters: React.FC<FilterProps> = ({ value, onChange, onSubmit, er
       }}
       className="grid gap-x-4 gap-y-4 p-4 sm:p-5 xl:grid-cols-12"
     >
-      <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] xl:col-span-6">
-        <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
-        <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
-        <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} max={maxToDate(value.fromDate)} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
+      <div className="xl:col-span-6">
+        <DateRangeFields
+          from={value.fromDate}
+          to={value.toDate}
+          onChange={({ from, to }) =>
+            onChange({
+              ...(from !== undefined ? { fromDate: from } : {}),
+              ...(to !== undefined ? { toDate: to } : {}),
+            })
+          }
+          error={error}
+        />
       </div>
 
       <div className="flex items-end xl:col-span-6">
@@ -122,7 +131,7 @@ const UnionwiseCollection: React.FC = () => {
   const pager = usePagination(rows);
 
   const submit = () => {
-    const rangeError = validateDateRange(draft.fromDate, draft.toDate);
+    const rangeError = validateDateRange(draft.fromDate, draft.toDate) ?? validatePastLimit(draft.fromDate);
     if (rangeError) {
       setError(rangeError);
       toast.show(rangeError, 'warn');

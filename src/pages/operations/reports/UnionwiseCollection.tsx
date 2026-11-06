@@ -4,7 +4,8 @@ import { Droplets, FlaskConical, IndianRupee, Users } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 import { useData } from '../../../context/DataContext';
 import { Card } from '../../../components/operations/ui/Card';
-import { Field, Input } from '../../../components/operations/ui/Fields';
+import { Field } from '../../../components/operations/ui/Fields';
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { DataTable, type Column } from '../../../components/operations/ui/DataTable';
 import { StatCard } from '../../../components/operations/ui/StatCard';
 import { QueryBoundary } from '../../../components/operations/Widget';
@@ -31,9 +32,11 @@ const UnionwiseCollection: React.FC = () => {
 
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
+  // nothing is requested until Submit is pressed
+  const [submitted, setSubmitted] = useState(false);
   const [applied, setApplied] = useState({ from: today, to: today });
 
-  const { q, rows } = useSamples(applied.from, applied.to, true, 0);
+  const { q, rows } = useSamples(applied.from, applied.to, submitted, 0, true);
 
 
   const unionOf = (id: string) => {
@@ -46,8 +49,8 @@ const UnionwiseCollection: React.FC = () => {
     [rows, centers, dairyName]);
   const t = useMemo(() => unionTotals(data), [data]);
 
-  const loading = q.status === 'loading' || (q.fetching && q.rows.length === 0);
-  const err = q.status === 'error';
+  const loading = submitted && (q.status === 'loading' || (q.fetching && q.rows.length === 0));
+  const err = submitted && q.status === 'error';
   const statError = err ? q.error?.message : undefined;
 
   const cols: Column<UnionRow>[] = [
@@ -112,30 +115,32 @@ const UnionwiseCollection: React.FC = () => {
     <ReportPage title="Unionwise Collection" subtitle="Milk collected for each union and its societies: farmers, litres, average fat, SNF and rate, and the amount.">
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard label="Total litres" value={t.liter} decimals={1} icon={<Droplets size={18} />} tone="text-brand" hint={`${t.societies} societies`} loading={loading} error={statError} onRetry={q.retry} compact />
-        <StatCard label="Average fat" value={t.fat} decimals={2} suffix="%" icon={<FlaskConical size={18} />} tone="text-cow" hint="Weighted by litres" loading={loading} error={statError} onRetry={q.retry} compact />
-        <StatCard label="Farmers" value={t.farmers} icon={<Users size={18} />} tone="text-goat" hint={`${t.societies} societies`} loading={loading} error={statError} onRetry={q.retry} compact />
-        <StatCard label="Amount" value={t.amount} prefix="₹" icon={<IndianRupee size={18} />} tone="text-buffalo" loading={loading} error={statError} onRetry={q.retry} compact />
+        <StatCard label="Total litres" value={t.liter} decimals={1} icon={<Droplets size={18} />} tone="text-brand" hint={`${t.societies} societies`} loading={loading} error={statError} onRetry={q.retry} idle={!submitted} compact />
+        <StatCard label="Average fat" value={t.fat} decimals={2} suffix="%" icon={<FlaskConical size={18} />} tone="text-cow" hint="Weighted by litres" loading={loading} error={statError} onRetry={q.retry} idle={!submitted} compact />
+        <StatCard label="Farmers" value={t.farmers} icon={<Users size={18} />} tone="text-goat" hint={`${t.societies} societies`} loading={loading} error={statError} onRetry={q.retry} idle={!submitted} compact />
+        <StatCard label="Amount" value={t.amount} prefix="₹" icon={<IndianRupee size={18} />} tone="text-buffalo" loading={loading} error={statError} onRetry={q.retry} idle={!submitted} compact />
       </div>
 
       <Reveal delay={0.05}>
         <Card>
           <div className="grid gap-x-4 gap-y-3 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
             <Field label={GLOBALLABELS.fromDate}>
-              <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
+              <PastDateInput type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
             </Field>
             <Field label={GLOBALLABELS.toDate}>
-              <Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
+              <PastDateInput type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
             </Field>
-            <SubmitButton className="sm:col-span-2" loading={q.fetching && q.rows.length === 0} onClick={() => { const e = validateDateRange(from, to); if (e) return toast(e, 'warn'); setApplied({ from, to }); }} />
+            <SubmitButton className="sm:col-span-2" loading={submitted && q.fetching && q.rows.length === 0} onClick={() => { const e = validateDateRange(from, to); if (e) return toast(e, 'warn'); setApplied({ from, to }); setSubmitted(true); }} />
           </div>
         </Card>
       </Reveal>
 
       <Reveal delay={0.1}>
         <Card>
-          <ReportBar count={data.length} hideCount={loading || err} disabled={loading || err || data.length === 0} kinds={['xls', 'pdf']} onExport={run} source={<ReportDataBadge state={{ fetching: q.fetching, stale: q.stale, updatedAt: q.updatedAt, failed: q.failed, total: q.total, error: q.error, hasData: q.rows.length > 0 }} />} />
-          {loading ? (
+          <ReportBar count={data.length} hideCount={!submitted || loading || err} disabled={!submitted || loading || err || data.length === 0} kinds={['xls', 'pdf']} onExport={run} source={submitted ? <ReportDataBadge state={{ fetching: q.fetching, stale: q.stale, updatedAt: q.updatedAt, failed: q.failed, total: q.total, error: q.error, hasData: q.rows.length > 0 }} /> : undefined} />
+          {!submitted ? (
+            <p className="px-6 py-8 text-center text-sm text-mute">Choose the dates and press Submit to load the collection.</p>
+          ) : loading ? (
             <MilkLoader label="Loading unionwise collection…" />
           ) : (
             <QueryBoundary q={q} skeleton={<MilkLoader label="Loading unionwise collection…" />} emptyTitle="No record for these dates" emptyHint="The portal says there is no collection between these dates.">

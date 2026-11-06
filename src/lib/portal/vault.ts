@@ -1,9 +1,11 @@
 import { decryptPayload, encryptPayload } from "./crypto";
 
-export const LOGIN_KEY = "dhara-login";
-export const DATA_KEY = "dhara-session-data";
+export const LOGIN_KEY = "smartX-login";
+export const DATA_KEY = "smartX-session-data";
 
-const LEGACY_KEYS = ["dhara-user"];
+export const MENU_KEY = "smartX-menu";
+
+const LEGACY_KEYS = ["smartX-user"];
 
 export function vaultSave(key: string, value: unknown): void {
   try {
@@ -25,7 +27,7 @@ export function vaultLoad<T>(key: string): T | null {
 }
 
 export function vaultClear(): void {
-  for (const k of [LOGIN_KEY, DATA_KEY, ...LEGACY_KEYS]) {
+  for (const k of [LOGIN_KEY, DATA_KEY, MENU_KEY, ...LEGACY_KEYS]) {
     try {
       sessionStorage.removeItem(k);
     } catch {}

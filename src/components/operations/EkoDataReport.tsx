@@ -6,7 +6,8 @@ import { Button } from "./ui/Button";
 import { Field, Select } from "./ui/Fields";
 import { PageBar } from "./ui/PageBar";
 import { EmptyState } from "./EmptyState";
-import { ErrorBlock, LoadingBlock } from "./Widget";
+import { ErrorBlock } from "./Widget";
+import { MilkLoader } from './MilkLoader';
 import { CardTitle, ReportBar, ReportPage } from "./ReportKit";
 import { useCenters } from "../../hooks/useSessionData";
 import { vlccOption } from "../../services/vlcc/names";
@@ -112,7 +113,7 @@ export default function EkoDataReport({ title, subtitle, icon: Icon, fields, loa
 
         {error && <div className="p-4"><ErrorBlock compact message={error} onRetry={() => void show()} /></div>}
         {loading ? (
-          <LoadingBlock height="h-32" label={`Loading ${title}…`} />
+          <MilkLoader label={`Loading ${title}…`} />
         ) : (
           <>
             <div className="overflow-x-auto">

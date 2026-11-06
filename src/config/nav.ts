@@ -28,6 +28,7 @@ import {
   UsersRound,
   Workflow,
   type LucideIcon,
+  BarChart3,
 } from 'lucide-react';
 import { useNav, type NavSection } from '../components/layout/operations/nav';
 
@@ -57,6 +58,7 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
   "/reports/unionwise": FileBarChart,
   "/reports/vlc-status": Activity,
   "/reports/variance": GitCompareArrows,
+  "/reports/cda": BarChart3,
   "/reports/cleaning": FileText,
   "/reports/eko-calibration": SlidersHorizontal,
   "/reports/eko-correction": GitCompareArrows,
