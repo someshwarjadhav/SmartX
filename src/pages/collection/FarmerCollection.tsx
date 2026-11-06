@@ -27,6 +27,8 @@ import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { Field, SelectField, TextField } from '../../components/ui/Fields';
 import { Segmented } from '../../components/ui/Segmented';
+import { validateDateRange, maxToDate } from '../../lib/dateRange';
+import { MSG } from '../../lib/messages';
 
 /* ---------- Filter card ---------- */
 
@@ -92,7 +94,7 @@ const FarmerCollectionFilters: React.FC<FilterProps> = ({ value, plantOptions, c
         <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-6">
           <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.from} max={value.to || undefined} onChange={(e) => onChange({ from: e.target.value })} />
           <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
-          <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.to} min={value.from || undefined} onChange={(e) => onChange({ to: e.target.value })} error={error} />
+          <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.to} min={value.from || undefined} max={maxToDate(value.from)} onChange={(e) => onChange({ to: e.target.value })} error={error} />
         </div>
 
         <div className="flex items-end sm:col-span-2 xl:col-span-6">
@@ -301,12 +303,15 @@ const FarmerCollection: React.FC = () => {
   }, [rows]);
 
   const submit = () => {
-    if (draft.from > draft.to) {
-      setError('From date cannot be after To date');
+    const rangeError = validateDateRange(draft.from, draft.to);
+    if (rangeError) {
+      setError(rangeError);
+      toast.show(rangeError, 'warn');
       return;
     }
     if (!scope.centre) {
-      setError('No VLC found for this plant');
+      setError(MSG.noCentreInPlant);
+      toast.show(MSG.noCentreInPlant, 'warn');
       return;
     }
     setError(undefined);

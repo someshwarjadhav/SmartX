@@ -1,3 +1,4 @@
+import { validateDateRange } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useCallback, useRef, useState } from "react";
 import { Search, Snowflake, Wallet } from "lucide-react";
@@ -222,8 +223,9 @@ const FarmerBill: React.FC = () => {
 
   const show = useCallback(async () => {
     if (!vlc) return;
-    if (from > to) {
-      toast("From Date cannot be after To Date", "warn");
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) {
+      toast(rangeError, "warn");
       return;
     }
     const mine = ++ticket.current;
@@ -396,6 +398,7 @@ const FarmerBill: React.FC = () => {
       </Reveal>
 
       <Reveal delay={0.1}>
+        {/* bar + result in ONE card, like Payment Summary: the Print bar sits attached to what is below it */}
         <Card>
           <ReportBar
             count={total}
@@ -403,51 +406,51 @@ const FarmerBill: React.FC = () => {
             kinds={["print"]}
             onExport={run}
           />
+          {status === "loading" && (
+            <div className="p-6">
+              <MilkLoader label="Loading farmer bills…" />
+            </div>
+          )}
+          {status === "error" && (
+            <p className="px-6 py-10 text-center text-sm text-danger">
+              {error}
+            </p>
+          )}
+          {status === "idle" && (
+            <p className="px-6 py-10 text-center text-sm text-mute">
+              Select a VLC and dates, then press Show Record.
+            </p>
+          )}
+          {status === "ready" && total === 0 && (
+            <p className="px-6 py-10 text-center text-sm text-mute">
+              No record found for this VLC and these dates.
+            </p>
+          )}
+          {status === "ready" && shown.length > 0 && (
+            <div className="space-y-4 p-4 sm:p-5">
+              {shown.map((b, i) => (
+                <BillCard
+                  key={`${b.name}-${safePage}-${i}`}
+                  bill={b}
+                  range={`${dmy(applied.from)} To ${dmy(applied.to)}`}
+                />
+              ))}
+            </div>
+          )}
+          {ready && (
+            <ReportPager
+              total={total}
+              page={safePage}
+              size={pageSize}
+              onPage={setPage}
+              onSize={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+            />
+          )}
         </Card>
       </Reveal>
-
-      {status === "loading" && (
-        <Card className="p-6">
-          <MilkLoader label="Loading farmer bills…" />
-        </Card>
-      )}
-      {status === "error" && (
-        <Card className="px-6 py-10 text-center text-sm text-danger">
-          {error}
-        </Card>
-      )}
-      {status === "idle" && (
-        <Card className="px-6 py-10 text-center text-sm text-mute">
-          Select a VLC and dates, then press Show Record.
-        </Card>
-      )}
-      {status === "ready" && total === 0 && (
-        <Card className="px-6 py-10 text-center text-sm text-mute">
-          No record found for this VLC and these dates.
-        </Card>
-      )}
-      {status === "ready" &&
-        shown.map((b, i) => (
-          <BillCard
-            key={`${b.name}-${safePage}-${i}`}
-            bill={b}
-            range={`${dmy(applied.from)} To ${dmy(applied.to)}`}
-          />
-        ))}
-      {ready && (
-        <Card>
-          <ReportPager
-            total={total}
-            page={safePage}
-            size={pageSize}
-            onPage={setPage}
-            onSize={(n) => {
-              setPageSize(n);
-              setPage(1);
-            }}
-          />
-        </Card>
-      )}
 
       <Modal
         open={freezeOpen}

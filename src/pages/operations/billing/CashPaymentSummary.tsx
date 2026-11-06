@@ -30,6 +30,8 @@ import {
 } from "../../../services/billing/cashPaymentSummary.api.ts";
 import { ApiError } from "../../../services/http/errors";
 import { pick, type Obj } from "../../../services/utils/loose";
+import { validateDateRange } from "../../../lib/dateRange";
+import { useToast } from "../../../context/ToastContext";
 
 interface Row {
   raw: Obj;
@@ -133,6 +135,7 @@ const CashPaymentSummary: React.FC = () => {
   const [needle, setNeedle] = useState("");
 
   const allChecked = options.length > 0 && picked.length === options.length;
+  const toast = useToast();
   const range = !!from && !!to && from <= to;
 
   const toggleAll = () => setPicked(allChecked ? [] : options.map((o) => o.id));
@@ -142,7 +145,9 @@ const CashPaymentSummary: React.FC = () => {
   const labelOf = (id: string) => options.find((o) => o.id === id)?.label ?? id;
 
   const submit = async () => {
-    if (loading || !range || picked.length === 0) return;
+    if (loading || picked.length === 0) return;
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) return toast(rangeError, "warn");
     const f = { type, ids: picked, from, to };
     setApplied(f);
     setLoading(true);

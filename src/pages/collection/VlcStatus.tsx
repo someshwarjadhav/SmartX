@@ -13,6 +13,9 @@ import { Panel } from '../../components/ui/Panel';
 import { Segmented } from '../../components/ui/Segmented';
 import { cn } from '../../lib/cn';
 import { nf, toISO } from '../../lib/format';
+import { validateDateRange, maxToDate } from '../../lib/dateRange';
+import { Toast } from '../../components/ui/Toast';
+import { useToast } from '../../hooks/useToast';
 
 /* ---------- Types ---------- */
 
@@ -82,7 +85,7 @@ const VlcStatusFilters: React.FC<FilterProps> = ({ value, plantOptions, onChange
       <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-12">
         <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
         <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
-        <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
+        <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} max={maxToDate(value.fromDate)} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
       </div>
 
       <div className="sm:col-span-2 xl:col-span-12">
@@ -131,6 +134,7 @@ const VlcStatus: React.FC = () => {
   const plantOptions = scope.plantOptions;
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const toast = useToast();
   // only the centres of the chosen plant are asked (faster than loading every plant)
   const plantIds = useMemo(() => centres.filter((c) => c.mccId === applied.plant).map((c) => c.id), [centres, applied.plant]);
   const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both', vlccIds: plantIds }, submitted && plantIds.length > 0);
@@ -140,8 +144,10 @@ const VlcStatus: React.FC = () => {
   const active = tiles.filter((t) => t.active).length;
 
   const submit = () => {
-    if (draft.fromDate > draft.toDate) {
-      setError('From date cannot be after To date');
+    const rangeError = validateDateRange(draft.fromDate, draft.toDate);
+    if (rangeError) {
+      setError(rangeError);
+      toast.show(rangeError, 'warn');
       return;
     }
     setError(undefined);
@@ -188,6 +194,8 @@ const VlcStatus: React.FC = () => {
         )}
       </Panel>
       </div>
+
+      <Toast message={toast.message} onClose={toast.close} />
     </div>
   );
 };

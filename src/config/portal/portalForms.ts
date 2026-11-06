@@ -177,7 +177,7 @@ export const NAV_MODULES: NavModule[] = [
         "eko-calibration",
         "/reports/eko-calibration",
       ),
-      form("Eko Correction", "/base/eko-correction", "eko-correction"),
+      form("Eko Correction", "/base/eko-correction", "eko-correction", "/reports/eko-correction"),
       form("RMRD", "/base/rmrd", "rmrd"),
       form("Deduction Report", "/base/deduction-report", "deduction-report"),
       form("Store Stock", "/base/store-stock", "store-stock"),

@@ -23,6 +23,7 @@ import { mapVlcc } from '../../../services/mappers/vlcc.mapper.ts';
 import { vlcStatus, type StatusRow } from '../../../services/report/vlcStatus.report.ts';
 import { vlccTitle } from '../../../services/vlcc/names';
 import type { MilkCode, RawVlccRow, ShiftCode } from '../../../services/types/raw';
+import { validateDateRange } from "../../../lib/dateRange";
 
 type Show = 'all' | 'active' | 'inactive';
 
@@ -163,7 +164,7 @@ const VlcStatus: React.FC = () => {
             </Field>
             <Field label={GLOBALLABELS.fromDate}><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
             <Field label={GLOBALLABELS.toDate}><Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
-            <SubmitButton className="sm:col-span-2 lg:col-span-1" loading={q.fetching && q.rows.length === 0} disabled={allIds.length === 0} onClick={() => setApplied({ from, to, shift, milk, ids: allIds })} />
+            <SubmitButton className="sm:col-span-2 lg:col-span-1" loading={q.fetching && q.rows.length === 0} disabled={allIds.length === 0} onClick={() => { const e = validateDateRange(from, to); if (e) return toast(e, 'warn'); setApplied({ from, to, shift, milk, ids: allIds }); }} />
           </div>
         </Card>
       </Reveal>

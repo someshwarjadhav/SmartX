@@ -1,3 +1,4 @@
+import { validateDateRange } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useMemo, useRef, useState } from "react";
 import { RotateCcw, Search } from "lucide-react";
@@ -150,6 +151,11 @@ const Collections: React.FC<{ only?: View }> = ({ only }) => {
   const search = () => {
     const picked = vlcc === ALL_CENTRES ? allIds : [vlcc];
     if (!vlcc || !picked.length) return;
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) {
+      toast(rangeError, "warn");
+      return;
+    }
     setApplied({
       farmer,
       from,

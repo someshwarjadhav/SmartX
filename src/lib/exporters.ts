@@ -391,19 +391,29 @@ export async function exportPDF(t: ExportTable): Promise<void> {
   };
   head();
 
-  const spanOf = (t.merge ?? []).map((m) => ({ col: m.col, spans: spansFor(t.rows, m) }));
-  const body = t.rows.map((r, ri) => {
-    const cells: Array<string | { content: string; rowSpan: number; styles: { valign: 'middle' } }> = [];
-    r.forEach((v, i) => {
-      const m = spanOf.find((x) => x.col === i);
-      const text = show(v, t.columns[i]?.type, 'Rs ');
-      if (!m) return void cells.push(text);
-      const span = m.spans[ri] ?? 0;
-      if (span === 0) return; // covered by the merged cell above
-      cells.push(span > 1 ? { content: text, rowSpan: span, styles: { valign: 'middle' } } : text);
+  // Grouped columns (Station Id / Village / Date ...) are NOT drawn with rowSpan: autotable cannot split a rowSpan cell over
+  // two pages, so a big group jumped to the next page and left page 1 almost empty. Instead every row is a normal row,
+  // the group value is written on the first row of the group and is written AGAIN on the first row of every new page,
+  // and the lines inside a group are hidden so it still looks like one merged cell.
+  const mergeCols = (t.merge ?? []).map((m) => ({ col: m.col, spans: spansFor(t.rows, m) }));
+  const mergeOf = new Map<number, { spans: number[]; runStart: number[] }>();
+  for (const m of mergeCols) {
+    const runStart: number[] = [];
+    let cur = 0;
+    m.spans.forEach((sp, i) => {
+      if (sp > 0) cur = i;
+      runStart[i] = cur;
     });
-    return cells;
-  });
+    mergeOf.set(m.col, { spans: m.spans, runStart });
+  }
+  const body = t.rows.map((r, ri) =>
+    r.map((v, i) => {
+      const m = mergeOf.get(i);
+      if (m && (m.spans[ri] ?? 0) === 0) return ''; // inside a group: filled again only at the top of a new page
+      return show(v, t.columns[i]?.type, 'Rs ');
+    }),
+  );
+  const lastShown = new Map<number, { run: number; page: number }>();
   const totals = totalsOf(t);
   const foot = totals ? [totals.map((v, i) => show(v, t.columns[i]?.type, 'Rs '))] : undefined;
   const headRows = [
@@ -424,6 +434,7 @@ export async function exportPDF(t: ExportTable): Promise<void> {
     foot,
     showFoot: 'lastPage',
     showHead: 'everyPage',
+    rowPageBreak: 'avoid',
     columnStyles: align,
     styles: { fontSize, cellPadding: pad, textColor: p.text, lineColor: p.line, lineWidth: 0.4, overflow: 'linebreak', valign: 'middle' },
     headStyles: { fillColor: p.brand, textColor: p.onBrand, fontStyle: 'bold', lineColor: p.brand },
@@ -431,9 +442,35 @@ export async function exportPDF(t: ExportTable): Promise<void> {
     alternateRowStyles: { fillColor: p.stripe },
     margin: { left: M, right: M, top: 40, bottom: 36 },
     didParseCell: (d) => {
+      if (d.section === 'body') {
+        const m = mergeOf.get(d.column.index);
+        if (m) {
+          // one "merged" look: white cell, no line between the rows of the same group
+          const first = (m.spans[d.row.index] ?? 0) > 0;
+          const nextStarts = (m.spans[d.row.index + 1] ?? 1) > 0;
+          d.cell.styles.fillColor = WHITE;
+          d.cell.styles.valign = 'top';
+          d.cell.styles.lineWidth = { top: first ? 0.4 : 0, right: 0.4, bottom: nextStarts ? 0.4 : 0, left: 0.4 } as unknown as number;
+        }
+      }
       // header cells follow the numeric alignment of their column
       if (d.section === 'head' && t.headerGroups && d.row.index === 0) d.cell.styles.halign = 'center';
       else if (d.section === 'head' || d.section === 'foot') d.cell.styles.halign = isNumeric(t.columns[d.column.index]?.type) ? 'right' : 'left';
+    },
+    willDrawCell: (d) => {
+      if (d.section !== 'body') return;
+      const m = mergeOf.get(d.column.index);
+      if (!m) return;
+      const run = m.runStart[d.row.index] ?? d.row.index;
+      const page = doc.getCurrentPageInfo().pageNumber;
+      const seen = lastShown.get(d.column.index);
+      if ((m.spans[d.row.index] ?? 0) > 0) {
+        lastShown.set(d.column.index, { run, page });
+      } else if (!seen || seen.run !== run || seen.page !== page) {
+        // first row of this group on a new page: show the group value again
+        d.cell.text = [show(t.rows[run]?.[d.column.index] ?? '', t.columns[d.column.index]?.type, 'Rs ')];
+        lastShown.set(d.column.index, { run, page });
+      }
     },
     didDrawPage: (d) => {
       if (d.pageNumber > 1) {

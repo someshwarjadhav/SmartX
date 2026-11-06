@@ -21,6 +21,7 @@ import { getSession } from '../../../services/session';
 import { vlccTitle } from '../../../services/vlcc/names';
 import { fetchPortalReport, type PortalRow } from '../../../services/report/cleaningReport.api.ts';
 import type { ShiftCode } from '../../../services/types/raw';
+import { validateDateRange } from "../../../lib/dateRange";
 
 interface Props {
   title: string;
@@ -112,7 +113,11 @@ const PortalReportPage: React.FC<Props> = ({ title, subtitle, endpoint, slug, no
   const statError = err ? q.error?.message : undefined;
   const hasApplied = applied !== null;
 
-  const submit = () => setApplied({ from, to, shift, scope });
+  const submit = () => {
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) return toast(rangeError, 'warn');
+    setApplied({ from, to, shift, scope });
+  };
   const reset = () => {
     setScope(allCentres ? ALL : '');
     setShift('Z');

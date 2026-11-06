@@ -27,6 +27,8 @@ import {
 import { getVlcMilkBill } from "../../../services/billing/vlcMilkBill.api";
 import { ApiError } from "../../../services/http/errors";
 import { norm, type Obj } from "../../../services/utils/loose";
+import { validateDateRange } from "../../../lib/dateRange";
+import { useToast } from "../../../context/ToastContext";
 
 
 interface Row {
@@ -104,11 +106,14 @@ const VlcMilkBill: React.FC = () => {
   const [pageSize, setPageSize] = useState(100);
   const [page, setPage] = useState(1);
 
+  const toast = useToast();
   const range = !!from && !!to && from <= to;
   const ready = range && options.length > 0;
 
   const submit = async () => {
-    if (loading || !ready) return;
+    if (loading || options.length === 0) return;
+    const rangeError = validateDateRange(from, to);
+    if (rangeError) return toast(rangeError, "warn");
     const f = { from, to };
     setApplied(f);
     setLoading(true);
