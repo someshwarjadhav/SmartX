@@ -17,7 +17,7 @@ interface Props {
 
 export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNavigate }) => {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  useAuth();
   const NAV = useNavGroups();
   const activeGroup = findNavIn(NAV, pathname)?.group.id;
   const [open, setOpen] = useState<Set<string>>(() => new Set(['dashboard', activeGroup ?? 'dashboard']));
