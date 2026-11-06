@@ -7,6 +7,7 @@ import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Badge } from "../../../components/operations/ui/Badge";
 import { Field, Input, Segmented, Select } from "../../../components/operations/ui/Fields";
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
 import { StatCard } from "../../../components/operations/ui/StatCard";
 import { KindChip } from "../../../components/operations/KindChip";
@@ -138,6 +139,7 @@ const Collections: React.FC<{ only?: View }> = ({ only }) => {
   const vlccQ = useQuery<RawVlccRow>(
     view === "vlcc" && hasAppliedCentre ? `vlccpage:${key}` : null,
     (emit) => fetchVlccCollection(params, emit),
+    { hideOldWhileLoading: true },
   );
 
   const farmerQ = useQuery<RawFarmerRow>(
@@ -145,6 +147,7 @@ const Collections: React.FC<{ only?: View }> = ({ only }) => {
       ? `farmerpage:${key}`
       : null,
     (emit) => fetchFarmerCollection(params, emit),
+    { hideOldWhileLoading: true },
   );
   const active = view === "vlcc" ? vlccQ : farmerQ;
 
@@ -801,10 +804,10 @@ const Collections: React.FC<{ only?: View }> = ({ only }) => {
             </Select>
           </Field>
           <Field label={GLOBALLABELS.fromDate} className="lg:col-span-3">
-            <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
+            <PastDateInput type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
           </Field>
           <Field label={GLOBALLABELS.toDate} className="lg:col-span-3">
-            <Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
+            <PastDateInput type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
           </Field>
           <SubmitButton
             className={view === "entry" ? "sm:col-span-2 lg:col-span-12" : "sm:col-span-2 lg:col-span-6"}

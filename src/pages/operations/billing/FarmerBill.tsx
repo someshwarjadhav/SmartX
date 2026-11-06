@@ -5,7 +5,8 @@ import { Search, Snowflake, Wallet } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Modal } from "../../../components/operations/ui/Modal";
-import { Field, Input } from "../../../components/operations/ui/Fields";
+import { Field } from "../../../components/operations/ui/Fields";
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { ReportPager } from "../../../components/operations/ui/ReportPager";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
@@ -357,7 +358,7 @@ const FarmerBill: React.FC = () => {
               label={GLOBALLABELS.vlcName}
             />
             <Field label={GLOBALLABELS.fromDate}>
-              <Input
+              <PastDateInput
                 type="date"
                 value={from}
                 max={to}
@@ -365,7 +366,7 @@ const FarmerBill: React.FC = () => {
               />
             </Field>
             <Field label={GLOBALLABELS.toDate}>
-              <Input
+              <PastDateInput
                 type="date"
                 value={to}
                 min={from}

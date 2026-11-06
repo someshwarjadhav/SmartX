@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import { Search, UserRound } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
-import { Field, Input } from "../../../components/operations/ui/Fields";
+import { Field } from "../../../components/operations/ui/Fields";
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { ReportPager } from "../../../components/operations/ui/ReportPager";
 import { EmptyState } from "../../../components/operations/EmptyState";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
@@ -135,10 +136,10 @@ const CattleFeedFarmerBill: React.FC = () => {
           <div className="grid gap-x-4 gap-y-3 px-5 pb-5 pt-3 sm:grid-cols-2 sm:px-6 sm:pb-6 lg:grid-cols-[minmax(0,2fr)_1fr_1fr_auto]">
             <CentreField value={vlc} onChange={setVlc} label={GLOBALLABELS.vlcName} className="sm:col-span-2 lg:col-span-1" />
             <Field label={GLOBALLABELS.fromDate}>
-              <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
+              <PastDateInput type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
             </Field>
             <Field label={GLOBALLABELS.toDate}>
-              <Input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
+              <PastDateInput type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
             </Field>
             <div className="flex items-end sm:col-span-2 lg:col-span-1">
               <Button className="w-full" icon={<Search size={16} />} loading={status === "loading"} disabled={!vlc} onClick={() => void submit()}>

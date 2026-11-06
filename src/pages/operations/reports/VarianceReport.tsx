@@ -4,7 +4,8 @@ import { Droplets, GitCompareArrows, IndianRupee, Scale } from 'lucide-react';
 import { useToast } from '../../../context/ToastContext';
 import { Card } from '../../../components/operations/ui/Card';
 import { Badge } from '../../../components/operations/ui/Badge';
-import { Field, Input } from '../../../components/operations/ui/Fields';
+import { Field } from '../../../components/operations/ui/Fields';
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { ALL_CENTRES, useCentreIds } from '../../../hooks/useCentres';
 import { CentreField, SubmitButton } from '../../../components/operations/ReportFilters';
 import { GroupTable, type GCol } from '../../../components/operations/ui/GroupTable';
@@ -58,8 +59,8 @@ const VarianceReport: React.FC = () => {
   const params = { from: applied.from, to: applied.to, shift: 'Z' as const, milk: 'ALL' as const, vlccIds: ids, priority: 0 as const };
 
 
-  const vq = useQuery<RawVlccRow>(hasAppliedCentre ? `variance-doc:${key}` : null, (emit) => fetchVlccCollection(params, emit));
-  const fq = useQuery<RawFarmerRow>(hasAppliedCentre ? `variance-vlc:${key}` : null, (emit) => fetchFarmerCollection(params, emit));
+  const vq = useQuery<RawVlccRow>(hasAppliedCentre ? `variance-doc:${key}` : null, (emit) => fetchVlccCollection(params, emit), { hideOldWhileLoading: true });
+  const fq = useQuery<RawFarmerRow>(hasAppliedCentre ? `variance-vlc:${key}` : null, (emit) => fetchFarmerCollection(params, emit), { hideOldWhileLoading: true });
 
   const rows = useMemo(() => variance(mapVlcc(vq.rows), mapFarmers(fq.rows)), [vq.rows, fq.rows]);
   const t = useMemo(() => varianceTotals(rows), [rows]);
@@ -183,8 +184,8 @@ const VarianceReport: React.FC = () => {
         <Card>
           <div className="grid gap-x-4 gap-y-3 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
             <CentreField className="sm:col-span-2" allValue={ALL_CENTRES} value={vlcc} onChange={setVlcc} />
-            <Field label={GLOBALLABELS.fromDate}><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
-            <Field label={GLOBALLABELS.toDate}><Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
+            <Field label={GLOBALLABELS.fromDate}><PastDateInput type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
+            <Field label={GLOBALLABELS.toDate}><PastDateInput type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
             <SubmitButton className="sm:col-span-2 lg:col-span-4" loading={waiting && nothing} disabled={!vlcc || (vlcc === ALL_CENTRES && allIds.length === 0)} onClick={() => { const e = validateDateRange(from, to); if (e) return toast(e, 'warn'); setApplied({ from, to, vlcc, ids: vlcc === ALL_CENTRES ? allIds : [vlcc] }); }} />
           </div>
         </Card>

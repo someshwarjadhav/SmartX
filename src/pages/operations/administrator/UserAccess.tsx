@@ -4,7 +4,8 @@ import { ShieldCheck } from 'lucide-react';
 import { Card } from '../../../components/operations/ui/Card';
 import { Button } from '../../../components/operations/ui/Button';
 import { SearchSelect } from '../../../components/operations/ui/SearchSelect';
-import { ErrorBlock, LoadingBlock } from '../../../components/operations/Widget';
+import { ErrorBlock } from '../../../components/operations/Widget';
+import { MilkLoader } from '../../../components/operations/MilkLoader';
 import { ReportPage, Reveal } from '../../../components/operations/ReportKit';
 import { useToast } from '../../../context/ToastContext';
 import { ApiError } from '../../../services/http/errors';
@@ -154,7 +155,7 @@ const UserAccess: React.FC = () => {
               <p className="text-sm text-mute">Select a user to see and change the forms they can access.</p>
             </div>
           ) : loading ? (
-            <LoadingBlock height="h-64" label="Loading the forms of this user…" />
+            <MilkLoader label="Loading the forms of this user…" />
           ) : error ? (
             <ErrorBlock message={error} onRetry={() => setMenuTick((t) => t + 1)} />
           ) : total === 0 ? (

@@ -10,7 +10,8 @@ import { Field, Select } from '../../components/operations/ui/Fields';
 import { DataTable, type Column } from '../../components/operations/ui/DataTable';
 import { StatCard } from '../../components/operations/ui/StatCard';
 import { PageHeader } from '../../components/operations/ui/PageHeader';
-import { LoadingBlock, Notice } from '../../components/operations/Widget';
+import { Notice } from '../../components/operations/Widget';
+import { MilkLoader } from '../../components/operations/MilkLoader';
 import { vlccOption } from '../../services/vlcc/names';
 import { addDays, fmtDate, inr, nf, todayISO } from '../../lib/portal/format';
 import { exportCSV, exportPDF, type ExportCol } from '../../lib/portal/export';
@@ -108,7 +109,7 @@ const Billing: React.FC = () => {
       <Card>
         <CardHeader title="Billing cycle" action={<div className="w-full sm:w-72"><Field label="Cycle"><Select value={idx} onChange={(e) => setIdx(Number(e.target.value))}>{list.map((c, i) => <option key={c.start} value={i}>{c.label}{i === 0 ? ' (running)' : ''}</option>)}</Select></Field></div>} />
         <Notice q={q} />
-        <div className="mt-3">{isLoadingQ(q) ? <LoadingBlock height="h-64" q={q} /> : <DataTable columns={cols} rows={bills} rowKey={(b) => b.key} pageSize={DEFAULT_PAGE_SIZE} pageSizes={[10, 25, 50, 100, 250]} onRowClick={(b) => setSlip(b)} empty={<p className="px-6 py-10 text-center text-sm text-mute">No milk was collected in this cycle.</p>} />}</div>
+        <div className="mt-3">{isLoadingQ(q) ? <MilkLoader label="Loading bills…" /> : <DataTable columns={cols} rows={bills} rowKey={(b) => b.key} pageSize={DEFAULT_PAGE_SIZE} pageSizes={[10, 25, 50, 100, 250]} onRowClick={(b) => setSlip(b)} empty={<p className="px-6 py-10 text-center text-sm text-mute">No milk was collected in this cycle.</p>} />}</div>
       </Card>
 
       <Modal open={!!slip} onClose={() => setSlip(null)} title="Payslip" subtitle={slip ? cycle.label : ''}

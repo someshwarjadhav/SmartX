@@ -7,6 +7,7 @@ export const MSG = {
   pickDates: 'Please select the From Date and To Date',
   fromAfterTo: 'From Date cannot be after To Date',
   rangeTooLong: (months = 3): string => `Date range cannot be more than ${months} months. Please select a shorter period`,
+  tooOld: (months = 3): string => `Dates older than ${months} months are not available. Please pick a more recent date`,
 
   /* filters */
   pickCentre: 'Please select a VLC',

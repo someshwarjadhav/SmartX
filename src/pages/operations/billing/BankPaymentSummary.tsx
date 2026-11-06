@@ -4,7 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { Landmark, Search } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
-import { Field, Input, Select } from "../../../components/operations/ui/Fields";
+import { Field, Select } from "../../../components/operations/ui/Fields";
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { MultiSelect } from "../../../components/operations/ui/MultiSelect";
 import { ReportPager } from "../../../components/operations/ui/ReportPager";
 import { EmptyState } from "../../../components/operations/EmptyState";
@@ -178,10 +179,10 @@ const BankPaymentSummary: React.FC = () => {
               <MultiSelect options={centres} value={picked} onChange={setPicked} placeholder="Select VLC" />
             </Field>
             <Field label={GLOBALLABELS.fromDate}>
-              <Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
+              <PastDateInput type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
             </Field>
             <Field label={GLOBALLABELS.toDate}>
-              <Input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
+              <PastDateInput type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
             </Field>
             <div className="md:col-span-2 lg:col-span-4">
               <Button

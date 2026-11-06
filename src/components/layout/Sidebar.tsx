@@ -129,7 +129,7 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
               <span className="h-2.5 w-2.5 rounded-full bg-ok" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-white">{user?.mccName || user?.dairyName || 'SmartX dairy'}</p>
+              <p className="truncate text-xs font-semibold text-white">SmartX</p>
               <p className="text-xs text-white/75">Live · portal API</p>
             </div>
           </div>

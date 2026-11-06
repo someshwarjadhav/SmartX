@@ -120,7 +120,7 @@ const rowOrder = (r: CollectionEntry): string => {
   return `${r.date}|${r.shift === 'Morning' ? 0 : 1}|${KIND_RANK[r.kind] ?? 3}|${id}|${time24(r.time)}`;
 };
 
-function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolean): { q: QueryState<RawFarmerRow>; rows: CollectionEntry[] } {
+function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolean, hideOld = true): { q: QueryState<RawFarmerRow>; rows: CollectionEntry[] } {
   const session = getSession();
   const centers = useReportCenters();
   const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : filter.vlccIds?.length ? filter.vlccIds : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
@@ -133,7 +133,7 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
     shift: apiShift(filter.shift),
     milk: apiMilk(filter.milk),
     vlccIds: ids,
-  }, emit, signal));
+  }, emit, signal), { hideOldWhileLoading: hideOld });
   const names = useMemo(() => new Map(centers.map((c) => [c.id, c.name || c.label || c.id])), [centers]);
   const rows = useMemo(() => {
     const used = new Map<string, number>();
@@ -179,8 +179,9 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
 
 const NO_ROWS: never[] = [];
 
-export function useMilkFarmerEntries(filter: LiveFilter, enabled = true): LiveReportState<CollectionEntry> {
-  const { q, rows } = useRawFarmerRows(filter, 'smartx-designed-farmer-report', enabled);
+/** `hideOld` (default): after Submit the table shows the loader until the new data has arrived, never the earlier / saved rows. */
+export function useMilkFarmerEntries(filter: LiveFilter, enabled = true, hideOld = true): LiveReportState<CollectionEntry> {
+  const { q, rows } = useRawFarmerRows(filter, 'smartx-designed-farmer-report', enabled, hideOld);
   const session = getSession();
   // depends on the filter VALUES (not on the filter object, which is a new object on every render): the result list keeps the
   // same identity between renders, so clicking a dropdown or button does not recalculate / redraw the whole report
@@ -229,7 +230,7 @@ export function useMilkVlccEntries(filter: LiveFilter, enabled = true): LiveRepo
   const key = enabled && ids.length ? `smartx-designed-vlcc-report:${filter.from}:${filter.to}:${filter.shift ?? 'both'}:${filter.milk ?? 'both'}:${idKey}` : null;
   const q = useQuery<RawVlccRow>(key, (emit) => fetchVlccCollection({
     from: filter.from, to: filter.to, shift: apiShift(filter.shift), milk: apiMilk(filter.milk), vlccIds: ids,
-  }, emit));
+  }, emit), { hideOldWhileLoading: true });
   const names = useMemo(() => new Map(centers.map((c) => [c.id, c.name || c.label || c.id])), [centers]);
   const rows = useMemo(() => mapVlcc(q.rows).map((r): LiveVlccRow => ({
     key: r.key,

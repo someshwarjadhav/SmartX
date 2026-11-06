@@ -38,6 +38,7 @@ import { KindChip, KindDot } from "../../components/operations/KindChip";
 import { ChartTip } from "../../components/operations/ChartTip";
 import { PageHeader } from "../../components/operations/ui/PageHeader";
 import { LoadingBlock, QueryBoundary } from "../../components/operations/Widget";
+import { MilkLoader } from "../../components/operations/MilkLoader";
 import { MILK_META } from "../../lib/portal/milk";
 import type { MilkType } from "../../types/operations";
 import { fmtDate, fmtShort, nf, todayISO } from "../../lib/portal/format";
@@ -744,6 +745,7 @@ const Dashboard: React.FC = () => {
         <div className="mt-3 pb-2">
           <QueryBoundary
             q={topQ}
+            skeleton={<MilkLoader label="Loading top suppliers…" />}
             emptyTitle="No supplier data yet"
             emptyHint="The portal returned no suppliers for your centres."
           >

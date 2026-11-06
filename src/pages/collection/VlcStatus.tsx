@@ -1,19 +1,20 @@
 import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, Search, SlidersHorizontal, Wifi, WifiOff } from 'lucide-react';
+import { Search, SlidersHorizontal, Wifi, WifiOff } from 'lucide-react';
 import { useMilkVlccEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
 import { SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import { Badge } from '../../components/ui/Badge';
 import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { Field, SelectField, TextField } from '../../components/ui/Fields';
+import { Field, SelectField } from '../../components/ui/Fields';
+import { DateRangeFields } from '../../components/ui/DateRangeFields';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Panel } from '../../components/ui/Panel';
 import { Segmented } from '../../components/ui/Segmented';
 import { cn } from '../../lib/cn';
 import { nf, toISO } from '../../lib/format';
-import { validateDateRange, maxToDate } from '../../lib/dateRange';
+import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
 import { Toast } from '../../components/ui/Toast';
 import { useToast } from '../../hooks/useToast';
 
@@ -82,10 +83,18 @@ const VlcStatusFilters: React.FC<FilterProps> = ({ value, plantOptions, onChange
         <Segmented<ShiftFilter> label="Shift" value={value.shift} onChange={(shift) => onChange({ shift })} options={SHIFT_FILTER_OPTIONS} className={SEGMENT} />
       </Field>
 
-      <div className="grid grid-cols-1 items-start gap-2 min-[480px]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:col-span-2 xl:col-span-12">
-        <TextField label="From Date" type="date" icon={<CalendarDays size={16} />} value={value.fromDate} max={value.toDate || undefined} onChange={(e) => onChange({ fromDate: e.target.value })} />
-        <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
-        <TextField label="To Date" type="date" icon={<CalendarDays size={16} />} value={value.toDate} min={value.fromDate || undefined} max={maxToDate(value.fromDate)} onChange={(e) => onChange({ toDate: e.target.value })} error={error} />
+      <div className="sm:col-span-2 xl:col-span-12">
+        <DateRangeFields
+          from={value.fromDate}
+          to={value.toDate}
+          onChange={({ from, to }) =>
+            onChange({
+              ...(from !== undefined ? { fromDate: from } : {}),
+              ...(to !== undefined ? { toDate: to } : {}),
+            })
+          }
+          error={error}
+        />
       </div>
 
       <div className="sm:col-span-2 xl:col-span-12">
@@ -144,7 +153,7 @@ const VlcStatus: React.FC = () => {
   const active = tiles.filter((t) => t.active).length;
 
   const submit = () => {
-    const rangeError = validateDateRange(draft.fromDate, draft.toDate);
+    const rangeError = validateDateRange(draft.fromDate, draft.toDate) ?? validatePastLimit(draft.fromDate);
     if (rangeError) {
       setError(rangeError);
       toast.show(rangeError, 'warn');

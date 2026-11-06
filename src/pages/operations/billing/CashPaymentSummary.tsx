@@ -4,6 +4,7 @@ import { Banknote, Search } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
@@ -455,7 +456,7 @@ const CashPaymentSummary: React.FC = () => {
             </div>
 
             <Field label="From Date">
-              <Input
+              <PastDateInput
                 type="date"
                 value={from}
                 max={today}
@@ -470,7 +471,7 @@ const CashPaymentSummary: React.FC = () => {
                   : undefined
               }
             >
-              <Input
+              <PastDateInput
                 type="date"
                 value={to}
                 max={today}

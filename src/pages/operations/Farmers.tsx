@@ -9,6 +9,7 @@ import { Button } from '../../components/operations/ui/Button';
 import { Badge } from '../../components/operations/ui/Badge';
 import { Drawer } from '../../components/operations/ui/Modal';
 import { Field, Input, Select } from '../../components/operations/ui/Fields';
+import { PastDateInput } from '../../components/operations/ui/PastDateInput';
 import { DataTable, type Column } from '../../components/operations/ui/DataTable';
 import { PageHeader } from '../../components/operations/ui/PageHeader';
 import { KindChip, KindDot } from '../../components/operations/KindChip';
@@ -55,7 +56,7 @@ const Farmers: React.FC = () => {
   const ids = applied ? [applied.vlcc] : [];
   const key = applied ? `farmerspage:${applied.from}:${applied.to}:${applied.shift}:${applied.milk}:${ids.join(',')}` : null;
   const samplesQ = useQuery<RawFarmerRow>(key, (emit) =>
-    fetchFarmerCollection({ from: applied!.from, to: applied!.to, shift: applied!.shift, milk: applied!.milk, vlccIds: ids, priority: 0 }, emit));
+    fetchFarmerCollection({ from: applied!.from, to: applied!.to, shift: applied!.shift, milk: applied!.milk, vlccIds: ids, priority: 0 }, emit), { hideOldWhileLoading: true });
   const samples = useMemo(() => mapFarmers(samplesQ.rows), [samplesQ.rows]);
   const master = useFarmerMaster(applied !== null);
   const end = applied?.to ?? today;
@@ -139,8 +140,8 @@ const Farmers: React.FC = () => {
           <Field label={GLOBALLABELS.milkType}><Select value={milk} onChange={(e) => setMilk(e.target.value as MilkCode)}>{GLOBALSMILK.milkOptions.map((m) => <option key={m.Id} value={m.Id}>{m.Name}</option>)}</Select></Field>
           <Field label={GLOBALLABELS.shift}><Select value={shift} onChange={(e) => setShift(e.target.value as ShiftCode)}>{GLOBALSSHIFT.shiftOptions.map((m) => <option key={m.Id} value={m.Id}>{m.Name}</option>)}</Select></Field>
           <Field label="Show"><Select value={show} onChange={(e) => setShow(e.target.value as Show)}><option value="poured">Farmers who poured milk</option><option value="all">All registered farmers</option><option value="nomilk">Active, no milk</option><option value="inactive">Inactive</option></Select></Field>
-          <Field label={GLOBALLABELS.fromDate}><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
-          <Field label={GLOBALLABELS.toDate}><Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
+          <Field label={GLOBALLABELS.fromDate}><PastDateInput type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
+          <Field label={GLOBALLABELS.toDate}><PastDateInput type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
           <SubmitButton className="sm:col-span-2" onClick={submit} loading={fetching && samplesQ.rows.length === 0} disabled={!vlcc || !from || !to} />
         </div>
       </Card>

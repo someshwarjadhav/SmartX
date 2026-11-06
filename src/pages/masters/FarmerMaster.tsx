@@ -14,6 +14,7 @@ import { Checkbox } from '../../components/ui/Checkbox';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { DropZone } from '../../components/ui/DropZone';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ReportLoader } from '../../components/ui/ReportLoader';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { SelectField, TextField } from '../../components/ui/Fields';
 import { FormSection } from '../../components/ui/FormSection';
@@ -310,11 +311,12 @@ interface ListProps {
   onUpdateStatus: () => void;
   exportActions: ExportAction[];
   centreOptions: { value: string; label: string }[];
+  loading?: boolean;
 }
 
 const dash = (v: string): string => v || '—';
 
-const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onSelected, onEdit, onUpdateStatus, exportActions, centreOptions }) => {
+const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onSelected, onEdit, onUpdateStatus, exportActions, centreOptions, loading = false }) => {
   const pager = usePagination(rows);
   const pageKeys = useMemo(() => pager.visible.map(farmerKey), [pager.visible]);
   const checkedOnPage = pageKeys.filter((k) => selected.has(k)).length;
@@ -395,7 +397,7 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
         }
         actions={
           <>
-            <ExportBar actions={exportActions} disabled={rows.length === 0} />
+            <ExportBar actions={exportActions} disabled={loading || rows.length === 0} />
             <Button size="sm" variant="success" icon={<RefreshCw size={15} aria-hidden />} disabled={changedCount === 0} onClick={onUpdateStatus}>
               Update Status{changedCount > 0 ? ` (${changedCount})` : ''}
             </Button>
@@ -403,13 +405,15 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
         }
       />
 
-      {rows.length === 0 ? (
+      {loading ? (
+        <ReportLoader label="Loading farmers…" />
+      ) : rows.length === 0 ? (
         <EmptyState icon={UsersRound} title="No farmers found" text="Add a farmer using the form above or import an Excel file." />
       ) : (
         <DataTable columns={columns} rows={pager.visible} rowKey={farmerKey} ariaLabel="Farmer master" minWidth={980} isSelected={(r) => selected.has(farmerKey(r))} />
       )}
 
-      {rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} />}
+      {!loading && rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} />}
     </Panel>
   );
 };
@@ -565,7 +569,6 @@ const FarmerMaster: React.FC = () => {
         </div>
       </div>
 
-      {loading && <div role="status" className="rounded-xl border border-line bg-panel px-4 py-3 text-sm text-mute">Loading farmers…</div>}
       <FarmerList
         rows={rows}
         centre={centre}
@@ -576,6 +579,7 @@ const FarmerMaster: React.FC = () => {
         onUpdateStatus={updateStatus}
         exportActions={[exportAction]}
         centreOptions={centreOptions}
+        loading={loading}
       />
 
       <Toast message={toast.message} onClose={toast.close} />

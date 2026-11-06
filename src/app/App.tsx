@@ -4,7 +4,7 @@ import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLoginData } from '../hooks/useSessionData';
 import { isRouteAllowed, useNav } from '../components/layout/operations/nav';
-import { applySession, isSessionDataLoaded, loadSessionData, refreshMenu } from '../services/bootstrap';
+import { applySession, ensureMenu, isSessionDataLoaded, loadSessionData } from '../services/bootstrap';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { PageLoader } from '../components/ui/PageLoader';
 
@@ -18,6 +18,7 @@ const UnionwiseCollection = lazy(() => import('../pages/collection/UnionwiseColl
 const VlccCollectionReport = lazy(() => import('../pages/collection/VlccCollectionReport'));
 const VlcStatus = lazy(() => import('../pages/collection/VlcStatus'));
 const VarianceReport = lazy(() => import('../pages/collection/VarianceReport'));
+const CdaReport = lazy(() => import('../pages/collection/CdaReport'));
 const FarmerMaster = lazy(() => import('../pages/masters/FarmerMaster'));
 const Contact = lazy(() => import('../pages/contact/Contact'));
 const NotFound = lazy(() => import('../pages/system/NotFound'));
@@ -68,6 +69,7 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/reports/unionwise': UnionwiseCollection,
   '/reports/vlc-status': VlcStatus,
   '/reports/variance': VarianceReport,
+  '/reports/cda': CdaReport,
   '/reports/cleaning': CleaningReport,
   '/reports/eko-calibration': EkoCalibration,
   '/reports/eko-correction': EkoCorrection,
@@ -126,7 +128,7 @@ const SessionGate: React.FC = () => {
     }
     if (isSessionDataLoaded()) {
       setReady(true);
-      if (profile.userId) void refreshMenu(profile.userId);
+      if (profile.userId) void ensureMenu(profile.userId);
       return;
     }
     started.current ??= loadSessionData(profile).then(() => applySession(profile));

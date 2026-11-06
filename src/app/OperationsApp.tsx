@@ -10,7 +10,7 @@ import {
   applySession,
   isSessionDataLoaded,
   loadSessionData,
-  refreshMenu,
+  ensureMenu,
 } from "../services/bootstrap";
 
 const Login = lazy(() => import("../pages/operations/Login"));
@@ -83,7 +83,7 @@ const SessionGate: React.FC = () => {
     }
     if (isSessionDataLoaded()) {
       setReady(true);
-      if (profile.userId) void refreshMenu(profile.userId);
+      if (profile.userId) void ensureMenu(profile.userId); // no network when the login menu is saved
       return;
     }
 
@@ -103,7 +103,7 @@ const SessionGate: React.FC = () => {
   return ready ? <Outlet /> : <PageLoader />;
 };
 
-// Har page ka guard: route sidebar (getMenu API) mein ho tabhi khulega, warna NotFound.
+
 const RouteGate: React.FC = () => {
   const { pathname } = useLocation();
   const sections = useNav();

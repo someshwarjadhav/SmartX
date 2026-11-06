@@ -312,7 +312,7 @@ const ReceiptVoucher: React.FC = () => {
         {!loading && rows.length === 0 ? (
           <EmptyState icon={ReceiptText} title="No receipt vouchers" text="Receipts saved for this centre and date will appear here." />
         ) : (
-          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.key} ariaLabel="Receipt vouchers" minWidth={720} loading={loading && rows.length === 0} />
+          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.key} ariaLabel="Receipt vouchers" minWidth={720} loading={loading} />
         )}
         {rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />}
       </Panel>

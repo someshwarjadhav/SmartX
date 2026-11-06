@@ -5,6 +5,7 @@ import { Building2, ListChecks, RotateCcw, Search } from 'lucide-react';
 import { Card, CardHeader } from '../../../components/operations/ui/Card';
 import { Button } from '../../../components/operations/ui/Button';
 import { Field, Input } from '../../../components/operations/ui/Fields';
+import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { DataTable, type Column } from '../../../components/operations/ui/DataTable';
 import { StatCard } from '../../../components/operations/ui/StatCard';
 import { QueryBoundary } from '../../../components/operations/Widget';
@@ -75,6 +76,7 @@ const PortalReportPage: React.FC<Props> = ({ title, subtitle, endpoint, slug, no
   const key = applied ? `${slug}:${applied.from}:${applied.to}:${applied.shift}:${applied.scope}` : null;
   const q = useQuery<PortalRow>(key, (emit) =>
     fetchPortalReport(endpoint, { from: applied!.from, to: applied!.to, shift: applied!.shift, vlccIds: ids }, emit),
+    { hideOldWhileLoading: true },
   );
 
 
@@ -177,8 +179,8 @@ const PortalReportPage: React.FC<Props> = ({ title, subtitle, endpoint, slug, no
             />
             {withDates && (
               <>
-                <Field label={GLOBALLABELS.fromDate} className="lg:col-span-2"><Input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
-                <Field label={GLOBALLABELS.toDate} className="lg:col-span-2"><Input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
+                <Field label={GLOBALLABELS.fromDate} className="lg:col-span-2"><PastDateInput type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></Field>
+                <Field label={GLOBALLABELS.toDate} className="lg:col-span-2"><PastDateInput type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></Field>
               </>
             )}
             <SubmitButton
