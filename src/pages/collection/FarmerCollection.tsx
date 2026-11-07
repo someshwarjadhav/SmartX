@@ -2,7 +2,8 @@ import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Users } from 'lucide-react';
 import type { CollectionEntry } from '../../data/farmerCollection';
-import { useMilkFarmerEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
+import { useMilkFarmerEntries, useMilkCenterOptions, useReportScope, centreIdsFor, apiMilk, apiShift } from '../../hooks/useMilkReportData';
+import { useWarmCentres } from '../../hooks/useWarmCentres';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
@@ -30,6 +31,7 @@ import { DateRangeFields } from '../../components/ui/DateRangeFields';
 import { Segmented } from '../../components/ui/Segmented';
 import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
 import { MSG } from '../../lib/messages';
+import { exportBansiAllExcel, isBansiAll } from '../../lib/bansiExcel';
 
 /* ---------- Filter card ---------- */
 
@@ -273,9 +275,13 @@ const FarmerCollection: React.FC = () => {
   const [draft, setDraft] = useState<CollectionFilters>(defaults);
   const [applied, setApplied] = useState<CollectionFilters>(defaults);
   const [submitted, setSubmitted] = useState(false);
-  // dropdowns: only real plants / centres, first one selected by default (no "All")
-  const scope = useReportScope(centres, draft.plant, draft.centre);
-  const live = useMilkFarmerEntries({ from: applied.from, to: applied.to, shift: applied.shift, milk: applied.kind, vlccId: applied.centre || 'all' }, submitted && !!applied.centre);
+  // dropdowns: real plants / centres plus an "All" row; the first real plant and centre are selected by default
+  const scope = useReportScope(centres, draft.plant, draft.centre, true);
+  const allCentres = applied.centre === 'all';
+  const askIds = useMemo(() => centreIdsFor(centres, applied.plant, applied.centre), [centres, applied.plant, applied.centre]);
+  const live = useMilkFarmerEntries({ from: applied.from, to: applied.to, shift: applied.shift, milk: applied.kind, vlccId: applied.centre || 'all', vlccIds: allCentres ? askIds : undefined }, submitted && !!applied.centre);
+  // the other centres of this plant are loaded quietly after the report is on screen, so changing the VLC name is instant
+  useWarmCentres({ ready: submitted && !!applied.centre && !allCentres && !live.fetching && !live.error && live.failed === 0, ids: centres.filter((c) => c.mccId === applied.plant && c.id !== applied.centre).map((c) => c.id), kind: 'farmer', from: applied.from, to: applied.to, shift: apiShift(applied.shift), milk: apiMilk(applied.kind) });
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
   const fetching = live.fetching;
@@ -287,8 +293,8 @@ const FarmerCollection: React.FC = () => {
   const shownKeys = useMemo(() => new Set(columns.map((c) => c.key)), [columns]);
 
   const rows = useMemo(() => live.rows.filter((r) =>
-    (!applied.plant || r.plant === applied.plant) &&
-    (!applied.centre || r.stationId === applied.centre) &&
+    (!applied.plant || applied.plant === 'all' || r.plant === applied.plant) &&
+    (!applied.centre || applied.centre === 'all' || r.stationId === applied.centre) &&
     (applied.kind === 'both' || r.kind === applied.kind) &&
     (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.from && r.date <= applied.to
   ), [live.rows, applied]);
@@ -328,8 +334,8 @@ const FarmerCollection: React.FC = () => {
     pager.reset();
   };
 
-  const plantName = centres.find((c) => c.mccId === applied.plant)?.plantName ?? '';
-  const centreName = centres.find((c) => c.id === applied.centre)?.label ?? '';
+  const plantName = applied.plant === 'all' ? 'All' : centres.find((c) => c.mccId === applied.plant)?.plantName ?? '';
+  const centreName = applied.centre === 'all' ? 'All' : centres.find((c) => c.id === applied.centre)?.label ?? '';
 
   /** PDF / CSV / Print: the columns shown in the table (follows userReportConfig). */
   const buildTable = (): ExportTable => {
@@ -351,17 +357,34 @@ const FarmerCollection: React.FC = () => {
   };
 
   // Old Excel = farmercollection.xlsx layout, New Excel = Station Id first layout (all 22 columns, Total row with SUM formulas)
-  const actions: ExportAction[] = reportActions({
+  const baseActions: ExportAction[] = reportActions({
     build: buildTable,
     count: rows.length,
     unit: 'entries',
     toast: toast.show,
     stiplExcel: {
-      // Old Excel = the portal's farmercollection.xlsx (same columns, same file name, Total row at the end)
-      old: () => sheetTable(NEW_ORDER, rows, 'farmercollection', 'num2'),
-      new: () => sheetTable(OLD_ORDER, rows, applied.centre || 'farmer-collection', 'num2'),
+      // Old Excel = the portal's farmercollection.xlsx (same columns, Total row at the end); the file name carries the dates
+      old: () => sheetTable(NEW_ORDER, rows, `farmercollection-${applied.from}-${applied.to}`, 'num2'),
+      new: () => sheetTable(OLD_ORDER, rows, `${applied.centre || 'farmer-collection'}-${applied.from}-${applied.to}`, 'num2'),
     },
   });
+  // Bansi login (user id 307) + VLC "All": New Excel Export gives the centre-wise "All" sheet. Everything else (and Old Excel Export) is unchanged.
+  const centreNames = new Map(centres.map((c) => [c.id, c.name || c.id]));
+  const actions: ExportAction[] = baseActions.map((a) =>
+    a.id === 'excel' && isBansiAll(applied.centre)
+      ? {
+          ...a,
+          run: async () => {
+            try {
+              await exportBansiAllExcel(rows, applied.from, applied.to, (id) => centreNames.get(id) ?? '');
+              toast.show(`Exported ${rows.length} entries as New Excel`, 'ok');
+            } catch {
+              toast.show(MSG.exportFailed, 'error');
+            }
+          },
+        }
+      : a,
+  );
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -396,7 +419,7 @@ const FarmerCollection: React.FC = () => {
         />
 
         {loading ? (
-          <ReportLoader label="Loading farmer collection…" />
+          <ReportLoader label="Loading farmer collection…" done={live.done} total={live.total} />
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range, shift or milk type." />
         ) : (

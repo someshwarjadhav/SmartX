@@ -191,7 +191,7 @@ const UnionwiseCollection: React.FC = () => {
         />
 
         {loading ? (
-          <ReportLoader label="Loading unionwise collection…" />
+          <ReportLoader label="Loading unionwise collection…" done={live.done} total={live.total} />
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range." />
         ) : (

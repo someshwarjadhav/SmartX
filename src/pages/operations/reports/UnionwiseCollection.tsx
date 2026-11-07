@@ -141,9 +141,9 @@ const UnionwiseCollection: React.FC = () => {
           {!submitted ? (
             <p className="px-6 py-8 text-center text-sm text-mute">Choose the dates and press Submit to load the collection.</p>
           ) : loading ? (
-            <MilkLoader label="Loading unionwise collection…" />
+            <MilkLoader label="Loading unionwise collection…" done={q.done} total={q.total} />
           ) : (
-            <QueryBoundary q={q} skeleton={<MilkLoader label="Loading unionwise collection…" />} emptyTitle="No record for these dates" emptyHint="The portal says there is no collection between these dates.">
+            <QueryBoundary q={q} skeleton={<MilkLoader label="Loading unionwise collection…" done={q.done} total={q.total} />} emptyTitle="No record for these dates" emptyHint="The portal says there is no collection between these dates.">
               <DataTable columns={cols} rows={data} rowKey={(r) => r.key} pageSize={DEFAULT_PAGE_SIZE} pageSizes={[10, 25, 50, 100, 250]} sizeLabel="Result per page" footerRow={footer} />
             </QueryBoundary>
           )}

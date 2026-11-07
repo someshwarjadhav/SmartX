@@ -1,9 +1,9 @@
 import type * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Download, FileSpreadsheet, Pencil, RefreshCw, Save, Upload, UsersRound, X } from 'lucide-react';
+import { Download, FileSpreadsheet, Pencil, RefreshCw, Save, ShieldCheck, ShieldOff, Upload, UsersRound, X } from 'lucide-react';
 import { farmerKey, nextFarmerCode, type FarmerRecord } from '../../data/farmerMaster';
-import { getData, postData, postExcel, updateFarmerStatus } from '../../services/master/farmerMaster.api.ts';
+import { getData, isRememberedVerified, postData, postExcel, updateFarmerFlag, updateFarmerStatus } from '../../services/master/farmerMaster.api.ts';
 import type { FarmerInput } from '../../services/master/farmerMaster.rules.ts';
 import { useMilkCenterOptions } from '../../hooks/useMilkReportData';
 import { AnimatedNumber } from '../../components/ui/AnimatedNumber';
@@ -22,6 +22,7 @@ import { IconButton } from '../../components/ui/IconButton';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Pagination } from '../../components/ui/Pagination';
 import { Panel } from '../../components/ui/Panel';
+import { Segmented } from '../../components/ui/Segmented';
 import { Select } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
 import { TableToolbar } from '../../components/ui/TableToolbar';
@@ -301,6 +302,8 @@ const FarmerImport: React.FC<ImportProps> = ({ onImport, validCentreIds }) => {
 
 
 
+type VerifyTab = 'all' | 'verified' | 'unverified';
+
 interface ListProps {
   rows: FarmerRecord[];
   centre: string;
@@ -312,11 +315,16 @@ interface ListProps {
   exportActions: ExportAction[];
   centreOptions: { value: string; label: string }[];
   loading?: boolean;
+  tab: VerifyTab;
+  onTab: (tab: VerifyTab) => void;
+  counts: { all: number; verified: number; unverified: number };
+  busyKeys: Set<string>;
+  onVerify: (record: FarmerRecord, verified: boolean) => void;
 }
 
 const dash = (v: string): string => v || '—';
 
-const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onSelected, onEdit, onUpdateStatus, exportActions, centreOptions, loading = false }) => {
+const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onSelected, onEdit, onUpdateStatus, exportActions, centreOptions, loading = false, tab, onTab, counts, busyKeys, onVerify }) => {
   const pager = usePagination(rows);
   const pageKeys = useMemo(() => pager.visible.map(farmerKey), [pager.visible]);
   const checkedOnPage = pageKeys.filter((k) => selected.has(k)).length;
@@ -363,6 +371,15 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
       ),
     },
     {
+      key: 'verified',
+      header: 'Verification',
+      cell: (r) => (
+        <Badge tone={r.verified ? 'brand' : 'warn'} dot>
+          {r.verified ? 'Verified' : 'Unverified'}
+        </Badge>
+      ),
+    },
+    {
       key: 'action',
       header: (
         <div className="flex flex-col items-center gap-1">
@@ -376,6 +393,31 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
         <span className="inline-flex items-center justify-center gap-2">
           <IconButton icon={Pencil} label={`Edit ${r.name}`} onClick={() => onEdit(r)} />
           <Checkbox aria-label={`Select ${r.name}`} checked={selected.has(farmerKey(r))} onChange={(e) => toggle(farmerKey(r), e.target.checked)} />
+          {r.verified ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="!h-8 border-danger/60 !px-3 text-danger hover:!border-danger"
+              icon={<ShieldOff size={14} aria-hidden />}
+              loading={busyKeys.has(farmerKey(r))}
+              onClick={() => onVerify(r, false)}
+              aria-label={`Unverify ${r.name}`}
+            >
+              Unverify
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="success"
+              className="!h-8 !px-3"
+              icon={<ShieldCheck size={14} aria-hidden />}
+              loading={busyKeys.has(farmerKey(r))}
+              onClick={() => onVerify(r, true)}
+              aria-label={`Verify ${r.name}`}
+            >
+              Verify
+            </Button>
+          )}
         </span>
       ),
     },
@@ -405,10 +447,25 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
         }
       />
 
+      {!loading && (
+        <div className="flex justify-end border-b border-line px-4 py-3 sm:px-5">
+          <Segmented<VerifyTab>
+            label="Verification filter"
+            value={tab}
+            onChange={onTab}
+            options={[
+              { value: 'all', label: `All (${nf(counts.all)})` },
+              { value: 'verified', label: `Verified (${nf(counts.verified)})` },
+              { value: 'unverified', label: `Unverified (${nf(counts.unverified)})` },
+            ]}
+          />
+        </div>
+      )}
+
       {loading ? (
         <ReportLoader label="Loading farmers…" />
       ) : rows.length === 0 ? (
-        <EmptyState icon={UsersRound} title="No farmers found" text="Add a farmer using the form above or import an Excel file." />
+        <EmptyState icon={UsersRound} title={tab === 'all' ? 'No farmers found' : tab === 'verified' ? 'No verified farmers' : 'No unverified farmers'} text={tab === 'all' ? 'Add a farmer using the form above or import an Excel file.' : 'Change the filter above to see other farmers.'} />
       ) : (
         <DataTable columns={columns} rows={pager.visible} rowKey={farmerKey} ariaLabel="Farmer master" minWidth={980} isSelected={(r) => selected.has(farmerKey(r))} />
       )}
@@ -431,6 +488,8 @@ const FarmerMaster: React.FC = () => {
   const [centre, setCentre] = useState('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<VerifyTab>('all');
+  const [busyKeys, setBusyKeys] = useState<Set<string>>(new Set());
   const toast = useToast();
 
 
@@ -439,7 +498,7 @@ const FarmerMaster: React.FC = () => {
     if (!silent) setLoading(true);
     try {
       const data = await getData(ids);
-      const list: FarmerRecord[] = data.map((r) => ({ vlcId: r.vlccid, farmerId: Number(r.farmerId) || 0, name: r.name, bankHolder: r.nameInBank, address: r.address, mobile: r.mobile, bankName: r.bank, ifsc: r.ifsc, accountNo: r.account, aadhaar: r.aadhaar, active: r.active }));
+      const list: FarmerRecord[] = data.map((r) => ({ vlcId: r.vlccid, farmerId: Number(r.farmerId) || 0, name: r.name, bankHolder: r.nameInBank, address: r.address, mobile: r.mobile, bankName: r.bank, ifsc: r.ifsc, accountNo: r.account, aadhaar: r.aadhaar, active: r.active, verified: r.verified ?? isRememberedVerified(r.vlccid, r.farmerId) }));
       setFarmers(list);
     
       setSelected(new Set(list.filter((f) => f.active).map(farmerKey)));
@@ -453,7 +512,12 @@ const FarmerMaster: React.FC = () => {
   };
   useEffect(() => { void refreshRecords(); }, [idsKey]);
 
-  const rows = useMemo(() => farmers.filter((f) => centre === 'all' || f.vlcId === centre), [farmers, centre]);
+  const centreRows = useMemo(() => farmers.filter((f) => centre === 'all' || f.vlcId === centre), [farmers, centre]);
+  const counts = useMemo(() => {
+    const verified = centreRows.filter((f) => f.verified).length;
+    return { all: centreRows.length, verified, unverified: centreRows.length - verified };
+  }, [centreRows]);
+  const rows = useMemo(() => centreRows.filter((f) => tab === 'all' || (tab === 'verified') === Boolean(f.verified)), [centreRows, tab]);
 
   const resetForm = () => {
     setEditing(null);
@@ -488,7 +552,7 @@ const FarmerMaster: React.FC = () => {
         console.warn('[FarmerMaster] The server reported an error, but the farmer is stored:', serverNote);
       }
       
-      setFarmers((prev) => (prev.some((f) => farmerKey(f) === farmerKey(record)) ? prev.map((f) => (farmerKey(f) === farmerKey(record) ? record : f)) : [...prev, record]));
+      setFarmers((prev) => (prev.some((f) => farmerKey(f) === farmerKey(record)) ? prev.map((f) => (farmerKey(f) === farmerKey(record) ? { ...record, verified: f.verified } : f)) : [...prev, { ...record, verified: false }]));
       setSelected((prev) => {
         const next = new Set(prev);
         if (record.active) next.add(farmerKey(record));
@@ -527,6 +591,24 @@ const FarmerMaster: React.FC = () => {
     catch (e) { toast.show(e instanceof Error ? e.message : 'Could not update status'); }
   };
 
+  const verifyingNow = useRef(new Set<string>());
+  const setVerify = async (record: FarmerRecord, verified: boolean) => {
+    const key = farmerKey(record);
+    if (verifyingNow.current.has(key)) return;
+    verifyingNow.current.add(key);
+    setBusyKeys(new Set(verifyingNow.current));
+    try {
+      await updateFarmerFlag(record.vlcId, record.farmerId, verified);
+      setFarmers((prev) => prev.map((f) => (farmerKey(f) === key ? { ...f, verified } : f)));
+      toast.show(`${record.name} ${verified ? 'verified' : 'unverified'}`);
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : `Could not ${verified ? 'verify' : 'unverify'} ${record.name}`, 'error');
+    } finally {
+      verifyingNow.current.delete(key);
+      setBusyKeys(new Set(verifyingNow.current));
+    }
+  };
+
   const changeCentre = (id: string) => {
     setCentre(id);
   };
@@ -537,9 +619,9 @@ const FarmerMaster: React.FC = () => {
     subtitle: `${rows.length} farmers`,
     columns: [
       { header: 'Vlccid' }, { header: 'Farmer Id', type: 'int' }, { header: 'Farmer Name' }, { header: 'Mobile No' }, { header: 'Bank Name' },
-      { header: 'Account No' }, { header: 'IFSC' }, { header: 'Aadhaar No' }, { header: 'Address' }, { header: 'Status' },
+      { header: 'Account No' }, { header: 'IFSC' }, { header: 'Aadhaar No' }, { header: 'Address' }, { header: 'Status' }, { header: 'Verification' },
     ],
-    rows: rows.map((r) => [r.vlcId, r.farmerId, r.name, r.mobile, r.bankName, r.accountNo, r.ifsc, r.aadhaar, r.address, r.active ? 'Active' : 'Inactive']),
+    rows: rows.map((r) => [r.vlcId, r.farmerId, r.name, r.mobile, r.bankName, r.accountNo, r.ifsc, r.aadhaar, r.address, r.active ? 'Active' : 'Inactive', r.verified ? 'Verified' : 'Unverified']),
   });
 
   const exportAction: ExportAction = {
@@ -564,7 +646,7 @@ const FarmerMaster: React.FC = () => {
       <div className="grid items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <FarmerForm key={formKey} farmers={farmers} editing={editing} onSubmit={save} onCancel={resetForm} centreOptions={centreOptions} />
         <div className="space-y-4 sm:space-y-5 xl:sticky xl:top-20">
-          <FarmerSummary rows={rows} />
+          <FarmerSummary rows={centreRows} />
           <FarmerImport onImport={importRecords} validCentreIds={ids} />
         </div>
       </div>
@@ -580,6 +662,11 @@ const FarmerMaster: React.FC = () => {
         exportActions={[exportAction]}
         centreOptions={centreOptions}
         loading={loading}
+        tab={tab}
+        onTab={setTab}
+        counts={counts}
+        busyKeys={busyKeys}
+        onVerify={setVerify}
       />
 
       <Toast message={toast.message} onClose={toast.close} />

@@ -18,6 +18,7 @@ import { DEFAULT_PAGE_SIZE, GLOBALLABELS } from "../../../lib/portal/global";
 import { nf, todayISO } from "../../../lib/portal/format";
 import { cn } from "../../../lib/portal/cn";
 import { exportCSV, exportExcel, exportPDF, type ExportCol } from "../../../lib/portal/export";
+import { exportBansiPaymentExcel, isBansiUser } from "../../../lib/bansiPaymentExcel";
 import {
   getPaymentSummary,
   PAY_TYPES,
@@ -130,6 +131,38 @@ const BankPaymentSummary: React.FC = () => {
       exportCSV(name, cols, rows);
       toast("CSV file downloaded");
     } else if (kind === "xls") {
+      if (isBansiUser()) {
+        // Bansi login: same sheet layout as the Bansi "All" collection Excel (VSP Name rows, centre totals, Total :)
+        exportBansiPaymentExcel<PayRow>({
+          rows,
+          from: applied.from,
+          to: applied.to,
+          fileLabel: "Bank Payment Summary",
+          centreOf: (r) => r.vlcId,
+          idOf: (r) => r.id,
+          nameOf: (r) => r.name,
+          centreLabel: labelOf,
+          texts: [
+            { header: "Bank Name", value: (r) => r.bankName },
+            { header: "Account No", value: (r) => r.accountNo },
+            { header: "IFSC", value: (r) => r.ifsc },
+          ],
+          cols: [
+            { header: "Total Qty", agg: "sum", dec: 2, value: (r) => r.totalQty },
+            { header: "Avg Fat", agg: "wavg", dec: 1, value: (r) => r.avgFat },
+            { header: "Avg Snf", agg: "wavg", dec: 1, value: (r) => r.avgSnf },
+            { header: "Avg Rate", agg: "wavg", dec: 2, value: (r) => r.avgRate },
+            { header: "Total Amount", agg: "sum", dec: 2, value: (r) => r.totalAmount },
+            { header: "Total Incentive", agg: "sum", dec: 2, value: (r) => r.totalIncentive },
+            { header: "Deduction Amount", agg: "sum", dec: 2, value: (r) => r.deduction },
+            { header: "Payable Amount", agg: "sum", dec: 2, value: (r) => r.payable },
+          ],
+          weightIndex: 0,
+        })
+          .then(() => toast("XLS file downloaded"))
+          .catch(() => toast("The Excel file could not be created", "error"));
+        return;
+      }
       exportExcel(name, cols, rows);
       toast("XLS file downloaded");
     } else {

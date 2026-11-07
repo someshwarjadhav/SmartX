@@ -139,17 +139,17 @@ const VlcStatus: React.FC = () => {
   const centres = useMilkCenterOptions();
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
-  const scope = useReportScope(centres, draft.plant, '');
+  const scope = useReportScope(centres, draft.plant, '', true);
   const plantOptions = scope.plantOptions;
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
   // only the centres of the chosen plant are asked (faster than loading every plant)
-  const plantIds = useMemo(() => centres.filter((c) => c.mccId === applied.plant).map((c) => c.id), [centres, applied.plant]);
+  const plantIds = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => c.id), [centres, applied.plant]);
   const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both', vlccIds: plantIds }, submitted && plantIds.length > 0);
   // tiles say "inactive" for a centre that has not answered yet, so this page waits for every centre before it draws them
   const loading = live.fetching;
-  const tiles = useMemo(() => centres.filter((c) => c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.id, name:c.name || c.id, active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
+  const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.id, name:c.name || c.id, active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
   const active = tiles.filter((t) => t.active).length;
 
   const submit = () => {
@@ -191,7 +191,7 @@ const VlcStatus: React.FC = () => {
         {!submitted ? (
           <EmptyState icon={SlidersHorizontal} title="Set your filters first" text="Choose the options above and press Submit to load the data." />
         ) : loading ? (
-          <ReportLoader label="Loading VLC status…" />
+          <ReportLoader label="Loading VLC status…" done={live.done} total={live.total} />
         ) : tiles.length === 0 ? (
           <EmptyState icon={WifiOff} title="No VLC found" text="This plant has no VLC yet." />
         ) : (

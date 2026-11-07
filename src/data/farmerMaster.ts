@@ -13,6 +13,8 @@ export interface FarmerRecord {
   accountNo: string;
   aadhaar: string;
   active: boolean;
+  /** Verified by the dairy (the portal's Verify / Unverify button). Missing = not verified. */
+  verified?: boolean;
 }
 
 export const farmerKey = (f: Pick<FarmerRecord, 'vlcId' | 'farmerId'>): string => `${f.vlcId}:${f.farmerId}`;

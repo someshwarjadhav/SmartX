@@ -11,6 +11,7 @@ import { isObj, pickLike, rowsFrom } from "../utils/loose";
 import { pickLoose } from "../farmer/farmerBook";
 import type { RawLoose } from "../types/raw";
 import type { FarmerInput } from "./farmerMaster.rules.ts";
+import { sendPath } from "../account/voucher.http";
 
 // DPU API: https://dpu.shivinfotech.co.in/api/Login/<endpoint>
 //   POST   FarmerMaster          list of farmers of the given villages
@@ -58,6 +59,8 @@ export function unwrapReply(reply: unknown): unknown {
 
 export interface MasterRecord extends FarmerInput {
   key: string;
+  /** Verify flag sent by the server (true / false). null = the server did not send one. */
+  verified: boolean | null;
 }
 
 const VLC_KEYS = ["vlccid", "villageid", "vlcid", "vlccode", "centerid"];
@@ -74,6 +77,35 @@ function mobileOf(r: RawLoose): string {
   if (exact) return PHONE.test(exact) ? exact : "";
   const loose = pickLike(r, ["mobile", "contact"]);
   return PHONE.test(loose) ? loose : "";
+}
+
+// The names a verify flag can come under in the farmer list. farmerstatus / status are NOT here: they mean Active / Inactive.
+const VERIFY_KEYS = [
+  "farmerflag",
+  "verifyflag",
+  "verifiedflag",
+  "isverified",
+  "verified",
+  "verifystatus",
+  "verificationstatus",
+  "farmerverify",
+  "farmerverified",
+  "verify",
+  "flag",
+];
+
+function verifiedOf(r: RawLoose): boolean | null {
+  const keys = Object.keys(r);
+  for (const want of VERIFY_KEYS) {
+    const k = keys.find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === want);
+    if (k === undefined) continue;
+    const v = r[k];
+    if (v === null || v === undefined || String(v).trim() === "") continue;
+    const t = String(v).trim().toLowerCase();
+    if ([ "1", "true", "yes", "y", "verified" ].includes(t)) return true;
+    if ([ "0", "false", "no", "n", "unverified", "not verified" ].includes(t)) return false;
+  }
+  return null;
 }
 
 export function mapRecord(r: RawLoose, vlccid: string, i = 0): MasterRecord {
@@ -121,6 +153,7 @@ export function mapRecord(r: RawLoose, vlccid: string, i = 0): MasterRecord {
       pickLoose(r, ["farmeraadhaar", "aadhaar", "aadhaarno", "aadharno"]) ||
       pickLike(r, ["aadhaar", "aadhar"]),
     active: !["false", "0", "inactive", "n", "no"].includes(status),
+    verified: verifiedOf(r),
   };
 }
 
@@ -160,7 +193,44 @@ export async function getData(
     );
     out = parts.flat();
   }
-  return out.map(({ r, v }, i) => mapRecord(r, v, i)).filter((m) => m.farmerId);
+  const mapped = out.map(({ r, v }, i) => mapRecord(r, v, i)).filter((m) => m.farmerId);
+  if (mapped.length && mapped.every((m) => m.verified === null)) {
+    console.info(
+      "[FarmerMaster] The farmer list has no verify flag field, so Verified / Unverified is remembered in this browser. Fields in a row:",
+      Object.keys(out[0]?.r ?? {}),
+    );
+  }
+  return mapped;
+}
+
+// Verified farmers are remembered in this browser too. It is used only when the farmer list itself carries no verify flag,
+// so a page reload does not turn every farmer back to Unverified.
+const VERIFIED_STORE = "smartx:farmerVerified";
+const storeKey = (vlccid: string, farmerId: string | number) => `${vlccid}:${Number(farmerId)}`;
+
+function readVerifiedStore(): Set<string> {
+  try {
+    const raw = localStorage.getItem(VERIFIED_STORE);
+    const list: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(list) ? list.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function isRememberedVerified(vlccid: string, farmerId: string | number): boolean {
+  return readVerifiedStore().has(storeKey(vlccid, farmerId));
+}
+
+function rememberVerified(vlccid: string, farmerId: string | number, verified: boolean): void {
+  try {
+    const set = readVerifiedStore();
+    if (verified) set.add(storeKey(vlccid, farmerId));
+    else set.delete(storeKey(vlccid, farmerId));
+    localStorage.setItem(VERIFIED_STORE, JSON.stringify([...set]));
+  } catch {
+    /* no localStorage: the flag still reaches the server */
+  }
 }
 
 export async function getMaxId(vlccid: string): Promise<number | null> {
@@ -362,6 +432,43 @@ export async function updateFarmerStatus(all: StatusChange[]): Promise<string> {
   }
   clearRequestMemo();
   return last;
+}
+
+// Verify / Unverify one farmer:  /dairy/dairy/updatefarmerflag?villageid=<centre>&farmerid=<code>&flag=<1|0>
+// flag = 1 -> Verify, flag = 0 -> Unverify (the dairy's backend developer gave this one API for both). The call is not
+// cached (a second Verify / Unverify of the same farmer must reach the server again). GET is what the API example uses;
+// if the server answers "method not allowed" PUT and then POST are tried, and the working one is remembered.
+export const FARMER_FLAG_PATH = "/dairy/dairy/updatefarmerflag";
+const FLAG_METHODS = ["GET", "PUT", "POST"] as const;
+let flagMethod = 0;
+
+export async function updateFarmerFlag(
+  vlccid: string,
+  farmerId: string | number,
+  verified: boolean,
+): Promise<string> {
+  const path = `${FARMER_FLAG_PATH}?villageid=${q(String(vlccid))}&farmerid=${q(String(farmerId))}&flag=${verified ? 1 : 0}`;
+  let lastError: unknown;
+  for (let n = 0; n < FLAG_METHODS.length; n++) {
+    const i = (flagMethod + n) % FLAG_METHODS.length;
+    const method = FLAG_METHODS[i]!;
+    try {
+      const text = await sendPath(path, () => ({ method }));
+      if (/^\s*\{\s*"error"\s*:/i.test(text))
+        throw new ApiError("The server could not update the verify status.", "server");
+      const message = checkReply(text, "Could not update the verify status", true);
+      flagMethod = i;
+      rememberVerified(vlccid, farmerId, verified);
+      clearRequestMemo();
+      return message;
+    } catch (e) {
+      lastError = e;
+      const wrongMethod =
+        e instanceof ApiError && e.kind === "server" && /error (404|405|415)\b/.test(e.message);
+      if (!wrongMethod) throw e;
+    }
+  }
+  throw lastError;
 }
 
 // DELETE /api/Login/DeleteFarmer?farmerid=&vlccid=
