@@ -208,7 +208,7 @@ const PortalReportPage: React.FC<Props> = ({ title, subtitle, endpoint, slug, no
           {!hasApplied ? (
             <p className="px-6 py-8 text-center text-sm text-mute">Choose the filters and press Submit to load the {title.toLowerCase()}.</p>
           ) : (
-            <QueryBoundary q={q} skeleton={<MilkLoader label={`Loading ${title.toLowerCase()}…`} />} emptyTitle="No record for these filters" emptyHint="The portal has no records for these dates and centre.">
+            <QueryBoundary q={q} skeleton={<MilkLoader label={`Loading ${title.toLowerCase()}…`} done={q.done} total={q.total} />} emptyTitle="No record for these filters" emptyHint="The portal has no records for these dates and centre.">
               {rows.length === 0 ? (
                 <p className="px-6 py-10 text-center text-sm text-mute">Nothing matches your search.</p>
               ) : (

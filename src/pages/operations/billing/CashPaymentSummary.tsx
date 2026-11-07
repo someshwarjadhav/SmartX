@@ -23,6 +23,7 @@ import {
   type ExportCol,
 } from "../../../lib/portal/export";
 import { DEFAULT_PAGE_SIZE } from "../../../lib/portal/global";
+import { exportBansiPaymentExcel, isBansiUser } from "../../../lib/bansiPaymentExcel";
 import { todayISO } from "../../../lib/portal/format";
 import {
   getCashSummary,
@@ -371,7 +372,43 @@ const CashPaymentSummary: React.FC = () => {
   const run = (kind: ExportKind) => {
     if (!applied) return;
     const name = `cash-payment-summary-${applied.from}-${applied.to}`;
-    if (kind === "xls") return exportExcel(name, exportCols, visible);
+    if (kind === "xls") {
+      if (isBansiUser()) {
+        // Bansi login: same sheet layout as the Bansi "All" collection Excel (VSP Name rows, centre totals, Total :)
+        const n = (r: Row, names: string[]) => numOf(r, names) ?? 0;
+        const vlcType = applied.type === "vlc";
+        void exportBansiPaymentExcel<Row>({
+          rows: visible,
+          from: applied.from,
+          to: applied.to,
+          fileLabel: vlcType ? "Cash Payment Summary VLC" : "Cash Payment Summary",
+          centreOf: (r) => r.station,
+          idOf: (r) => get(r, FIELDS.id),
+          nameOf: (r) => get(r, FIELDS.name),
+          centreLabel: labelOf,
+          cols: [
+            { header: "Cow Qty", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.cowQty) },
+            { header: "Buff Qty", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.buffQty) },
+            { header: "Total Qty", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.qty) },
+            { header: "Kg Fat", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.kgFat) },
+            { header: "Avg Fat", agg: "wavg", dec: 1, value: (r) => n(r, FIELDS.fat) },
+            { header: "Kg SNF", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.kgSnf) },
+            { header: "Avg SNF", agg: "wavg", dec: 1, value: (r) => n(r, FIELDS.snf) },
+            { header: "Avg Rate", agg: "wavg", dec: 2, value: (r) => n(r, FIELDS.rate) },
+            { header: "Total Amount", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.amount) },
+            { header: "Incentive", agg: "sum", dec: 2, value: (r) => partsOf(r, FIELDS.incentive) ?? 0 },
+            { header: "Transport", agg: "sum", dec: 2, value: (r) => partsOf(r, FIELDS.transport) ?? 0 },
+            { header: "Milk Deposit", agg: "sum", dec: 2, value: (r) => partsOf(r, FIELDS.deposit) ?? 0 },
+            { header: "Cattle Feed", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.cattleFeed) },
+            { header: "Advance", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.advance) },
+            { header: "Payable Amount", agg: "sum", dec: 2, value: (r) => payableOf(r) ?? 0 },
+          ],
+          weightIndex: 2,
+        }).catch(() => toast("The Excel file could not be created", "error"));
+        return;
+      }
+      return exportExcel(name, exportCols, visible);
+    }
     if (kind === "csv") return exportCSV(name, exportCols, visible);
 
     const lead = cols.findIndex((c) => c.sum);

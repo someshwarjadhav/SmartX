@@ -189,9 +189,9 @@ const VlcStatus: React.FC = () => {
             <p className="px-6 py-8 text-center text-sm text-mute">Select a centre and press Submit to check its status.</p>
           ) : <div className="p-5 sm:p-6">
             {loading ? (
-              <MilkLoader label="Checking selected centre…" />
+              <MilkLoader label="Checking selected centre…" done={q.done} total={q.total} />
             ) : (
-              <QueryBoundary q={q} skeleton={<MilkLoader label="Checking selected centre…" />} showWhenEmpty>
+              <QueryBoundary q={q} skeleton={<MilkLoader label="Checking selected centre…" done={q.done} total={q.total} />} showWhenEmpty>
                 {shown.length === 0 ? (
                   <p className="py-10 text-center text-sm text-mute">No centre matches this filter.</p>
                 ) : (

@@ -1,7 +1,7 @@
 import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { Search, SlidersHorizontal } from 'lucide-react';
-import { useMilkFarmerEntries, useMilkVlccEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
+import { useMilkFarmerEntries, useMilkVlccEntries, useMilkCenterOptions, useReportScope, centreIdsFor } from '../../hooks/useMilkReportData';
 import { GroupedTable, type GroupColumn } from '../../components/ui/GroupedTable';
 import type { Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
@@ -238,13 +238,14 @@ const VarianceReport: React.FC = () => {
   const centres = useMilkCenterOptions();
   const [draft, setDraft] = useState<Filters>(defaults);
   const [applied, setApplied] = useState<Filters>(defaults);
-  const scope = useReportScope(centres, draft.plant, draft.vlcId);
+  const scope = useReportScope(centres, draft.plant, draft.vlcId, true);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
   const on = submitted && !!applied.vlcId;
-  const vendor = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId || 'all' }, on);
-  const farmer = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId || 'all' }, on);
+  const askIds = useMemo(() => (applied.vlcId === 'all' ? centreIdsFor(centres, applied.plant, applied.vlcId) : undefined), [centres, applied.plant, applied.vlcId]);
+  const vendor = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId || 'all', vlccIds: askIds }, on);
+  const farmer = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId || 'all', vlccIds: askIds }, on);
   const fetching = vendor.fetching || farmer.fetching;
 
   const rows = useMemo(() => {
@@ -306,7 +307,7 @@ const VarianceReport: React.FC = () => {
   const buildTable = (): ExportTable => ({
     filename: `variance-report-${applied.fromDate}-${applied.toDate}`,
     title: 'Variance report',
-    subtitle: `${centres.find((c) => c.id === applied.vlcId)?.label ?? ''}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
+    subtitle: `${applied.vlcId === 'all' ? 'All' : centres.find((c) => c.id === applied.vlcId)?.label ?? ''}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
     headerGroups: HEADER_GROUPS,
     columns: [
       { header: 'VLCC Id' }, { header: 'Village Name' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Milk Type' },
@@ -353,7 +354,7 @@ const VarianceReport: React.FC = () => {
         />
 
         {loading ? (
-          <ReportLoader label="Loading variance report…" />
+          <ReportLoader label="Loading variance report…" done={vendor.done + farmer.done} total={vendor.total + farmer.total} />
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No variance found" text="No collection found for this VLC and date range." />
         ) : (

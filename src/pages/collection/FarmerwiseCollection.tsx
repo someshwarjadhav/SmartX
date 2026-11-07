@@ -2,7 +2,8 @@ import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Sun, Users } from 'lucide-react';
 import type { CollectionEntry } from '../../data/farmerCollection';
-import { useMilkFarmerEntries, useMilkCenterOptions, useReportScope, useFarmerMasterOptions, farmerKey } from '../../hooks/useMilkReportData';
+import { useMilkFarmerEntries, useMilkCenterOptions, useReportScope, useFarmerMasterOptions, centreIdsFor, farmerKey, apiMilk, apiShift } from '../../hooks/useMilkReportData';
+import { useWarmCentres } from '../../hooks/useWarmCentres';
 import { withFormulaTotals } from '../../lib/exporters';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
@@ -186,17 +187,22 @@ const FarmerwiseCollection: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const scope = useReportScope(centres, draft.plant, draft.vlcId);
+  const scope = useReportScope(centres, draft.plant, draft.vlcId, true);
+  const allVlc = applied.vlcId === 'all';
+  const askIds = useMemo(() => centreIdsFor(centres, applied.plant, applied.vlcId), [centres, applied.plant, applied.vlcId]);
   const plantOptions = scope.plantOptions;
   const centreOptions = scope.centreOptions;
-  const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId || 'all' }, submitted && !!applied.vlcId);
+  const live = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId || 'all', vlccIds: allVlc ? askIds : undefined }, submitted && !!applied.vlcId);
+  useWarmCentres({ ready: submitted && !!applied.vlcId && !allVlc && !live.fetching && !live.error && live.failed === 0, ids: centres.filter((c) => c.mccId === applied.plant && c.id !== applied.vlcId).map((c) => c.id), kind: 'farmer', from: applied.fromDate, to: applied.toDate, shift: apiShift(applied.shift), milk: apiMilk(applied.milkType) });
   const fetching = live.fetching;
   const loading = live.loading;
-  const farmerVlccIds = useMemo(() => (scope.centre ? [scope.centre] : []), [scope.centre]);
+  // the farmer list belongs to ONE VLC: with VLC = All only "All Farmers" is offered
+  const oneVlc = !!scope.centre && scope.centre !== 'all';
+  const farmerVlccIds = useMemo(() => (oneVlc ? [scope.centre] : []), [oneVlc, scope.centre]);
   const centreNames = useMemo(() => Object.fromEntries(centres.map((c) => [c.id, c.name || c.id])), [centres]);
   const { options: masterFarmers, loading: farmersLoading } = useFarmerMasterOptions(farmerVlccIds, centreNames);
   // only if the farmer master gave nobody: farmers of the chosen VLC are read from its collection
-  const pre = useMilkFarmerEntries({ from: draft.fromDate, to: draft.toDate, shift: 'both', milk: 'both', vlccId: scope.centre || 'all' }, !!scope.centre && !farmersLoading && masterFarmers.length === 0, false);
+  const pre = useMilkFarmerEntries({ from: draft.fromDate, to: draft.toDate, shift: 'both', milk: 'both', vlccId: scope.centre || 'all' }, oneVlc && !farmersLoading && masterFarmers.length === 0, false);
   const farmerOptions = useMemo(() => {
     // farmer master (id | name) first; farmers seen in the loaded collection are added if the master missed them
     const have = new Set(masterFarmers.map((o) => o.value));
@@ -210,7 +216,7 @@ const FarmerwiseCollection: React.FC = () => {
     }
     return [{ value: 'all', label: farmersLoading ? 'Loading farmers…' : 'All Farmers' }, ...masterFarmers, ...extra];
   }, [masterFarmers, farmersLoading, pre.rows, live.rows, scope.centre]);
-  const rows = useMemo(() => live.rows.filter((r) => (!applied.plant || r.plant === applied.plant) && (!applied.vlcId || r.stationId === applied.vlcId) && (applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
+  const rows = useMemo(() => live.rows.filter((r) => (!applied.plant || applied.plant === 'all' || r.plant === applied.plant) && (!applied.vlcId || allVlc || r.stationId === applied.vlcId) && (applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
 
   const pager = usePagination(rows);
 
@@ -251,7 +257,7 @@ const FarmerwiseCollection: React.FC = () => {
   const buildTable = (): ExportTable => withFormulaTotals({
     filename: `farmerwise-collection-${applied.fromDate}-${applied.toDate}`,
     title: 'Farmerwise collection',
-    subtitle: `${centres.find((c) => c.mccId === applied.plant)?.plantName ?? ''}  |  ${centres.find((c) => c.id === applied.vlcId)?.label ?? ''}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
+    subtitle: `${applied.plant === 'all' ? 'All' : centres.find((c) => c.mccId === applied.plant)?.plantName ?? ''}  |  ${allVlc ? 'All' : centres.find((c) => c.id === applied.vlcId)?.label ?? ''}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
     columns: tbl.pick([
       { header: 'Station Id' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Milk Type' }, { header: 'Farmer Id' }, { header: 'Name' },
       { header: 'Station Name' }, { header: 'Liter', type: 'dec1' }, { header: 'Kg', type: 'dec1' }, { header: 'Fat', type: 'dec1' }, { header: 'Snf', type: 'dec1' }, { header: 'Clr', type: 'dec1' }, { header: 'Rate', type: 'money' }, { header: 'Amount', type: 'money' },
@@ -295,7 +301,7 @@ const FarmerwiseCollection: React.FC = () => {
         />
 
         {loading ? (
-          <ReportLoader label="Loading farmerwise collection…" />
+          <ReportLoader label="Loading farmerwise collection…" done={live.done} total={live.total} />
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another farmer, date range, shift or milk type." />
         ) : (

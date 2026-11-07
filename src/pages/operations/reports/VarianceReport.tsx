@@ -197,7 +197,7 @@ const VarianceReport: React.FC = () => {
           {!hasAppliedCentre ? (
             <p className="px-6 py-8 text-center text-sm text-mute">Select a centre and press Submit to compare its collections.</p>
           ) : loading ? (
-            <MilkLoader label="Comparing DOC and VLC collection…" />
+            <MilkLoader label="Comparing DOC and VLC collection…" done={vq.done + fq.done} total={vq.total + fq.total} />
           ) : err ? (
             <ErrorBlock message={statError ?? 'The variance report could not be loaded.'} onRetry={retry} busy={waiting} />
           ) : (

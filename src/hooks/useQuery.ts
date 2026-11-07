@@ -2,6 +2,7 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { ApiError, isCancelled } from '../services/http/errors';
 import { FRESH_FOR_MS } from '../services/config';
 import { clearRequestMemo } from '../services/http/client';
+import { clearChunkCache } from '../services/http/chunkCache';
 import { type Emit, type QueryData } from '../services/http/fanout';
 import { getSession } from '../services/session';
 
@@ -29,6 +30,8 @@ interface Entry<R> {
   fetcher: Fetcher<R>;
   inflight: boolean;
   abort: AbortController | null;
+  /** report mode: rows are shown only once ALL requests have finished (progress counters still update meanwhile) */
+  waitForAll: boolean;
 }
 
 const store = new Map<string, Entry<unknown>>();
@@ -96,7 +99,7 @@ function notify(e: Entry<unknown>) {
 
 function run<R>(key: string, entry: Entry<R>, force = false) {
   if (entry.inflight) return;
-  if (force) { clearRequestMemo(); }
+  if (force) { clearRequestMemo(); clearChunkCache(); }
   const ctl = new AbortController();
   entry.abort = ctl;
   entry.inflight = true;
@@ -110,9 +113,11 @@ function run<R>(key: string, entry: Entry<R>, force = false) {
   const emit: Emit<R> = (p) => {
     if (ctl.signal.aborted) return;
     const hasRows = p.rows.length > 0;
+    // reports (waitForAll): partial rows are NOT put on screen - only the progress moves. The table appears once, with everything.
+    const showPartial = !entry.waitForAll && hasRows && !holdOld;
     entry.state = {
       ...entry.state,
-      ...(hasRows && !holdOld ? { status: 'ready' as const, rows: p.rows, stale: false, held: false } : {}),
+      ...(showPartial ? { status: 'ready' as const, rows: p.rows, stale: false, held: false } : {}),
       failed: p.failed,
       total: p.total,
       done: p.done,
@@ -180,6 +185,7 @@ function entryFor<R>(key: string, fetcher: Fetcher<R>): Entry<R> {
       fetcher,
       inflight: false,
       abort: null,
+      waitForAll: false,
     };
     store.set(key, e as Entry<unknown>);
   }
@@ -203,11 +209,17 @@ export interface QueryOptions {
    * show the loader instead. Rows appear only when the new data has arrived.
    */
   hideOldWhileLoading?: boolean;
+  /**
+   * Show the rows only when every request has finished (one clean appearance, no 1000 -> 3000 -> 4000 growing table).
+   * Defaults to the value of `hideOldWhileLoading`, so every filter-form report waits for the full data; dashboards keep filling in.
+   */
+  waitForAll?: boolean;
 }
 
 export function useQuery<R>(key: string | null, fetcher: Fetcher<R>, options?: QueryOptions): QueryState<R> {
   const scoped = key ? `${getSession()?.scope ?? 'anon'}:${key}` : null;
   const entry = scoped ? entryFor(scoped, fetcher) : null;
+  if (entry) entry.waitForAll = options?.waitForAll ?? options?.hideOldWhileLoading ?? false;
 
   const subscribe = useCallback(
     (cb: () => void) => {
@@ -236,8 +248,12 @@ export function useQuery<R>(key: string | null, fetcher: Fetcher<R>, options?: Q
   }, [entry, scoped]);
 
   if (!snapshot) return IDLE as QueryState<R>;
-  if (options?.hideOldWhileLoading && snapshot.fetching && snapshot.held) {
-    return { ...snapshot, status: 'loading', rows: [], failed: 0, retry };
+  if (options?.hideOldWhileLoading) {
+    // report behind a filter form: never show saved / earlier rows while the new data is coming - the loader covers it,
+    // and the full table appears once, when everything has arrived
+    if (snapshot.fetching && snapshot.held) return { ...snapshot, status: 'loading', rows: [], failed: 0, retry };
+    // saved copy read from the browser on first mount: the refresh starts in the next moment, do not flash the old rows
+    if (snapshot.stale && !snapshot.fetching && !snapshot.error && snapshot.rows.length > 0) return { ...snapshot, status: 'loading', rows: [], failed: 0, retry };
   }
   return { ...snapshot, retry };
 }

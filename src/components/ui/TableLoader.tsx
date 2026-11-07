@@ -86,7 +86,12 @@ export const TableLoader: React.FC<{
   label?: string;
   className?: string;
   rows?: number;
-}> = ({ label = "Loading data…", className, rows = 5 }) => {
+  /** requests finished so far / total: when total > 1 the bar shows real progress instead of the endless animation */
+  done?: number;
+  total?: number;
+}> = ({ label = "Loading data…", className, rows = 5, done = 0, total = 0 }) => {
+  const known = total > 1;
+  const pct = known ? Math.max(6, Math.min(100, Math.round((done / total) * 100))) : 0;
   const [hint, setHint] = useState(0);
 
   useEffect(() => {
@@ -162,7 +167,14 @@ export const TableLoader: React.FC<{
               <span className="tl-hint inline-block">{HINTS[hint]}</span>
             </p>
             <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-brand/15">
-              <span className="tl-bar block h-full w-1/2 rounded-full bg-gradient-to-r from-brand to-glow" />
+              {known ? (
+                <span
+                  className="block h-full rounded-full bg-gradient-to-r from-brand to-glow transition-[width] duration-300"
+                  style={{ width: `${pct}%` }}
+                />
+              ) : (
+                <span className="tl-bar block h-full w-1/2 rounded-full bg-gradient-to-r from-brand to-glow" />
+              )}
             </div>
           </div>
         </div>

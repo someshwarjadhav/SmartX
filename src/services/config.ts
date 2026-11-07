@@ -17,7 +17,7 @@ export const environment = {
 export const REQUEST_TIMEOUT_MS = 90_000;
 
 
-export const MAX_PARALLEL_REQUESTS = 10;
+export const MAX_PARALLEL_REQUESTS = 12;
 
 export const FRESH_FOR_MS = 5 * 60_000;
 
@@ -43,3 +43,12 @@ export const PORTAL_URL = (import.meta.env.VITE_PORTAL_URL || 'https://smartx.sh
 
 
 export const SHOW_CUSTOMER_ID = (import.meta.env.VITE_SHOW_CUSTOMER_ID ?? 'true').toString().toLowerCase() !== 'false';
+
+/**
+ * After a report has loaded, the other centres of the same plant are loaded quietly in the background (low priority, one centre
+ * at a time, stopped as soon as the person clicks Submit again). Changing the VLC name and pressing Submit then answers from the saved copy.
+ * Set to false to turn the background loading off.
+ */
+export const WARM_OTHER_CENTRES = true;
+/** most centres the background loading will go through for one report */
+export const MAX_WARM_CENTRES = 40;

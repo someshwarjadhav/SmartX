@@ -13,4 +13,4 @@ export const MilkLoader: React.FC<{
   className?: string;
   done?: number;
   total?: number;
-}> = ({ label = 'Loading data from the SmartX portal…', className }) => <TableLoader label={label} className={className} />;
+}> = ({ label = 'Loading data from the SmartX portal…', className, done, total }) => <TableLoader label={label} className={className} done={done} total={total} />;

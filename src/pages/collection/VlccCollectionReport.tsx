@@ -1,7 +1,8 @@
 import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal, Store, Sun } from 'lucide-react';
-import { useMilkVlccEntries, useMilkCenterOptions, useReportScope } from '../../hooks/useMilkReportData';
+import { useMilkVlccEntries, useMilkCenterOptions, useReportScope, centreIdsFor, apiMilk, apiShift } from '../../hooks/useMilkReportData';
+import { useWarmCentres } from '../../hooks/useWarmCentres';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
 import { ReportLoader } from '../../components/ui/ReportLoader';
@@ -171,8 +172,11 @@ const VlccCollectionReport: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const scope = useReportScope(centres, draft.plant, draft.vlcId);
-  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId || 'all' }, submitted && !!applied.vlcId);
+  const scope = useReportScope(centres, draft.plant, draft.vlcId, true);
+  const allVlc = applied.vlcId === 'all';
+  const askIds = useMemo(() => centreIdsFor(centres, applied.plant, applied.vlcId), [centres, applied.plant, applied.vlcId]);
+  const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: applied.milkType, vlccId: applied.vlcId || 'all', vlccIds: allVlc ? askIds : undefined }, submitted && !!applied.vlcId);
+  useWarmCentres({ ready: submitted && !!applied.vlcId && !allVlc && !live.fetching && !live.error && live.failed === 0, ids: centres.filter((c) => c.mccId === applied.plant && c.id !== applied.vlcId).map((c) => c.id), kind: 'vlcc', from: applied.fromDate, to: applied.toDate, shift: apiShift(applied.shift), milk: apiMilk(applied.milkType) });
   const fetching = live.fetching;
   const loading = live.loading;
   const rows = useMemo(() => {
@@ -228,7 +232,7 @@ const VlccCollectionReport: React.FC = () => {
     return withFormulaTotals({
       filename: `vlcc-collection-report-${applied.fromDate}-${applied.toDate}`,
       title: 'Vlcc collection report',
-      subtitle: `${centres.find((c) => c.mccId === applied.plant)?.plantName ?? ''}  |  ${centres.find((c) => c.id === applied.vlcId)?.label ?? ''}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
+      subtitle: `${applied.plant === 'all' ? 'All' : centres.find((c) => c.mccId === applied.plant)?.plantName ?? ''}  |  ${allVlc ? 'All' : centres.find((c) => c.id === applied.vlcId)?.label ?? ''}  |  ${applied.shift === 'both' ? 'Morning & Evening' : applied.shift}  |  ${applied.milkType === 'both' ? 'Cow & Buffalo' : applied.milkType}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
       columns: tbl.pick([
         { header: 'Station Id' }, { header: 'Village' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Total Liter', type: 'dec2' },
         { header: 'Avg Fat', type: 'dec2' }, { header: 'Avg SNF', type: 'dec2' }, { header: 'Avg Rate', type: 'dec2' }, { header: 'Total Amount', type: 'dec2' },
@@ -274,7 +278,7 @@ const VlccCollectionReport: React.FC = () => {
         />
 
         {loading ? (
-          <ReportLoader label="Loading VLC collection report…" />
+          <ReportLoader label="Loading VLC collection report…" done={live.done} total={live.total} />
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another VLC, date range, shift or milk type." />
         ) : (

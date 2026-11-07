@@ -43,6 +43,7 @@ import { useFarmerMaster, useFarmersOf } from "../../../hooks/useSmartxData";
 import { ALL_CENTRES, useCentreIds, useFirstCentre } from "../../../hooks/useCentres";
 import { CentreField, PlantMccField, SubmitButton } from "../../../components/operations/ReportFilters";
 import { useReportColumns } from "../../../hooks/useSessionData";
+import { useWarmCentres } from "../../../hooks/useWarmCentres";
 import { Droplets, FlaskConical, IndianRupee, Users } from "lucide-react";
 
 export type View = "vlcc" | "farmer" | "entry";
@@ -150,6 +151,8 @@ const Collections: React.FC<{ only?: View }> = ({ only }) => {
     { hideOldWhileLoading: true },
   );
   const active = view === "vlcc" ? vlccQ : farmerQ;
+  // one centre on screen: the other centres are loaded quietly in the background, so changing the VLC name is instant
+  useWarmCentres({ ready: hasAppliedCentre && ids.length === 1 && active.status === "ready" && !active.fetching && active.failed === 0, ids: allIds.filter((id) => id !== ids[0]), kind: view === "vlcc" ? "vlcc" : "farmer", from: applied.from, to: applied.to, shift: applied.shift, milk: applied.milk });
 
   const search = () => {
     const picked = vlcc === ALL_CENTRES ? allIds : [vlcc];
@@ -853,11 +856,11 @@ const Collections: React.FC<{ only?: View }> = ({ only }) => {
             Select a centre and press Submit to load its collection.
           </p>
         ) : loading ? (
-          <MilkLoader label={loaderLabel} />
+          <MilkLoader label={loaderLabel} done={active.done} total={active.total} />
         ) : (
           <QueryBoundary
             q={active}
-            skeleton={<MilkLoader label={loaderLabel} />}
+            skeleton={<MilkLoader label={loaderLabel} done={active.done} total={active.total} />}
             emptyTitle="No record for these filters"
             emptyHint="The portal says there is no collection for this date, shift and milk type."
           >

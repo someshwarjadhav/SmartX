@@ -6,6 +6,7 @@ import type { RawFarmerRow, RawLoose } from '../types/raw';
 import type { QueryData } from '../http/fanout';
 import { apiDate, eachDay } from '../utils/date';
 import { ApiError, isCancelled } from '../http/errors';
+import { dayCacheGet, dayCacheSet } from '../http/chunkCache';
 
 
 export const DPU_FARMER_COLLECTION = true;
@@ -134,9 +135,9 @@ async function dpuCall(body: Record<string, string>, priority: Priority = 1, sig
 }
 
 /** Most requests one report may have in flight at once for its date range (the browser sends 10 at a time). */
-const MAX_RANGE_REQUESTS = 30;
+const MAX_RANGE_REQUESTS = 24;
 /** A small (one centre, a few days) request that has not answered after this long is retried instead of hanging for 90 s. */
-const CHUNK_TIMEOUT_MS = 45_000;
+const CHUNK_TIMEOUT_MS = 80_000;
 
 /** Splits a date range into the day windows that are asked in parallel. */
 export function dateChunks(from: string, to: string, windows: number): Array<[string, string]> {
@@ -147,49 +148,118 @@ export function dateChunks(from: string, to: string, windows: number): Array<[st
   return out.length ? out : [[from, to]];
 }
 
-function fetchDpuFarmerCollection(p: CollectionParams, emit?: Emit<RawFarmerRow>, signal?: AbortSignal) {
-  needSession();
-  const priority = p.priority ?? 1;
-  const codes = dpuMilkCodes(p.milk);
-  // One centre (the normal report): the date range is cut into day windows that are asked at the same time, so the first
-  // rows are on screen after one short request and the whole range is ready much sooner than one long request - which the
-  // server may also cut off. Many centres (dashboard): one request per centre and milk type, as before.
-  const windows = Math.max(1, Math.floor(MAX_RANGE_REQUESTS / Math.max(1, p.vlccIds.length * codes.length)));
-  const chunks = dateChunks(p.from, p.to, windows);
-  const split = chunks.length > 1;
-  const jobs = chunks.flatMap(([from, to]) =>
-    p.vlccIds.flatMap((id) =>
-      codes.map((code) => async () => {
-        const read = async (f: string, t: string): Promise<RawFarmerRow[]> =>
-          rowsOfReply(
-            await dpuCall({ id, stationid: id, shift: p.shift, milktype: code, fromdate: apiDate(f), todate: apiDate(t) }, priority, signal, split ? CHUNK_TIMEOUT_MS : undefined),
-          ).map((r) => toRawFarmer(r, id, code, p.shift));
-        // one retry, then (for a window of several days) day by day: a failed request would otherwise silently drop data
-        const once = async (f: string, t: string): Promise<RawFarmerRow[]> => {
-          try {
-            return await read(f, t);
-          } catch (e) {
-            if (isCancelled(e)) throw e;
-            await new Promise((r) => setTimeout(r, 200));
-            return read(f, t);
-          }
-        };
-        let rows: RawFarmerRow[];
-        try {
-          rows = await once(from, to);
-        } catch (e) {
-          if (isCancelled(e) || from >= to) throw e;
-          rows = (await Promise.all(eachDay(from, to).map((d) => once(d, d)))).flat();
-        }
-        // the pages match rows to centres by vlccid: keep it one of the ids that were asked for
-        for (const r of rows) if (!p.vlccIds.includes(String(r.vlccid))) r.vlccid = id;
-        return rows;
-      }),
-    ),
-  );
-  return fanOut<RawFarmerRow>([jobs], emit, true, signal);
+const MON_INDEX: Record<string, string> = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+/** "07 Aug 2026" (what toRawFarmer produces) -> "2026-08-07"; '' when it cannot be read */
+export const isoOfTrdate = (v: unknown): string => {
+  const m = /^(\d{2}) ([A-Za-z]{3}) (\d{4})$/.exec(String(v ?? '').trim());
+  const mm = m ? MON_INDEX[m[2]!] : undefined;
+  return m && mm ? `${m[3]}-${mm}-${m[1]}` : '';
+};
+const addOneDay = (iso: string): string => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+/** Missing days -> request windows: runs of following days, cut into at most about `windows` pieces. */
+export function windowsOf(missing: string[], windows: number): Array<[string, string]> {
+  if (!missing.length) return [];
+  const days = [...missing].sort();
+  const size = Math.max(1, Math.ceil(days.length / Math.max(1, windows)));
+  const out: Array<[string, string]> = [];
+  let start = 0;
+  for (let i = 1; i <= days.length; i++) {
+    const breaks = i === days.length || addOneDay(days[i - 1]!) !== days[i] || i - start >= size;
+    if (breaks) {
+      out.push([days[start]!, days[i - 1]!]);
+      start = i;
+    }
+  }
+  return out;
 }
 
+async function fetchDpuFarmerCollection(p: CollectionParams, emit?: Emit<RawFarmerRow>, signal?: AbortSignal) {
+  const session = needSession();
+  const priority = p.priority ?? 1;
+  const codes = dpuMilkCodes(p.milk);
+  const started = Date.now();
+  const days = eachDay(p.from, p.to);
+  const keyOf = (id: string, code: string, day: string) => `${session.scope}|${id}|${code}|${p.shift}|${day}`;
+
+  // 1) days that were already loaded (this visit or earlier): answered from the browser, no request
+  const saved = await dayCacheGet(p.vlccIds.flatMap((id) => codes.flatMap((code) => days.map((d) => keyOf(id, code, d)))));
+
+  // 2) only the missing days go to the server. One centre (the normal report): the missing range is cut into day windows
+  // asked at the same time, so the whole range is ready much sooner than one long request - which the server may also cut off.
+  // Many centres (dashboard): one request per centre and milk type.
+  const windows = Math.max(1, Math.floor(MAX_RANGE_REQUESTS / Math.max(1, p.vlccIds.length * codes.length)));
+  const cachedJobs: Array<() => Promise<RawFarmerRow[]>> = [];
+  const plan: Array<{ id: string; code: string; from: string; to: string }> = [];
+  for (const id of p.vlccIds) {
+    for (const code of codes) {
+      const have: RawFarmerRow[] = [];
+      const missing: string[] = [];
+      for (const d of days) {
+        const hit = saved.get(keyOf(id, code, d));
+        if (hit) have.push(...(hit as RawFarmerRow[]));
+        else missing.push(d);
+      }
+      if (have.length || !missing.length) cachedJobs.push(async () => have);
+      for (const [from, to] of windowsOf(missing, windows)) plan.push({ id, code, from, to });
+    }
+  }
+  const split = plan.length > 1;
+  const timings: Array<{ label: string; ms: number; rows: number }> = [];
+
+  const jobs = plan.map(({ id, code, from, to }) => async () => {
+    const read = async (f: string, t: string): Promise<RawFarmerRow[]> => {
+      const at = Date.now();
+      const got = rowsOfReply(
+        await dpuCall({ id, stationid: id, shift: p.shift, milktype: code, fromdate: apiDate(f), todate: apiDate(t) }, priority, signal, split ? CHUNK_TIMEOUT_MS : undefined),
+      ).map((r) => toRawFarmer(r, id, code, p.shift));
+      timings.push({ label: `${code} ${f}..${t}`, ms: Date.now() - at, rows: got.length });
+      return got;
+    };
+    // one retry, then (for a window of several days) day by day: a failed request would otherwise silently drop data
+    const once = async (f: string, t: string): Promise<RawFarmerRow[]> => {
+      try {
+        return await read(f, t);
+      } catch (e) {
+        if (isCancelled(e)) throw e;
+        await new Promise((r) => setTimeout(r, 200));
+        return read(f, t);
+      }
+    };
+    let rows: RawFarmerRow[];
+    try {
+      rows = await once(from, to);
+    } catch (e) {
+      if (isCancelled(e) || from >= to) throw e;
+      rows = (await Promise.all(eachDay(from, to).map((d) => once(d, d)))).flat();
+    }
+    // the pages match rows to centres by vlccid: keep it one of the ids that were asked for
+    for (const r of rows) if (!p.vlccIds.includes(String(r.vlccid))) r.vlccid = id;
+    // remember this window day by day (only when every row can be placed on a day of the window)
+    const byDay = new Map<string, RawFarmerRow[]>(eachDay(from, to).map((d) => [d, []]));
+    let placeable = true;
+    for (const r of rows) {
+      const bucket = byDay.get(isoOfTrdate(r.trdate));
+      if (bucket) bucket.push(r);
+      else placeable = false;
+    }
+    if (placeable) dayCacheSet([...byDay].map(([d, list]) => [keyOf(id, code, d), list] as [string, unknown[]]));
+    return rows;
+  });
+
+  const result = await fanOut<RawFarmerRow>([[...cachedJobs, ...jobs]], emit, true, signal);
+  if (timings.length) {
+    const slowest = timings.reduce((a, b) => (b.ms > a.ms ? b : a));
+    const sum = timings.reduce((n, x) => n + x.ms, 0);
+    // wall time close to "sum of request times" = the server answers one request after the other; much smaller = it answers in parallel
+    console.info(`[report] timing: ${timings.length} answered request(s), slowest ${slowest.ms} ms (${slowest.label}, ${slowest.rows} rows), sum of request times ${sum} ms, wall time ${Date.now() - started} ms`);
+  }
+  console.info(`[report] ${plan.length} request(s) to the server, ${days.length * p.vlccIds.length * codes.length - plan.reduce((n, w) => n + eachDay(w.from, w.to).length, 0)} day(s) from the saved copy, ${result.rows.length} rows in ${Date.now() - started} ms`);
+  return result;
+}
 export const fetchFarmerCollection = (p: CollectionParams, emit?: Emit<RawFarmerRow>, signal?: AbortSignal) =>
   DPU_FARMER_COLLECTION
     ? fetchDpuFarmerCollection(p, emit, signal)

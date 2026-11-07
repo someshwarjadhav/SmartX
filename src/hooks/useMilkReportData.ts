@@ -107,8 +107,8 @@ const toISO = (raw: string): string => {
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? s : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
-const apiMilk = (milk?: MilkKind | 'both') => milk === 'cow' ? 'C' as const : milk === 'buffalo' ? 'B' as const : milk === 'mix' ? 'M' as const : 'ALL' as const;
-const apiShift = (shift?: Shift | 'both') => shift === 'Morning' ? 'M' as const : shift === 'Evening' ? 'E' as const : 'Z' as const;
+export const apiMilk = (milk?: MilkKind | 'both') => milk === 'cow' ? 'C' as const : milk === 'buffalo' ? 'B' as const : milk === 'mix' ? 'M' as const : 'ALL' as const;
+export const apiShift = (shift?: Shift | 'both') => shift === 'Morning' ? 'M' as const : shift === 'Evening' ? 'E' as const : 'Z' as const;
 const smartKind = (kind: string | null): MilkKind => kind === 'cow' || kind === 'buffalo' ? kind : 'mix';
 const smartShift = (shift: string | null): Shift => shift === 'Evening' ? 'Evening' : 'Morning';
 
@@ -292,18 +292,37 @@ export function usePlantOptions(centres: CentreOpt[]): { value: string; label: s
 }
 
 /**
- * Plant -> VLC dropdowns of every report: no "All" row, the first plant and its first centre are selected by default.
+ * Plant -> VLC dropdowns of every report (without `withAll`: the first plant and its first centre are selected by default).
  * `plant` / `centre` are what the person picked ('' = nothing picked yet); the returned values are always a real option.
+ * `withAll` (CDA Report, Farmer Collection) adds an "All" row (value 'all') on top of both dropdowns:
+ * plant 'all' = every plant, centre 'all' = every centre of the picked plant(s). "All" is also the default selection.
  */
-export function useReportScope(centres: CentreOpt[], plant: string, centre: string) {
-  const plantOptions = usePlantOptions(centres);
-  const plantValue = plantOptions.some((o) => o.value === plant) ? plant : plantOptions[0]?.value ?? '';
-  const centreOptions = useMemo(
-    () => centres.filter((c) => c.mccId === plantValue).map((c) => ({ value: c.id, label: c.label })),
+export function useReportScope(centres: CentreOpt[], plant: string, centre: string, withAll = false) {
+  const realPlants = usePlantOptions(centres);
+  const plantOptions = useMemo(
+    () => (withAll && realPlants.length ? [{ value: ALL, label: 'All' }, ...realPlants] : realPlants),
+    [withAll, realPlants],
+  );
+  const plantValue = plantOptions.some((o) => o.value === plant) ? plant : withAll && realPlants.length ? ALL : realPlants[0]?.value ?? '';
+  const realCentres = useMemo(
+    () => centres.filter((c) => plantValue === ALL || c.mccId === plantValue).map((c) => ({ value: c.id, label: c.label })),
     [centres, plantValue],
   );
-  const centreValue = centreOptions.some((o) => o.value === centre) ? centre : centreOptions[0]?.value ?? '';
+  const centreOptions = useMemo(
+    () => (withAll && realCentres.length ? [{ value: ALL, label: 'All' }, ...realCentres] : realCentres),
+    [withAll, realCentres],
+  );
+  const centreValue = centreOptions.some((o) => o.value === centre) ? centre : withAll && realCentres.length ? ALL : realCentres[0]?.value ?? '';
   return { plantOptions, centreOptions, plant: plantValue, centre: centreValue };
+}
+
+/** value of the "All" row in the Plant / VLC dropdowns */
+export const ALL = 'all';
+
+/** centre ids a report has to ask for: one centre, or (All) every centre of the picked plant / of every plant */
+export function centreIdsFor(centres: CentreOpt[], plant: string, centre: string): string[] {
+  if (centre && centre !== ALL) return [centre];
+  return centres.filter((c) => !plant || plant === ALL || c.mccId === plant).map((c) => c.id);
 }
 
 /* ---------- Farmer dropdown: DPU FarmerMaster (loads before Submit) ---------- */
