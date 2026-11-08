@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 import { cn } from '../../../lib/portal/cn';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../../lib/portal/global';
 import { PageBar } from './PageBar';
+import { TableTopBar } from './ResultPerPage';
 import { EmptyState } from '../EmptyState';
 
 export interface Column<T> {
@@ -62,6 +63,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SI
 
   return (
     <div>
+      {rows.length > 0 && <TableTopBar total={sorted.length} page={cur + 1} size={size} onSize={setSize} />}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm" style={minWidth ? { minWidth } : undefined}>
           <thead>
@@ -101,7 +103,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SI
         </table>
       </div>
       {rows.length === 0 && (empty ?? <EmptyState title="No records for these filters" hint="Widen the date range or pick another centre." />)}
-      {rows.length > 0 && <PageBar total={sorted.length} page={cur + 1} size={size} onPage={(p) => setPage(p - 1)} onSize={setSize} />}
+      {rows.length > 0 && <PageBar total={sorted.length} page={cur + 1} size={size} onPage={(p) => setPage(p - 1)} />}
     </div>
   );
 }

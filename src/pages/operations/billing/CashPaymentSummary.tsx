@@ -32,7 +32,7 @@ import {
 } from "../../../services/billing/cashPaymentSummary.api.ts";
 import { ApiError } from "../../../services/http/errors";
 import { pick, type Obj } from "../../../services/utils/loose";
-import { validateDateRange } from "../../../lib/dateRange";
+import { validateDateRange, validatePastLimit } from "../../../lib/dateRange";
 import { useToast } from "../../../context/ToastContext";
 
 interface Row {
@@ -138,7 +138,6 @@ const CashPaymentSummary: React.FC = () => {
 
   const allChecked = options.length > 0 && picked.length === options.length;
   const toast = useToast();
-  const range = !!from && !!to && from <= to;
 
   const toggleAll = () => setPicked(allChecked ? [] : options.map((o) => o.id));
   const toggleOne = (id: string) =>
@@ -148,7 +147,8 @@ const CashPaymentSummary: React.FC = () => {
 
   const submit = async () => {
     if (loading || picked.length === 0) return;
-    const rangeError = validateDateRange(from, to);
+    // checked here (not by disabling the button) so a wrong date always gets a message
+    const rangeError = validateDateRange(from, to) ?? validatePastLimit(from);
     if (rangeError) return toast(rangeError, "warn");
     const f = { type, ids: picked, from, to };
     setApplied(f);
@@ -521,7 +521,7 @@ const CashPaymentSummary: React.FC = () => {
                 className="w-full"
                 icon={<Search size={16} />}
                 loading={loading}
-                disabled={!range || picked.length === 0}
+                disabled={picked.length === 0}
                 onClick={() => void submit()}
               >
                 Submit

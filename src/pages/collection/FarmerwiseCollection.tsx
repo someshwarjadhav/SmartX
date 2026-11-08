@@ -71,7 +71,7 @@ const SEGMENT = 'w-full [&>button]:h-9 [&>button]:flex-1';
 
 const FarmerwiseFilters: React.FC<FilterProps> = ({ value, plantOptions, centreOptions, farmerOptions, onChange, onSubmit, error, loading }) => {
 
-  const changePlant = (plant: string) => onChange({ plant, vlcId: '', farmerId: 'all' });
+  const changePlant = (plant: string) => onChange({ plant, vlcId: '', farmerId: '' });
 
   return (
     <section aria-label="User Info" className="overflow-hidden rounded-2xl border border-line bg-panel shadow-card">
@@ -94,7 +94,7 @@ const FarmerwiseFilters: React.FC<FilterProps> = ({ value, plantOptions, centreO
         className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
       >
         <SelectField wrapperClassName="xl:col-span-4" label="Plant/MCC Name" value={value.plant} onChange={changePlant} options={plantOptions} />
-        <SelectField wrapperClassName="xl:col-span-4" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId, farmerId: 'all' })} options={centreOptions} />
+        <SelectField wrapperClassName="xl:col-span-4" label="VLC Name" value={value.vlcId} onChange={(vlcId) => onChange({ vlcId, farmerId: '' })} options={centreOptions} />
         <SelectField wrapperClassName="xl:col-span-4" label="Farmer Name" value={value.farmerId} onChange={(farmerId) => onChange({ farmerId })} options={farmerOptions} />
 
         <Field label="Milk Type" className="xl:col-span-3">
@@ -132,9 +132,10 @@ const FarmerwiseFilters: React.FC<FilterProps> = ({ value, plantOptions, centreO
 
 const defaults = (): Filters => {
   const today = toISO(new Date());
-  // plant / VLC '' = first plant and its first centre (no "All" row)
+  // plant / VLC / farmer '' = first plant, its first centre and that centre's first farmer (no "All" row)
   const plant = '';
-  return { plant, vlcId: '', farmerId: 'all', milkType: 'cow', shift: 'Morning', fromDate: today, toDate: today };
+  // farmerId '' = the first farmer of the chosen VLC (there is no "All Farmers" row in this report)
+  return { plant, vlcId: '', farmerId: '', milkType: 'cow', shift: 'Morning', fromDate: today, toDate: today };
 };
 
 const KIND_TEXT: Record<string, string> = { cow: 'Cow', buffalo: 'Buffalo', mix: 'Mix' };
@@ -196,7 +197,7 @@ const FarmerwiseCollection: React.FC = () => {
   useWarmCentres({ ready: submitted && !!applied.vlcId && !allVlc && !live.fetching && !live.error && live.failed === 0, ids: centres.filter((c) => c.mccId === applied.plant && c.id !== applied.vlcId).map((c) => c.id), kind: 'farmer', from: applied.fromDate, to: applied.toDate, shift: apiShift(applied.shift), milk: apiMilk(applied.milkType) });
   const fetching = live.fetching;
   const loading = live.loading;
-  // the farmer list belongs to ONE VLC: with VLC = All only "All Farmers" is offered
+  // the farmer list belongs to ONE VLC
   const oneVlc = !!scope.centre && scope.centre !== 'all';
   const farmerVlccIds = useMemo(() => (oneVlc ? [scope.centre] : []), [oneVlc, scope.centre]);
   const centreNames = useMemo(() => Object.fromEntries(centres.map((c) => [c.id, c.name || c.id])), [centres]);
@@ -214,9 +215,13 @@ const FarmerwiseCollection: React.FC = () => {
       have.add(value);
       extra.push({ value, label: `${r.farmerId} | ${r.farmer}` });
     }
-    return [{ value: 'all', label: farmersLoading ? 'Loading farmers…' : 'All Farmers' }, ...masterFarmers, ...extra];
+    const list = [...masterFarmers, ...extra];
+    // no "All Farmers" row: one farmer is always chosen
+    return list.length ? list : [{ value: '', label: farmersLoading ? 'Loading farmers…' : 'No farmer found' }];
   }, [masterFarmers, farmersLoading, pre.rows, live.rows, scope.centre]);
-  const rows = useMemo(() => live.rows.filter((r) => (!applied.plant || applied.plant === 'all' || r.plant === applied.plant) && (!applied.vlcId || allVlc || r.stationId === applied.vlcId) && (applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
+  // the farmer shown in the dropdown: the one picked, else the first of the list
+  const farmerId = farmerOptions.some((o) => o.value === draft.farmerId && o.value !== '') ? draft.farmerId : farmerOptions[0]?.value ?? '';
+  const rows = useMemo(() => live.rows.filter((r) => (!applied.plant || applied.plant === 'all' || r.plant === applied.plant) && (!applied.vlcId || allVlc || r.stationId === applied.vlcId) && (!applied.farmerId || applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
 
   const pager = usePagination(rows);
 
@@ -243,8 +248,12 @@ const FarmerwiseCollection: React.FC = () => {
       toast.show(MSG.noCentreInPlant, 'warn');
       return;
     }
+    if (!farmerId) {
+      toast.show(MSG.pickFarmer, 'warn');
+      return;
+    }
     setError(undefined);
-    const next = { ...draft, plant: scope.plant, vlcId: scope.centre };
+    const next = { ...draft, plant: scope.plant, vlcId: scope.centre, farmerId };
     if (submitted && JSON.stringify(applied) === JSON.stringify(next)) { live.retry(); }
     setApplied(next);
     setSubmitted(true);
@@ -270,7 +279,7 @@ const FarmerwiseCollection: React.FC = () => {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <PageHeader title="Farmerwise Collection" subtitle="Litres, fat, SNF, rate and amount for one farmer or the whole centre, by shift and date." />
+      <PageHeader title="Farmerwise Collection" subtitle="Litres, fat, SNF, rate and amount of one farmer, by shift and date." />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard index={0} tone="brand" label="Total Liter" note="Litres collected" icon={Milk} value={totals.litres} format={(n) => nf(n, 1)} />
@@ -279,7 +288,7 @@ const FarmerwiseCollection: React.FC = () => {
         <StatCard index={3} tone="danger" label="Total Farmer" note="Pouring in this range" icon={Users} value={totals.farmers} format={(n) => nf(Math.round(n))} />
       </div>
 
-      <FarmerwiseFilters value={{ ...draft, plant: scope.plant, vlcId: scope.centre }} plantOptions={plantOptions} centreOptions={centreOptions} farmerOptions={farmerOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={fetching} />
+      <FarmerwiseFilters value={{ ...draft, plant: scope.plant, vlcId: scope.centre, farmerId }} plantOptions={plantOptions} centreOptions={centreOptions} farmerOptions={farmerOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={fetching} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
       <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />

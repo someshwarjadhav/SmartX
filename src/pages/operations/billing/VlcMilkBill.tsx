@@ -79,7 +79,7 @@ function columnsOf(rows: Row[]): Col[] {
   return cols;
 }
 
-const PAGE_SIZES = [10, 25, 50, 100, 250];
+const PAGE_SIZES = [100, 200, 300];
 
 // The bill is a printed-paper style document, so it stays black on white in light and dark mode.
 const PAPER =

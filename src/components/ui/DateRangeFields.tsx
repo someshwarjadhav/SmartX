@@ -56,20 +56,28 @@ export const DateRangeFields: React.FC<DateRangeFieldsProps> = ({
   const toMin = from && from > floor ? from : floor;
   const toMax = smaller(from ? addMonthsISO(from, maxRangeMonths) : undefined, ceil);
 
-  const changeFrom = (raw: string) => {
-    const v = clampDate(raw, fromMin, ceil);
-    const patch: { from?: string; to?: string } = { from: v };
-    if (v && to) {
-      if (to < v) patch.to = v; // To can never be before From
-      else {
-        const limit = addMonthsISO(v, maxRangeMonths);
-        if (to > limit) patch.to = limit; // keep the gap inside the allowed range
-      }
-    }
-    onChange(patch);
+  // While a date is being TYPED nothing is corrected: the browser reports every half-typed value (typing the month "11"
+  // first gives "01"), and pulling it back made manual typing impossible. The value is fixed when the field loses focus,
+  // and a range that is still wrong is reported by the page's Submit check (validateDateRange / validatePastLimit).
+  const changeFrom = (raw: string) => onChange({ from: raw });
+  const changeTo = (raw: string) => onChange({ to: raw });
+
+  const blurFrom = () => {
+    if (!from) return;
+    const v = clampDate(from, fromMin, ceil);
+    const patch: { from?: string; to?: string } = {};
+    if (v !== from) patch.from = v;
+    if (v && to && to < v) patch.to = v; // To can never be before From
+    if (patch.from !== undefined || patch.to !== undefined) onChange(patch);
   };
 
-  const changeTo = (raw: string) => onChange({ to: clampDate(raw, toMin, toMax) });
+  const blurTo = () => {
+    if (!to) return;
+    // only the hard limits (older than the past limit / before From / future) are fixed here;
+    // a gap longer than the allowed range is left for the Submit message so the person sees why
+    const v = clampDate(to, toMin, ceil);
+    if (v !== to) onChange({ to: v });
+  };
 
   return (
     <div
@@ -86,6 +94,7 @@ export const DateRangeFields: React.FC<DateRangeFieldsProps> = ({
         min={fromMin}
         max={fromMax}
         onChange={(e) => changeFrom(e.target.value)}
+        onBlur={blurFrom}
       />
       <ArrowRight size={16} className="mt-[2.4rem] hidden text-mute min-[480px]:block" aria-hidden />
       <TextField
@@ -96,6 +105,7 @@ export const DateRangeFields: React.FC<DateRangeFieldsProps> = ({
         min={toMin}
         max={toMax}
         onChange={(e) => changeTo(e.target.value)}
+        onBlur={blurTo}
         error={error}
       />
     </div>

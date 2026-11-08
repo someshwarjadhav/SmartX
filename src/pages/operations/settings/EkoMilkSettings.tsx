@@ -16,6 +16,8 @@ import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Modal } from "../../../components/operations/ui/Modal";
 import { Pager } from "../../../components/operations/ui/Pager";
+import { TableTopBar } from "../../../components/operations/ui/ResultPerPage";
+import { DEFAULT_PAGE_SIZE } from "../../../lib/portal/global";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
@@ -166,7 +168,7 @@ const RecordsTable: React.FC<{
   emptyText: string;
 }> = ({ rows, kind, busyId, onCancel, loading, emptyText }) => {
   const [page, setPage] = useState(1);
-  const [size, setSize] = useState(10);
+  const [size, setSize] = useState(DEFAULT_PAGE_SIZE);
   useEffect(() => {
     setPage(1);
   }, [rows]);
@@ -210,6 +212,17 @@ const RecordsTable: React.FC<{
 
   return (
     <div className="overflow-hidden rounded-xl border border-line">
+      {rows.length > 0 && (
+        <TableTopBar
+          total={rows.length}
+          page={page}
+          size={size}
+          onSize={(n) => {
+            setSize(n);
+            setPage(1);
+          }}
+        />
+      )}
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -433,10 +446,6 @@ const RecordsTable: React.FC<{
         page={page}
         size={size}
         onPage={setPage}
-        onSize={(n) => {
-          setSize(n);
-          setPage(1);
-        }}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { validateDateRange } from "../../../lib/dateRange";
+import { validateDateRange, validatePastLimit } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useCallback, useRef, useState } from "react";
 import { Search, Snowflake, Wallet } from "lucide-react";
@@ -25,7 +25,13 @@ import { todayISO } from "../../../lib/portal/format";
 import { cn } from "../../../lib/portal/cn";
 import {
   billExportRows,
+  farmerLabel,
   getPrintTableData,
+  hasBillData,
+  isMergedBill,
+  missingRanges,
+  replyKeys,
+  idKey,
   parseFarmerBills,
   postBillFreeze,
   type BillExportRow,
@@ -44,6 +50,7 @@ import {
   type BillPrintInfo,
 } from "../../../lib/portal/farmerBillPrint";
 import { getSession } from "../../../services/session";
+import { fetchDpuFarmerMaster } from "../../../services/farmer/farmer.api";
 
 const dmy = (s: string) => s.split("-").reverse().join("-");
 const SHIFT_KEYS: Array<keyof BillShift> = ["wt", "fat", "snf", "rate", "amt"];
@@ -82,7 +89,7 @@ const BillCard: React.FC<{ bill: FarmerBillData; range: string }> = ({
     <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-line px-4 py-3 text-sm">
       <p>
         <span className="font-bold">Farmer Name:</span>{" "}
-        <span className="font-semibold">{bill.name || "—"}</span>
+        <span className="font-semibold">{farmerLabel(bill) || "—"}</span>
       </p>
       <p>
         <span className="font-bold">Date:</span>{" "}
@@ -154,6 +161,7 @@ const BillCard: React.FC<{ bill: FarmerBillData; range: string }> = ({
                 return (
                   <td
                     key={`${p.label}${j}`}
+                    colSpan={j === row.length - 1 && row.length < 4 ? 5 - row.length : 1}
                     className={cn(
                       "w-1/4 border border-line px-3 py-1.5",
                       net && "bg-soft",
@@ -187,6 +195,9 @@ const BillCard: React.FC<{ bill: FarmerBillData; range: string }> = ({
   </article>
 );
 
+/** farmer id -> name per VLC, asked from the farmer master once per VLC (only when the bill reply has no names) */
+const nameCache = new Map<string, Map<string, string>>();
+
 type Status = "idle" | "loading" | "ready" | "error";
 
 const FarmerBill: React.FC = () => {
@@ -202,6 +213,7 @@ const FarmerBill: React.FC = () => {
   const [error, setError] = useState("");
   const [bills, setBills] = useState<FarmerBillData[]>([]);
   const [rawReply, setRawReply] = useState<unknown>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [applied, setApplied] = useState({ vlc: "", from: "", to: "" });
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
@@ -211,6 +223,9 @@ const FarmerBill: React.FC = () => {
 
   const vlcLabel = (id: string) =>
     options.find((o) => o.id === id)?.label ?? id;
+  const missing = missingRanges(rawReply);
+  // the server sent bills but none of them could be read (different from "no record")
+  const unreadable = status === "ready" && bills.length === 0 && hasBillData(rawReply);
   const ready = status === "ready" && bills.length > 0;
   const total = bills.length;
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -224,7 +239,7 @@ const FarmerBill: React.FC = () => {
 
   const show = useCallback(async () => {
     if (!vlc) return;
-    const rangeError = validateDateRange(from, to);
+    const rangeError = validateDateRange(from, to) ?? validatePastLimit(from);
     if (rangeError) {
       toast(rangeError, "warn");
       return;
@@ -233,17 +248,50 @@ const FarmerBill: React.FC = () => {
     setStatus("loading");
     setError("");
     setPage(1);
+    setBills([]);
+    setRawReply(null);
+    setProgress(null);
+    // farmer names of this VLC are asked at once (in parallel with the bill), so the bills show the names while they load
+    let names: Map<string, string> | undefined = nameCache.get(vlc);
+    const namesReady = names
+      ? Promise.resolve()
+      : fetchDpuFarmerMaster(vlc)
+          .then((master) => {
+            const m = new Map(master.map((f) => [idKey(f.farmerId), f.name]));
+            if (m.size) nameCache.set(vlc, m);
+            names = m;
+          })
+          .catch(() => undefined);
+    const named = (list: FarmerBillData[]): FarmerBillData[] => {
+      const known = names;
+      return known ? list.map((b) => (b.name.trim() ? b : { ...b, name: known.get(idKey(b.id)) ?? "" })) : list;
+    };
     try {
-      const raw = await getPrintTableData(from, to, vlc);
+      const raw = await getPrintTableData(
+        from,
+        to,
+        vlc,
+        (p) => {
+          if (mine !== ticket.current) return;
+          // only the progress is shown while loading; the bills appear together once the whole period is in
+          setProgress({ done: p.done, total: p.total });
+        },
+        () => mine !== ticket.current,
+      );
       if (mine !== ticket.current) return;
-      const list = parseFarmerBills(raw, extended);
+      await namesReady;
+      if (mine !== ticket.current) return;
+      const list = named(parseFarmerBills(raw, extended));
+      if (!list.length && hasBillData(raw)) console.warn("[farmer bill] the server replied with data that could not be read as a bill:", replyKeys(raw), raw);
       setBills(list);
       setRawReply(raw);
       setApplied({ vlc, from, to });
+      setProgress(null);
       setStatus("ready");
     } catch (e) {
       if (mine !== ticket.current) return;
       setBills([]);
+      setProgress(null);
       setStatus("error");
       setError(
         e instanceof Error ? e.message : "The bill could not be loaded.",
@@ -252,6 +300,11 @@ const FarmerBill: React.FC = () => {
   }, [vlc, from, to, toast, extended]);
 
   const freeze = async () => {
+    if (isMergedBill(rawReply)) {
+      toast("This bill was loaded in shorter parts because the server was slow. Choose a shorter period (about 15 days) to freeze it.", "warn");
+      setFreezeOpen(false);
+      return;
+    }
     setFreezing(true);
     try {
       const reply = await postBillFreeze({
@@ -403,13 +456,26 @@ const FarmerBill: React.FC = () => {
         <Card>
           <ReportBar
             count={total}
+            pager={{
+              page: safePage,
+              size: pageSize,
+              onSize: (n) => {
+                setPageSize(n);
+                setPage(1);
+              },
+            }}
             disabled={!ready}
             kinds={["print"]}
             onExport={run}
           />
           {status === "loading" && (
             <div className="p-6">
-              <MilkLoader label="Loading farmer bills…" />
+              <MilkLoader label={progress ? `Loading farmer bills… ${progress.done} of ${progress.total} parts` : "Loading farmer bills…"} />
+              {progress && (
+                <div className="mx-auto mt-4 h-1.5 max-w-sm overflow-hidden rounded-full bg-line">
+                  <div className="h-full rounded-full bg-brand transition-all duration-500" style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} />
+                </div>
+              )}
             </div>
           )}
           {status === "error" && (
@@ -422,9 +488,21 @@ const FarmerBill: React.FC = () => {
               Select a VLC and dates, then press Show Record.
             </p>
           )}
-          {status === "ready" && total === 0 && (
+          {status === "ready" && total === 0 && !unreadable && (
             <p className="px-6 py-10 text-center text-sm text-mute">
               No record found for this VLC and these dates.
+            </p>
+          )}
+          {unreadable && (
+            <p className="px-6 py-10 text-center text-sm text-danger">
+              The server sent data for this VLC, but the bill could not be read
+              {replyKeys(rawReply).length ? ` (${replyKeys(rawReply).join(" | ").slice(0, 160)})` : ""}.
+              Please try a shorter period or contact support.
+            </p>
+          )}
+          {ready && missing.length > 0 && (
+            <p className="border-b border-line bg-warn/10 px-5 py-2.5 text-sm text-warn">
+              The server did not answer for {missing.join(", ")}. The bill below does not include those dates. Press Show Record again to load them.
             </p>
           )}
           {status === "ready" && shown.length > 0 && (
@@ -444,10 +522,6 @@ const FarmerBill: React.FC = () => {
               page={safePage}
               size={pageSize}
               onPage={setPage}
-              onSize={(n) => {
-                setPageSize(n);
-                setPage(1);
-              }}
             />
           )}
         </Card>

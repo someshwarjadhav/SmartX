@@ -358,15 +358,15 @@ export async function loginApi(
   username: string,
   password: string,
 ): Promise<LoginResult> {
-  if (staticLoginActive()) {
-    const found = await resolveStaticLogin(username, password);
-    if (found.kind === "denied") {
-      throw new ApiError("Incorrect username or password.");
-    }
-    if (found.kind === "match") {
-      const profile = mapLoginResponse(found.record, username);
-      return { profile, record: sanitizeLoginRecord(found.record) };
-    }
+  // Known accounts (staticLogin.ts) sign in on every build. With VITE_STATIC_LOGIN=1 ONLY these accounts are allowed;
+  // without it (npm run dev) an unknown account simply continues to the login API below.
+  const found = await resolveStaticLogin(username, password);
+  if (found.kind === "match") {
+    const profile = mapLoginResponse(found.record, username);
+    return { profile, record: sanitizeLoginRecord(found.record) };
+  }
+  if (found.kind === "denied" && staticLoginActive()) {
+    throw new ApiError("Incorrect username or password.");
   }
 
   if (!hasEncryptionKey()) {

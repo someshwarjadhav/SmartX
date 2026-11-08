@@ -177,7 +177,7 @@ export const STATIC_LOGINS: StaticLoginEntry[] = [
   {
     username: "bansidairynagpur@gmail.com",
     passwordSha256:
-      "13dc9df30ffe19bc15e19e21bbf4aff41977c23b03d5f98deed4464919d7b3b9",
+      "da65e43e2a094f208d61fab0f1f35cd8adc15889759dda37e59b4c010aa3a340",
     record: BANSI_LOGIN_RECORD,
   },
   {

@@ -470,7 +470,7 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
         <DataTable columns={columns} rows={pager.visible} rowKey={farmerKey} ariaLabel="Farmer master" minWidth={980} isSelected={(r) => selected.has(farmerKey(r))} />
       )}
 
-      {!loading && rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} />}
+      {!loading && rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />}
     </Panel>
   );
 };

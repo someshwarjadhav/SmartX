@@ -154,6 +154,7 @@ const CattleFeedFarmerBill: React.FC = () => {
         <Card>
           <ReportBar
             count={total}
+            pager={{ page: current, size: pageSize, onSize: (n) => { setPageSize(n); setPage(1); } }}
             disabled={!ready}
             kinds={["xls", "pdf", "csv"]}
             onExport={run}
@@ -225,10 +226,6 @@ const CattleFeedFarmerBill: React.FC = () => {
               page={current}
               size={pageSize}
               onPage={setPage}
-              onSize={(n) => {
-                setPageSize(n);
-                setPage(1);
-              }}
             />
           )}
         </Card>
