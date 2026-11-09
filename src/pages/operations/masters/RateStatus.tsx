@@ -122,7 +122,7 @@ const RateStatus: React.FC = () => {
               <MilkLoader label="Loading rate status…" />
             ) : (
             <div className="overflow-x-auto rounded-xl border border-line">
-              <table className="clip-cells w-full min-w-[56rem] text-sm" onMouseOver={clipTitle}>
+              <table className="clip-cells w-full text-[13px]" onMouseOver={clipTitle}>
                 <thead className="bg-soft/70 text-left text-xs text-mute">
                   <tr>
                     {COLUMNS.map(([k, label]) => (

@@ -28,7 +28,7 @@ interface Props<T> {
 }
 
 const alignOf = (a?: string) => (a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left');
-const TH = 'whitespace-nowrap border-b border-line bg-soft/70 px-3 py-3 text-xs font-semibold text-mute';
+const TH = 'whitespace-nowrap border-b border-line bg-soft/70 px-2.5 py-3 text-xs font-semibold text-mute';
 
 
 export function GroupTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SIZE, footer, empty }: Props<T>) {
@@ -62,7 +62,7 @@ export function GroupTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_S
     <div>
       {rows.length > 0 && <TableTopBar total={rows.length} page={cur + 1} size={size} onSize={setSize} />}
       <div className="overflow-x-auto">
-        <table className="clip-cells w-full min-w-[640px] border-separate border-spacing-0 text-sm" onMouseOver={clipTitle}>
+        <table className="clip-cells w-full border-separate border-spacing-0 text-[13px]" onMouseOver={clipTitle}>
           <thead>
             <tr>{top}</tr>
             {grouped && (
@@ -77,7 +77,7 @@ export function GroupTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_S
             {slice.map((r) => (
               <tr key={rowKey(r)} className="transition-colors hover:bg-brand/[0.06]">
                 {columns.map((c) => (
-                  <td key={c.key} className={cn('whitespace-nowrap border-b border-line/70 px-3 py-2.5 tnum', alignOf(c.align), c.className)}>{c.cell(r)}</td>
+                  <td key={c.key} className={cn('whitespace-nowrap border-b border-line/70 px-2.5 py-2.5 tnum', alignOf(c.align), c.className)}>{c.cell(r)}</td>
                 ))}
               </tr>
             ))}

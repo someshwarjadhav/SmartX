@@ -338,11 +338,11 @@ const LiveCollection: React.FC = () => {
           ) : (
             <>
               <div className="hidden overflow-x-auto md:block">
-                <table className="clip-cells w-full min-w-[720px] border-separate border-spacing-0 text-sm" onMouseOver={clipTitle}>
+                <table className="clip-cells w-full border-separate border-spacing-0 text-[13px]" onMouseOver={clipTitle}>
                   <thead>
                     <tr className="text-left text-xs font-semibold text-mute">
                       {["Farmer", "Centre", "Time", "Milk", "Litres", "Fat", "SNF", "Amount", ""].map((h, i) => (
-                        <th key={h + i} scope="col" className={cn("sticky top-0 whitespace-nowrap border-y border-line bg-soft/70 px-4 py-3", i >= 4 && i <= 7 && "text-right")}>{h}</th>
+                        <th key={h + i} scope="col" className={cn("sticky top-0 whitespace-nowrap border-y border-line bg-soft/70 px-3 py-3", i >= 4 && i <= 7 && "text-right")}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -352,18 +352,18 @@ const LiveCollection: React.FC = () => {
                       const st = styleOf(c.milk);
                       return (
                         <tr key={c.key} className={cn("transition-colors duration-500 hover:bg-brand/[0.06]", lit.current.has(c.key) && cn(st.tint, "ring-1 ring-inset", st.ring))}>
-                          <td className="border-b border-line/70 px-4 py-2.5">
+                          <td className="border-b border-line/70 px-3 py-2.5">
                             <p className="font-semibold">{c.farmerName}</p>
                             <p className="text-xs text-mute">#{c.farmerId}</p>
                           </td>
-                          <td className="border-b border-line/70 px-4 py-2.5 text-mute">{vlccTitle(c.vlccid, c.village)}</td>
-                          <td className="tnum whitespace-nowrap border-b border-line/70 px-4 py-2.5 text-mute">{c.time}</td>
-                          <td className="border-b border-line/70 px-4 py-2.5"><KindChip kind={c.milk} label={c.milkLabel} compact /></td>
-                          <td className="tnum border-b border-line/70 px-4 py-2.5 text-right font-bold">{c.liter}</td>
-                          <td className="tnum border-b border-line/70 px-4 py-2.5 text-right">{c.fat}</td>
-                          <td className="tnum border-b border-line/70 px-4 py-2.5 text-right">{c.snf}</td>
-                          <td className="tnum border-b border-line/70 px-4 py-2.5 text-right font-bold">{inr(c.amount)}</td>
-                          <td className="border-b border-line/70 px-4 py-2.5">{flag && <Badge tone="warn">{FLAG_META[flag].label}</Badge>}</td>
+                          <td className="border-b border-line/70 px-3 py-2.5 text-mute">{vlccTitle(c.vlccid, c.village)}</td>
+                          <td className="tnum whitespace-nowrap border-b border-line/70 px-3 py-2.5 text-mute">{c.time}</td>
+                          <td className="border-b border-line/70 px-3 py-2.5"><KindChip kind={c.milk} label={c.milkLabel} compact /></td>
+                          <td className="tnum border-b border-line/70 px-3 py-2.5 text-right font-bold">{c.liter}</td>
+                          <td className="tnum border-b border-line/70 px-3 py-2.5 text-right">{c.fat}</td>
+                          <td className="tnum border-b border-line/70 px-3 py-2.5 text-right">{c.snf}</td>
+                          <td className="tnum border-b border-line/70 px-3 py-2.5 text-right font-bold">{inr(c.amount)}</td>
+                          <td className="border-b border-line/70 px-3 py-2.5">{flag && <Badge tone="warn">{FLAG_META[flag].label}</Badge>}</td>
                         </tr>
                       );
                     })}

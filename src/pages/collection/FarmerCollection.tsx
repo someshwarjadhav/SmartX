@@ -151,7 +151,7 @@ const COLUMNS: Column<CollectionEntry>[] = [
       </div>
     ),
     mobile: 'title',
-    width: 190,
+    width: 170,
   },
   { key: 'centre', header: 'Station Name', cell: (r) => <span className="block truncate whitespace-nowrap" title={r.centre}>{r.centre}</span>, mobile: 'hidden', width: 170 },
   { key: 'sample', header: 'Sample No', cell: (r) => <span className="tnum">{r.sampleNo ?? ''}</span>, mobile: 'hidden' },
@@ -312,7 +312,6 @@ const FarmerCollection: React.FC = () => {
   // userReportConfig -> report[0] = Farmer Collection: only the columns allowed for this login are shown / exported
   const access = useReportColumns('farmercollection');
   const columns = useMemo(() => access.arrange(COLUMNS, (c) => c.key, COLUMN_ALIASES), [access]);
-  const shownKeys = useMemo(() => new Set(columns.map((c) => c.key)), [columns]);
 
   const plantIds = useMemo(() => new Set(centres.filter((c) => c.mccId === applied.plant).map((c) => c.id)), [centres, applied.plant]);
   const rows = useMemo(() => live.rows.filter((r) =>
@@ -463,7 +462,7 @@ const FarmerCollection: React.FC = () => {
         ) : bansiSheet ? (
           <BansiCollectionTable from={bansiSheet.from} to={bansiSheet.to} lines={linesPager.visible} />
         ) : (
-          <DataTable columns={columns} rows={rowsPager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection" minWidth={Math.max(520, shownKeys.size * 73)} />
+          <DataTable columns={columns} rows={rowsPager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection"  />
         )}
 
         {!loading && rows.length > 0 && (

@@ -252,7 +252,7 @@ const BankPaymentSummary: React.FC = () => {
 
           {status !== "loading" && status !== "error" && (
             <div className="overflow-x-auto">
-              <table className="clip-cells w-full min-w-[980px] border-separate border-spacing-0 text-sm" onMouseOver={clipTitle}>
+              <table className="clip-cells w-full border-separate border-spacing-0 text-[13px]" onMouseOver={clipTitle}>
                 <thead>
                   <tr>
                     {multi && <th className={cn(TH, "text-left")}>VLC</th>}

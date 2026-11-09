@@ -18,7 +18,7 @@ const num = (v: number, dec: number): string =>
   v.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
 const NAME_CELL = 'overflow-hidden whitespace-nowrap';
-const NAME_STYLE: React.CSSProperties = { width: NAME_WIDTH, minWidth: NAME_WIDTH, maxWidth: NAME_WIDTH };
+const NAME_STYLE: React.CSSProperties = { maxWidth: NAME_WIDTH };
 const BORDER = 'border border-line/80';
 const CELL = `${BORDER} px-2 py-1.5 text-[13px]`;
 
