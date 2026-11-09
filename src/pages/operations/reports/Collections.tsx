@@ -14,7 +14,7 @@ import { KindChip } from "../../../components/operations/KindChip";
 import { QueryBoundary } from "../../../components/operations/Widget";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import { nf, todayISO } from "../../../lib/portal/format";
-import { exportCSV, exportExcel, exportPDF, type ExportCol } from "../../../lib/portal/export";
+import { exportCSV, exportExcel, exportPDF, type ExportCol } from "../../../assets/excel/portalExport";
 import { ReportBar, ReportDataBadge, ReportPage } from "../../../components/operations/ReportKit";
 import { GLOBALLABELS, GLOBALSMILK, GLOBALSSHIFT, DEFAULT_PAGE_SIZE, DEFAULT_MILK, DEFAULT_SHIFT, SHIFT_MORNING } from "../../../lib/portal/global";
 import {

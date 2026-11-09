@@ -117,6 +117,26 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
+  /*
+   * Report tables: names / fields keep a fixed width and a long value ends with "..." instead of stretching the
+   * whole table (which caused the long sideways scroll). A column can set its own width through style.width.
+   */
+  .clip-cells td,
+  .clip-cells th {
+    max-width: var(--cell-max, 15rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* a cell being used (input, menu, focus ring) is never clipped */
+  .clip-cells td:focus-within {
+    overflow: visible;
+  }
+  .clip-cells td .truncate {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .tk-wave-a {

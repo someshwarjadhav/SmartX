@@ -13,7 +13,7 @@ import {
   Reveal,
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
-import { exportExcel, type ExportCol } from "../../../lib/portal/export";
+import { exportExcel, type ExportCol } from "../../../assets/excel/portalExport";
 import { useToast } from "../../../context/ToastContext";
 import { fmtDate, nf, todayISO } from "../../../lib/portal/format";
 import { DEFAULT_PAGE_SIZE, GLOBALSSHIFT } from "../../../lib/portal/global";

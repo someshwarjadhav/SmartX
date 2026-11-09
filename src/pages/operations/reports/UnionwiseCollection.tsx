@@ -12,7 +12,7 @@ import { QueryBoundary } from '../../../components/operations/Widget';
 import { MilkLoader } from '../../../components/operations/MilkLoader';
 import { ReportBar, ReportDataBadge, ReportPage, Reveal, type ExportKind } from '../../../components/operations/ReportKit';
 import { fmtDate, nf, todayISO } from '../../../lib/portal/format';
-import { exportExcel, exportPDF, type ExportCol } from '../../../lib/portal/export';
+import { exportExcel, exportPDF, type ExportCol } from '../../../assets/excel/portalExport';
 import { DEFAULT_PAGE_SIZE, GLOBALLABELS } from '../../../lib/portal/global';
 import { SubmitButton } from '../../../components/operations/ReportFilters';
 import { useSamples } from '../../../hooks/useSmartxData';

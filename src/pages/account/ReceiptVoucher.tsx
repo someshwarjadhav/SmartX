@@ -22,7 +22,7 @@ import { useCentreOptions } from '../../hooks/useCentres';
 import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
 import { useVoucherLookups } from '../../hooks/useVoucherLookups';
-import { exportExcel, type ExportTable } from '../../lib/exporters';
+import { exportExcel, type ExportTable } from '../../assets/excel/exporters';
 import { fmtDate, nf, toISO } from '../../lib/format';
 import { cn } from '../../lib/cn';
 import { deleteReceiptVoucher, getLedgers, getReceiptVouchers, saveReceiptVoucher } from '../../services/account/receiptVoucher.api';

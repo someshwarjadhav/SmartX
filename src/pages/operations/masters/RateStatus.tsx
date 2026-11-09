@@ -19,7 +19,8 @@ import { GLOBALS } from "../../../lib/portal/global";
 import { getSession } from "../../../services/session";
 import { ApiError } from "../../../services/http/errors";
 import { MILK_TYPES, getRateStatus, type RateStatusRow } from "../../../services/master/rate.api.ts";
-import { exportRateStatus } from "../../../services/master/rate.excel.ts";
+import { exportRateStatus } from "../../../assets/excel/rate.excel.ts";
+import { clipTitle } from '../../../lib/clipTitle';
 
 const GOOD = /^(1|true|active|done|success|sync|synced|downloaded)/i;
 const WAIT = /^(0|pending|waiting|queued)/i;
@@ -121,7 +122,7 @@ const RateStatus: React.FC = () => {
               <MilkLoader label="Loading rate status…" />
             ) : (
             <div className="overflow-x-auto rounded-xl border border-line">
-              <table className="w-full min-w-[56rem] text-sm">
+              <table className="clip-cells w-full text-[13px]" onMouseOver={clipTitle}>
                 <thead className="bg-soft/70 text-left text-xs text-mute">
                   <tr>
                     {COLUMNS.map(([k, label]) => (

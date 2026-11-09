@@ -2,7 +2,7 @@ import { FileSpreadsheet, FileText, Printer, Table2 } from 'lucide-react';
 import type { ExportAction } from './ExportBar';
 import type { ToastTone } from './Toast';
 import { MSG } from '../../lib/messages';
-import { exportCSV, exportExcel, exportPDF, exportPlainExcel, printTable, type ExportTable } from '../../lib/exporters';
+import { exportCSV, exportExcel, exportPDF, exportPlainExcel, printTable, type ExportTable } from '../../assets/excel/exporters';
 
 interface Options {
   /** builds the table (columns, rows, totals) for the current filters */

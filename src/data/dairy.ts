@@ -1,3 +1,4 @@
+import { currentShift } from '../lib/shift';
 import type { AlertRow, CentreRow, DayRecord, MilkKind, SampleFlag, SampleRow, SupplierRow, TankerRow } from '../types';
 import { toISO } from '../lib/format';
 
@@ -128,7 +129,7 @@ export function todayIntake(now = new Date()): TodayIntake {
   const hour = now.getHours() + now.getMinutes() / 60;
   const full = avg(historyDays(7).map((d) => d.total)) * 1.02;
   const litres = Math.round(full * dayProgress(hour));
-  const morning = hour < 14;
+  const morning = currentShift(now) === 'Morning';
   return {
     litres,
     target: DAILY_TARGET,

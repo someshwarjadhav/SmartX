@@ -16,7 +16,7 @@ import { MilkLoader } from '../../../components/operations/MilkLoader';
 import { ReportBar, ReportDataBadge, ReportPage, Reveal, type ExportKind } from '../../../components/operations/ReportKit';
 import { cn } from '../../../lib/portal/cn';
 import { fmtDate, nf, todayISO } from '../../../lib/portal/format';
-import { exportCSV, exportExcel, exportPDF, type ExportCol } from '../../../lib/portal/export';
+import { exportCSV, exportExcel, exportPDF, type ExportCol } from '../../../assets/excel/portalExport';
 import { DEFAULT_PAGE_SIZE, GLOBALLABELS, SHIFT_MORNING } from '../../../lib/portal/global';
 import { useQuery } from '../../../hooks/useQuery';
 import { fetchVlccCollection } from '../../../services/vlcc/vlcc.api.ts';

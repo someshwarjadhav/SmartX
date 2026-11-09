@@ -1,5 +1,6 @@
-import type { FarmerRecord } from '../data/farmerMaster';
-import { findCentre } from '../data/masters';
+import type { FarmerRecord } from '../../data/farmerMaster';
+import { excelFileName } from './fileName';
+import { findCentre } from '../../data/masters';
 
 export const SAMPLE_HEADERS = [
   'Vlccid',
@@ -23,17 +24,18 @@ export interface ParseResult {
 const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const ALIASES: Record<string, string[]> = {
-  vlcId: ['vlccid', 'vlcid', 'centerid', 'centreid', 'centercode'],
+  vlcId: ['vlccid', 'vlcid', 'centerid', 'centreid', 'centercode', 'villageid'],
   farmerId: ['farmercode', 'farmerid'],
   name: ['farmername', 'name'],
-  bankHolder: ['farmernameasperbank', 'bankholder', 'accountholder'],
+  bankHolder: ['farmernameasperbank', 'bankholder', 'accountholder', 'nameinbank'],
   address: ['farmeraddress', 'address'],
-  mobile: ['mobilenumber', 'mobileno', 'mobile'],
-  bankName: ['bankname'],
-  ifsc: ['bankifsc', 'ifsc'],
-  accountNo: ['bankaccountno', 'accountno', 'accountnumber'],
-  aadhaar: ['aadhaarno', 'aadharno', 'aadhaar', 'aadhar'],
-  active: ['active', 'status'],
+  mobile: ['mobilenumber', 'mobileno', 'mobile', 'farmercontact'],
+  bankName: ['bankname', 'farmerbank'],
+  ifsc: ['bankifsc', 'ifsc', 'bankifsccode'],
+  accountNo: ['bankaccountno', 'accountno', 'accountnumber', 'farmerbankac'],
+  aadhaar: ['aadhaarno', 'aadharno', 'aadhaar', 'aadhar', 'farmeraadhaar'],
+  active: ['active', 'status', 'farmerstatus'],
+  cow: ['farmercow', 'cow', 'milktype', 'cowbuff'],
 };
 
 function pick(row: Record<string, unknown>, field: string): string {
@@ -77,17 +79,39 @@ export async function parseFarmerSheet(file: File, validCentreIds?: string[]): P
       accountNo: pick(row, 'accountNo'),
       aadhaar: pick(row, 'aadhaar'),
       active: activeText === '' ? true : isActive(activeText),
+      cow: pick(row, 'cow').toLowerCase(),
     });
   }
 
   return { records, invalid };
 }
 
+/**
+ * Sample file = the FarmerAccount.xlsx layout: the same 12 columns and the same dummy rows
+ * (farmerid ... farmeraadhaar, farmercow), so the sheet can be filled in and imported back as it is.
+ */
+export const SAMPLE_COLUMNS = [
+  'farmerid', 'farmername', 'nameinbank', 'farmeraddress', 'farmercontact', 'farmerbank',
+  'bankifsccode', 'farmerbankac', 'farmerstatus', 'villageid', 'farmeraadhaar', 'farmercow',
+] as const;
+
+const SAMPLE_ROWS: Array<Array<string | number>> = [
+  [498, 'Ravi', 'ABC XYZ', 'sangli', 9370950000, 'state bank of india sangli', 'idbi00s059', 122110400008311, 1, 7010101, '', 'cow'],
+  [499, 'Raj', 'ABC XYZ', 'sangli', 9370950000, 'state bank of india sangli', 'idbi00s059', 122110400008312, 1, 7010101, '', 'buff'],
+];
+
 export async function downloadFarmerSample(): Promise<void> {
   const XLSX = await import('xlsx');
-  const ws = XLSX.utils.aoa_to_sheet([[...SAMPLE_HEADERS]]);
-  ws['!cols'] = SAMPLE_HEADERS.map((h) => ({ wch: Math.max(14, h.length + 2) }));
+  const ws = XLSX.utils.aoa_to_sheet([[...SAMPLE_COLUMNS], ...SAMPLE_ROWS]);
+  ws['!cols'] = [10, 20, 20, 20, 16, 28, 16, 20, 14, 14, 16, 12].map((wch) => ({ wch }));
+  SAMPLE_ROWS.forEach((row, r) => row.forEach((v, c) => {
+    if (typeof v !== 'number') return;
+    const cell = ws[XLSX.utils.encode_cell({ r: r + 1, c })];
+    if (cell) cell.z = '0';
+  }));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Farmers');
-  XLSX.writeFile(wb, 'farmer-import-sample.xlsx');
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[]]), 'Sheet2');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[]]), 'Sheet3');
+  XLSX.writeFile(wb, excelFileName('FarmerAccount_Sample'), { compression: true });
 }

@@ -44,7 +44,7 @@ import {
   type VlcRoute,
   type VlcSlots,
 } from "../../../services/master/vlcMaster.api.ts";
-import { exportVlcMaster } from "../../../services/master/vlcMaster.excel.ts";
+import { exportVlcMaster } from "../../../assets/excel/vlcMaster.excel.ts";
 
 const msg = (e: unknown, fallback: string) =>
   e instanceof ApiError ? e.message : fallback;

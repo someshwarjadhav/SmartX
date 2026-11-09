@@ -2,11 +2,32 @@ import type * as React from 'react';
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { ArrowLeftRight, Banknote, ChevronDown, Database, FileBarChart, LayoutDashboard, LayoutGrid, Milk, PanelLeftClose, PanelLeftOpen, Receipt, Settings, ShieldCheck, Wallet, X, type LucideIcon } from 'lucide-react';
 import { findNavIn, useNavGroups } from '../../config/nav';
 import { useAuth } from '../../context/AuthContext';
 import { LogoMark, Wordmark } from '../brand/Logo';
 import { cn } from '../../lib/cn';
+
+/** Icon in front of every menu heading (the menu API only gives the names) */
+const GROUP_ICON: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  collection: Milk,
+  report: FileBarChart,
+  reports: FileBarChart,
+  master: Database,
+  masters: Database,
+  transactions: ArrowLeftRight,
+  transaction: ArrowLeftRight,
+  billing: Receipt,
+  account: Wallet,
+  accounts: Wallet,
+  administrator: ShieldCheck,
+  admin: ShieldCheck,
+  settings: Settings,
+  setting: Settings,
+  payment: Banknote,
+};
+const groupIcon = (title: string, fallback: LucideIcon): LucideIcon => GROUP_ICON[title.trim().toLowerCase()] ?? fallback ?? LayoutGrid;
 
 interface Props {
   collapsed: boolean;
@@ -67,7 +88,10 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
                   aria-expanded={isOpen}
                   className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-white/85 transition-colors duration-200 hover:bg-glow/15 hover:text-white"
                 >
-                  {group.title}
+                  <span className="flex min-w-0 items-center gap-3">
+                    {(() => { const GroupIcon = groupIcon(group.title, group.icon); return <GroupIcon size={18} className="shrink-0 text-glow/90" aria-hidden />; })()}
+                    <span className="truncate">{group.title}</span>
+                  </span>
                   <ChevronDown size={14} className={cn('transition-transform duration-300 ease-out', isOpen ? 'rotate-0' : '-rotate-90')} />
                 </button>
               )}

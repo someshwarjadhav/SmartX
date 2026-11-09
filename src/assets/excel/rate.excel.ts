@@ -1,9 +1,12 @@
-import { ApiError } from "../http/errors";
-import type { RateGrid, RateStatusRow } from "./rate.api.ts";
+import { ApiError } from "../../services/http/errors";
+import { excelFileName } from './fileName';
+import type { RateGrid, RateStatusRow } from "../../services/master/rate.api.ts";
 
 const loadXlsx = () => import("xlsx");
 
-export const SAMPLE_RATE_URL = `${import.meta.env.BASE_URL}Rate.xlsx`;
+import rateSampleUrl from "./Rate.xlsx?url";
+
+export const SAMPLE_RATE_URL: string = rateSampleUrl;
 
 export interface RateFile {
   grid: RateGrid;
@@ -113,7 +116,7 @@ export async function downloadGrid(grid: RateGrid, name: string) {
   const ws = XLSX.utils.aoa_to_sheet(gridAoa(grid));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-  XLSX.writeFile(wb, `${name}.xlsx`, { compression: true });
+  XLSX.writeFile(wb, excelFileName(name), { compression: true });
 }
 
 const csvCell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
@@ -152,5 +155,5 @@ export async function exportRateStatus(rows: RateStatusRow[], name: string) {
   ws["!cols"] = [14, 28, 16, 16, 14, 16, 16, 16, 12].map((wch) => ({ wch }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Rate Status");
-  XLSX.writeFile(wb, `${name}.xlsx`, { compression: true });
+  XLSX.writeFile(wb, excelFileName(name), { compression: true });
 }

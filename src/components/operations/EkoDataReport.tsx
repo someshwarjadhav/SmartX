@@ -11,8 +11,9 @@ import { MilkLoader } from './MilkLoader';
 import { CardTitle, ReportBar, ReportPage } from "./ReportKit";
 import { useCenters } from "../../hooks/useSessionData";
 import { vlccOption } from "../../services/vlcc/names";
-import { exportExcel, type ExportCol } from "../../lib/portal/export";
+import { exportExcel, type ExportCol } from "../../assets/excel/portalExport";
 import { ekoNorm, ekoText, ekoValue, type EkoField, type EkoRow } from "../../services/report/ekoShared";
+import { clipTitle } from '../../lib/clipTitle';
 
 interface Props {
   title: string;
@@ -117,18 +118,18 @@ export default function EkoDataReport({ title, subtitle, icon: Icon, fields, loa
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
+              <table className="clip-cells w-full border-separate border-spacing-0 text-[13px]" onMouseOver={clipTitle}>
                 <thead>
                   <tr>
                     {columns.map((c) => (
-                      <th key={c.label} scope="col" className="sticky top-0 whitespace-nowrap border-b border-line bg-soft/70 px-4 py-3 text-left text-xs font-semibold text-mute first:rounded-tl-xl last:rounded-tr-xl">{c.label}</th>
+                      <th key={c.label} scope="col" className="sticky top-0 whitespace-nowrap border-b border-line bg-soft/70 px-3 py-3 text-left text-xs font-semibold text-mute first:rounded-tl-xl last:rounded-tr-xl">{c.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((row, i) => (
                     <tr key={(cur - 1) * size + i} className="transition-colors hover:bg-brand/[0.06]">
-                      {columns.map((c) => <td key={c.label} className="tnum whitespace-nowrap border-b border-line/70 px-4 py-3">{c.get(row)}</td>)}
+                      {columns.map((c) => <td key={c.label} className="tnum whitespace-nowrap border-b border-line/70 px-3 py-3">{c.get(row)}</td>)}
                     </tr>
                   ))}
                 </tbody>

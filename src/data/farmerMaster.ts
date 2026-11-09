@@ -15,6 +15,8 @@ export interface FarmerRecord {
   active: boolean;
   /** Verified by the dairy (the portal's Verify / Unverify button). Missing = not verified. */
   verified?: boolean;
+  /** farmercow column: cow / buff (only used for the Excel export) */
+  cow?: string;
 }
 
 export const farmerKey = (f: Pick<FarmerRecord, 'vlcId' | 'farmerId'>): string => `${f.vlcId}:${f.farmerId}`;

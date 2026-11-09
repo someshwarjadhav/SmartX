@@ -21,9 +21,9 @@ import {
   exportExcel,
   exportPDF,
   type ExportCol,
-} from "../../../lib/portal/export";
+} from "../../../assets/excel/portalExport";
 import { DEFAULT_PAGE_SIZE } from "../../../lib/portal/global";
-import { exportBansiPaymentExcel, isBansiUser } from "../../../lib/bansiPaymentExcel";
+import { exportBansiPaymentExcel, isBansiUser } from "../../../assets/excel/bansiPaymentExcel";
 import { todayISO } from "../../../lib/portal/format";
 import {
   getCashSummary,

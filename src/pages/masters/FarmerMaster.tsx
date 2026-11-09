@@ -1,5 +1,5 @@
 import type * as React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Download, FileSpreadsheet, Pencil, RefreshCw, Save, ShieldCheck, ShieldOff, Upload, UsersRound, X } from 'lucide-react';
 import { farmerKey, nextFarmerCode, type FarmerRecord } from '../../data/farmerMaster';
@@ -29,8 +29,8 @@ import { TableToolbar } from '../../components/ui/TableToolbar';
 import { Toast } from '../../components/ui/Toast';
 import { usePagination } from '../../hooks/usePagination';
 import { useToast } from '../../hooks/useToast';
-import { downloadFarmerSample, parseFarmerSheet } from '../../lib/farmerImport';
-import { exportExcel, type ExportTable } from '../../lib/exporters';
+import { downloadFarmerSample, parseFarmerSheet } from '../../assets/excel/farmerImport';
+import { exportFarmerAccountExcel } from '../../assets/excel/farmerAccountExcel';
 import { nf, toISO } from '../../lib/format';
 
 
@@ -101,13 +101,29 @@ interface Values {
   accountNo: string;
   aadhaar: string;
   active: boolean;
+  /** farmercow column: cow / buff */
+  cow: string;
 }
 
 type Errors = Partial<Record<keyof Values, string>>;
 
+/** the farmercow column holds `cow` or `buff` */
+const normCow = (v?: string): string => {
+  const t = (v ?? '').trim().toLowerCase();
+  if (t.startsWith('cow')) return 'cow';
+  if (t.startsWith('buff')) return 'buff';
+  return '';
+};
+
+const COW_OPTIONS = [
+  { value: '', label: 'Select' },
+  { value: 'cow', label: 'Cow' },
+  { value: 'buff', label: 'Buffalo' },
+];
+
 const digitsOnly = (v: string, max: number): string => v.replace(/\D/g, '').slice(0, max);
 
-const fromRecord = (r: FarmerRecord): Values => ({ ...r, farmerId: String(r.farmerId) });
+const fromRecord = (r: FarmerRecord): Values => ({ ...r, farmerId: String(r.farmerId), cow: normCow(r.cow) });
 
 const blank = (farmers: FarmerRecord[], vlcId: string): Values => ({
   vlcId,
@@ -121,6 +137,7 @@ const blank = (farmers: FarmerRecord[], vlcId: string): Values => ({
   accountNo: '',
   aadhaar: '',
   active: true,
+  cow: '',
 });
 
 function validate(v: Values, farmers: FarmerRecord[], isEdit: boolean): Errors {
@@ -206,10 +223,11 @@ const FarmerForm: React.FC<FormProps> = ({ farmers, editing, onSubmit, onCancel,
           <TextField wrapperClassName="sm:col-span-4" label="Farmer Name" value={values.name} onChange={(e) => set('name', e.target.value)} error={errors.name} autoComplete="off" />
         </FormSection>
 
-        <FormSection step={2} title="Contact and identity" description="Address, phone and Aadhaar" className="border-t border-line pt-6" bodyClassName="grid gap-4 sm:grid-cols-6">
+        <FormSection step={2} title="Contact and identity" description="Address, phone, Aadhaar and milk type" className="border-t border-line pt-6" bodyClassName="grid gap-4 sm:grid-cols-6">
           <TextField wrapperClassName="sm:col-span-4" label="Farmer Address" value={values.address} onChange={(e) => set('address', e.target.value)} autoComplete="off" />
           <TextField wrapperClassName="sm:col-span-2" label="Mobile Number" type="tel" inputMode="numeric" value={values.mobile} onChange={(e) => set('mobile', digitsOnly(e.target.value, 10))} error={errors.mobile} />
-          <TextField wrapperClassName="sm:col-span-6" label="Aadhaar No" inputMode="numeric" value={values.aadhaar} onChange={(e) => set('aadhaar', digitsOnly(e.target.value, 12))} error={errors.aadhaar} />
+          <TextField wrapperClassName="sm:col-span-4" label="Aadhaar No" inputMode="numeric" value={values.aadhaar} onChange={(e) => set('aadhaar', digitsOnly(e.target.value, 12))} error={errors.aadhaar} />
+          <SelectField wrapperClassName="sm:col-span-2" label="Cow / Buff" value={values.cow} onChange={(v) => set('cow', v)} options={COW_OPTIONS} />
         </FormSection>
 
         <FormSection step={3} title="Bank details" description="Used for bank payment files" className="border-t border-line pt-6" bodyClassName="grid gap-4 sm:grid-cols-6">
@@ -320,11 +338,13 @@ interface ListProps {
   counts: { all: number; verified: number; unverified: number };
   busyKeys: Set<string>;
   onVerify: (record: FarmerRecord, verified: boolean) => void;
+  /** the centre id as the screens show it (station code), not the id the server stores */
+  codeOf: (vlcId: string) => string;
 }
 
 const dash = (v: string): string => v || '—';
 
-const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onSelected, onEdit, onUpdateStatus, exportActions, centreOptions, loading = false, tab, onTab, counts, busyKeys, onVerify }) => {
+const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onSelected, onEdit, onUpdateStatus, exportActions, centreOptions, loading = false, tab, onTab, counts, busyKeys, onVerify, codeOf }) => {
   const pager = usePagination(rows);
   const pageKeys = useMemo(() => pager.visible.map(farmerKey), [pager.visible]);
   const checkedOnPage = pageKeys.filter((k) => selected.has(k)).length;
@@ -344,11 +364,12 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
   };
 
   const columns: Column<FarmerRecord>[] = [
-    { key: 'vlc', header: 'Vlccid', cell: (r) => <span className="tnum">{r.vlcId}</span> },
-    { key: 'id', header: 'Farmer Id', cell: (r) => <span className="tnum">{r.farmerId}</span> },
+    { key: 'vlc', header: 'Vlccid', width: 90, cell: (r) => <span className="tnum truncate">{codeOf(r.vlcId)}</span> },
+    { key: 'id', header: 'Farmer Id', width: 90, cell: (r) => <span className="tnum truncate">{r.farmerId}</span> },
     {
       key: 'name',
       header: 'Farmer Name',
+      width: 220,
       cell: (r) => (
         <span className="flex items-center gap-3">
           <Avatar name={r.name} size="sm" />
@@ -357,25 +378,17 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
       ),
       mobile: 'title',
     },
-    { key: 'mobile', header: 'Mobile No', cell: (r) => <span className="tnum">{dash(r.mobile)}</span> },
-    { key: 'bank', header: 'Bank Name', cell: (r) => dash(r.bankName) },
-    { key: 'account', header: 'Account No', cell: (r) => <span className="tnum">{dash(r.accountNo)}</span> },
-    { key: 'ifsc', header: 'IFSC', cell: (r) => <span className="tnum">{dash(r.ifsc)}</span> },
+    { key: 'mobile', header: 'Mobile No', width: 130, cell: (r) => <span className="tnum truncate">{dash(r.mobile)}</span> },
+    { key: 'bank', header: 'Bank Name', width: 170, cell: (r) => <span className="truncate">{dash(r.bankName)}</span> },
+    { key: 'account', header: 'Account No', width: 160, cell: (r) => <span className="tnum truncate">{dash(r.accountNo)}</span> },
+    { key: 'ifsc', header: 'IFSC', width: 130, cell: (r) => <span className="tnum truncate">{dash(r.ifsc)}</span> },
     {
       key: 'status',
       header: 'Status',
+      width: 110,
       cell: (r) => (
         <Badge tone={selected.has(farmerKey(r)) ? 'ok' : 'neutral'} dot>
           {selected.has(farmerKey(r)) ? 'Active' : 'Inactive'}
-        </Badge>
-      ),
-    },
-    {
-      key: 'verified',
-      header: 'Verification',
-      cell: (r) => (
-        <Badge tone={r.verified ? 'brand' : 'warn'} dot>
-          {r.verified ? 'Verified' : 'Unverified'}
         </Badge>
       ),
     },
@@ -467,7 +480,7 @@ const FarmerList: React.FC<ListProps> = ({ rows, centre, onCentre, selected, onS
       ) : rows.length === 0 ? (
         <EmptyState icon={UsersRound} title={tab === 'all' ? 'No farmers found' : tab === 'verified' ? 'No verified farmers' : 'No unverified farmers'} text={tab === 'all' ? 'Add a farmer using the form above or import an Excel file.' : 'Change the filter above to see other farmers.'} />
       ) : (
-        <DataTable columns={columns} rows={pager.visible} rowKey={farmerKey} ariaLabel="Farmer master" minWidth={980} isSelected={(r) => selected.has(farmerKey(r))} />
+        <DataTable columns={columns} rows={pager.visible} rowKey={farmerKey} ariaLabel="Farmer master" minWidth={1180} isSelected={(r) => selected.has(farmerKey(r))} />
       )}
 
       {!loading && rows.length > 0 && <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPage={pager.goTo} onPageSize={pager.setPageSize} showSize={false} />}
@@ -482,6 +495,13 @@ const FarmerMaster: React.FC = () => {
   const centreOptions = useMemo(() => centers.map((c) => ({ value: c.id, label: c.label })), [centers]);
   const ids = useMemo(() => centreOptions.map((c) => c.value), [centreOptions]);
   const idsKey = ids.join(',');
+  // centre id as the screens show it (station code) <-> the id the server stores
+  const codeOf = useCallback((id: string): string => centers.find((c) => c.id === id)?.code || id, [centers]);
+  const codeToId = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of centers) if (c.code) { m[c.code] = c.id; m[c.code.padStart(7, '0')] = c.id; }
+    return m;
+  }, [centers]);
   const [farmers, setFarmers] = useState<FarmerRecord[]>([]);
   const [editing, setEditing] = useState<FarmerRecord | null>(null);
   const [formKey, setFormKey] = useState(0);
@@ -497,8 +517,8 @@ const FarmerMaster: React.FC = () => {
     if (!ids.length) { setFarmers([]); setLoading(false); return []; }
     if (!silent) setLoading(true);
     try {
-      const data = await getData(ids);
-      const list: FarmerRecord[] = data.map((r) => ({ vlcId: r.vlccid, farmerId: Number(r.farmerId) || 0, name: r.name, bankHolder: r.nameInBank, address: r.address, mobile: r.mobile, bankName: r.bank, ifsc: r.ifsc, accountNo: r.account, aadhaar: r.aadhaar, active: r.active, verified: r.verified ?? isRememberedVerified(r.vlccid, r.farmerId) }));
+      const data = await getData(ids, codeToId);
+      const list: FarmerRecord[] = data.map((r) => ({ vlcId: r.vlccid, farmerId: Number(r.farmerId) || 0, name: r.name, bankHolder: r.nameInBank, address: r.address, mobile: r.mobile, bankName: r.bank, ifsc: r.ifsc, accountNo: r.account, aadhaar: r.aadhaar, active: r.active, cow: r.cow, verified: r.verified === true || isRememberedVerified(r.vlccid, r.farmerId) }));
       setFarmers(list);
     
       setSelected(new Set(list.filter((f) => f.active).map(farmerKey)));
@@ -537,7 +557,7 @@ const FarmerMaster: React.FC = () => {
   const save = async (record: FarmerRecord, isEdit: boolean) => {
     if (saving.current) return;
     saving.current = true;
-    const input: FarmerInput = { vlccid: record.vlcId, farmerId: String(record.farmerId), name: record.name, nameInBank: record.bankHolder, address: record.address, mobile: record.mobile, bank: record.bankName, ifsc: record.ifsc, account: record.accountNo, aadhaar: record.aadhaar, active: record.active };
+    const input: FarmerInput = { vlccid: record.vlcId, farmerId: String(record.farmerId), name: record.name, nameInBank: record.bankHolder, address: record.address, mobile: record.mobile, bank: record.bankName, ifsc: record.ifsc, account: record.accountNo, aadhaar: record.aadhaar, active: record.active, cow: record.cow };
     try {
       let serverNote = '';
       try {
@@ -574,9 +594,11 @@ const FarmerMaster: React.FC = () => {
   };
 
   const importRecords = async (records: FarmerRecord[], invalid: number) => {
+    // the sheet may carry the station code (as the Excel export writes it): it is turned back into the centre id here
+    records = records.map((r) => ({ ...r, vlcId: codeToId[r.vlcId] ?? r.vlcId }));
     const valid = records.filter((r) => ids.includes(r.vlcId));
     const invalidCentres = records.length - valid.length;
-    const inputs: FarmerInput[] = valid.map((r) => ({ vlccid: r.vlcId, farmerId: String(r.farmerId), name: r.name, nameInBank: r.bankHolder, address: r.address, mobile: r.mobile, bank: r.bankName, ifsc: r.ifsc, account: r.accountNo, aadhaar: r.aadhaar, active: r.active }));
+    const inputs: FarmerInput[] = valid.map((r) => ({ vlccid: r.vlcId, farmerId: String(r.farmerId), name: r.name, nameInBank: r.bankHolder, address: r.address, mobile: r.mobile, bank: r.bankName, ifsc: r.ifsc, account: r.accountNo, aadhaar: r.aadhaar, active: r.active, cow: r.cow }));
     try { if (inputs.length) await postExcel(inputs); await refreshRecords(true); toast.show(`Imported ${inputs.length} farmers${invalid + invalidCentres ? `, skipped ${invalid + invalidCentres}` : ''}`); }
     catch (e) { throw new Error(e instanceof Error ? e.message : 'Could not import farmers'); }
   };
@@ -598,7 +620,7 @@ const FarmerMaster: React.FC = () => {
     verifyingNow.current.add(key);
     setBusyKeys(new Set(verifyingNow.current));
     try {
-      await updateFarmerFlag(record.vlcId, record.farmerId, verified);
+      await updateFarmerFlag(record.vlcId, record.farmerId, verified, codeOf(record.vlcId));
       setFarmers((prev) => prev.map((f) => (farmerKey(f) === key ? { ...f, verified } : f)));
       toast.show(`${record.name} ${verified ? 'verified' : 'unverified'}`);
     } catch (e) {
@@ -613,17 +635,6 @@ const FarmerMaster: React.FC = () => {
     setCentre(id);
   };
 
-  const buildTable = (): ExportTable => ({
-    filename: `farmer-master-${toISO(new Date())}`,
-    title: 'Farmer master',
-    subtitle: `${rows.length} farmers`,
-    columns: [
-      { header: 'Vlccid' }, { header: 'Farmer Id', type: 'int' }, { header: 'Farmer Name' }, { header: 'Mobile No' }, { header: 'Bank Name' },
-      { header: 'Account No' }, { header: 'IFSC' }, { header: 'Aadhaar No' }, { header: 'Address' }, { header: 'Status' }, { header: 'Verification' },
-    ],
-    rows: rows.map((r) => [r.vlcId, r.farmerId, r.name, r.mobile, r.bankName, r.accountNo, r.ifsc, r.aadhaar, r.address, r.active ? 'Active' : 'Inactive', r.verified ? 'Verified' : 'Unverified']),
-  });
-
   const exportAction: ExportAction = {
     id: 'excel',
     label: 'Excel Export',
@@ -631,7 +642,10 @@ const FarmerMaster: React.FC = () => {
     variant: 'primary',
     run: async () => {
       try {
-        await exportExcel(buildTable());
+        await exportFarmerAccountExcel(
+          rows.map((r) => ({ farmerId: r.farmerId, name: r.name, nameInBank: r.bankHolder, address: r.address, mobile: r.mobile, bank: r.bankName, ifsc: r.ifsc, account: r.accountNo, active: r.active, villageId: codeOf(r.vlcId), aadhaar: r.aadhaar, cow: r.cow })),
+          `farmer-master-${toISO(new Date())}`,
+        );
         toast.show(`Exported ${rows.length} farmers as Excel`);
       } catch {
         toast.show('Export failed. Please try again.');
@@ -647,7 +661,7 @@ const FarmerMaster: React.FC = () => {
         <FarmerForm key={formKey} farmers={farmers} editing={editing} onSubmit={save} onCancel={resetForm} centreOptions={centreOptions} />
         <div className="space-y-4 sm:space-y-5 xl:sticky xl:top-20">
           <FarmerSummary rows={centreRows} />
-          <FarmerImport onImport={importRecords} validCentreIds={ids} />
+          <FarmerImport onImport={importRecords} validCentreIds={[...ids, ...Object.keys(codeToId)]} />
         </div>
       </div>
 
@@ -667,6 +681,7 @@ const FarmerMaster: React.FC = () => {
         counts={counts}
         busyKeys={busyKeys}
         onVerify={setVerify}
+        codeOf={codeOf}
       />
 
       <Toast message={toast.message} onClose={toast.close} />

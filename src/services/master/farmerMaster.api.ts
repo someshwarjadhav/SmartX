@@ -61,6 +61,8 @@ export interface MasterRecord extends FarmerInput {
   key: string;
   /** Verify flag sent by the server (true / false). null = the server did not send one. */
   verified: boolean | null;
+  /** farmercow column of the farmer master (cow / buff) */
+  cow?: string;
 }
 
 const VLC_KEYS = ["vlccid", "villageid", "vlcid", "vlccode", "centerid"];
@@ -94,16 +96,29 @@ const VERIFY_KEYS = [
   "flag",
 ];
 
+const flagValue = (v: unknown): boolean | null => {
+  if (v === null || v === undefined || String(v).trim() === "") return null;
+  const t = String(v).trim().toLowerCase();
+  if ([ "1", "true", "yes", "y", "verified" ].includes(t)) return true;
+  if ([ "0", "false", "no", "n", "unverified", "not verified" ].includes(t)) return false;
+  return null;
+};
+
 function verifiedOf(r: RawLoose): boolean | null {
   const keys = Object.keys(r);
+  const clean = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
   for (const want of VERIFY_KEYS) {
-    const k = keys.find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === want);
+    const k = keys.find((x) => clean(x) === want);
     if (k === undefined) continue;
-    const v = r[k];
-    if (v === null || v === undefined || String(v).trim() === "") continue;
-    const t = String(v).trim().toLowerCase();
-    if ([ "1", "true", "yes", "y", "verified" ].includes(t)) return true;
-    if ([ "0", "false", "no", "n", "unverified", "not verified" ].includes(t)) return false;
+    const found = flagValue(r[k]);
+    if (found !== null) return found;
+  }
+  // any other column that is named like a flag / verify field (never the Active / Inactive status)
+  for (const k of keys) {
+    const c = clean(k);
+    if (!/(flag|verif)/.test(c) || /status|active/.test(c)) continue;
+    const found = flagValue(r[k]);
+    if (found !== null) return found;
   }
   return null;
 }
@@ -154,6 +169,7 @@ export function mapRecord(r: RawLoose, vlccid: string, i = 0): MasterRecord {
       pickLike(r, ["aadhaar", "aadhar"]),
     active: !["false", "0", "inactive", "n", "no"].includes(status),
     verified: verifiedOf(r),
+    cow: pickLoose(r, ["farmercow", "cow", "milktype"]),
   };
 }
 
@@ -185,7 +201,8 @@ export async function getData(
   const tagged = rows.map((r) => pickLoose(r, VLC_KEYS));
   let out: Array<{ r: RawLoose; v: string }>;
   if (ids.length === 1) out = rows.map((r) => ({ r, v: ids[0] }));
-  else if (tagged.every(Boolean))
+  else if (tagged.every((t) => Boolean(t) && known.has(resolve(t))))
+    // every row names a centre of this login (by its centre id or its station code) -> it is shown under that centre
     out = rows.map((r, i) => ({ r, v: resolve(tagged[i]) }));
   else {
     const parts = await Promise.all(
@@ -296,6 +313,7 @@ export function toPayload(f: FarmerInput, isEdit = false) {
     bnkifsc: f.ifsc.trim().toUpperCase(),
     nameinbank: f.nameInBank.trim(),
     farmeraadhaar: f.aadhaar,
+    farmercow: f.cow ?? "",
     farmerstatus: f.active ? "1" : "0",
     action: isEdit ? "update" : "insert",
   };
@@ -314,6 +332,7 @@ export function toExcelPayload(f: FarmerInput) {
     farmerstatus: f.active ? 1 : 0,
     villageid: Number(f.vlccid),
     farmeraadhaar: f.aadhaar,
+    farmercow: f.cow ?? "",
   };
 }
 
@@ -446,8 +465,9 @@ export async function updateFarmerFlag(
   vlccid: string,
   farmerId: string | number,
   verified: boolean,
+  villageCode: string = vlccid,
 ): Promise<string> {
-  const path = `${FARMER_FLAG_PATH}?villageid=${q(String(vlccid))}&farmerid=${q(String(farmerId))}&flag=${verified ? 1 : 0}`;
+  const path = `${FARMER_FLAG_PATH}?villageid=${q(String(villageCode))}&farmerid=${q(String(farmerId))}&flag=${verified ? 1 : 0}`;
   let lastError: unknown;
   for (let n = 0; n < FLAG_METHODS.length; n++) {
     const i = (flagMethod + n) % FLAG_METHODS.length;

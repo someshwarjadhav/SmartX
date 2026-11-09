@@ -7,7 +7,7 @@ import { useWarmCentres } from '../../hooks/useWarmCentres';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
-import type { ColType, ExportTable } from '../../lib/exporters';
+import type { ColType, ExportTable } from '../../assets/excel/exporters';
 import { DataTable, type Column } from '../../components/ui/DataTable';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { KindChip } from '../../components/ui/KindChip';
@@ -31,8 +31,9 @@ import { DateRangeFields } from '../../components/ui/DateRangeFields';
 import { Segmented } from '../../components/ui/Segmented';
 import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
 import { MSG } from '../../lib/messages';
-import { BANSI_USER_IDS, exportBansiAllExcel, isBansiAll } from '../../lib/bansiExcel';
-import { GLOBALS } from '../../lib/portal/global';
+import { buildBansiSheet, exportBansiSheet, isBansiUser } from '../../assets/excel/bansiExcel';
+import { BansiCollectionTable } from '../../components/ui/BansiCollectionTable';
+import { titleCase } from '../../lib/titleCase';
 
 /* ---------- Filter card ---------- */
 
@@ -145,13 +146,14 @@ const COLUMNS: Column<CollectionEntry>[] = [
     header: 'Name',
     cell: (r) => (
       <div className="min-w-0">
-        <p className="truncate font-semibold">{r.farmer}</p>
+        <p className="truncate font-semibold" title={r.farmer}>{r.farmer}</p>
         <p className="tnum text-xs font-normal text-mute md:hidden">Station {r.stationCode || r.stationId}</p>
       </div>
     ),
     mobile: 'title',
+    width: 170,
   },
-  { key: 'centre', header: 'Station Name', cell: (r) => <span className="whitespace-nowrap">{r.centre}</span>, mobile: 'hidden' },
+  { key: 'centre', header: 'Station Name', cell: (r) => <span className="block truncate whitespace-nowrap" title={r.centre}>{r.centre}</span>, mobile: 'hidden', width: 170 },
   { key: 'sample', header: 'Sample No', cell: (r) => <span className="tnum">{r.sampleNo ?? ''}</span>, mobile: 'hidden' },
   { key: 'litres', header: 'Liter', align: 'right', cell: (r) => <span className="tnum font-semibold">{nf(r.litres, 2)}</span> },
   { key: 'kg', header: 'Kg', align: 'right', cell: (r) => <span className="tnum">{nf(r.kg ?? 0, 2)}</span>, mobile: 'hidden' },
@@ -264,21 +266,28 @@ const asNumber = (v: string | number): number => {
   return Number.isFinite(n) ? r2(n) : 0;
 };
 
+/** a column whose every value is a whole number without leading zeros (farmer id 3, branch id 1 ...) is written as REAL numbers, not text */
+const PLAIN_INT = /^(0|[1-9]\d{0,14})$/;
+const ID_COLS = new Set(['farmerId', 'branch', 'sampleNo']);
+
 function sheetTable(order: string[], rows: CollectionEntry[], filename: string, numType: ColType, withTotal: boolean): ExportTable {
   const cols = order.map((k) => SHEET_COLS[k]).filter((c): c is SheetCol => !!c);
+  const keyOf = (c: SheetCol): string => order.find((k) => SHEET_COLS[k] === c) ?? '';
   const at = (key: string): number => cols.findIndex((c) => c.header === SHEET_COLS[key]?.header);
   const litres = at('litres');
   const amount = at('amount');
+  // number-like text columns: numbers (right aligned, can be summed) when every value is a plain whole number, else they stay text
+  const idCol = cols.map((c) => ID_COLS.has(keyOf(c)) && rows.every((r) => { const v = String(c.value(r) ?? '').trim(); return v === '' || PLAIN_INT.test(v); }));
   return {
     filename,
     title: 'Farmer collection',
-    columns: cols.map((c) => ({
+    columns: cols.map((c, i) => ({
       header: c.header,
-      ...(c.num ? { type: numType } : {}),
+      ...(c.num ? { type: numType } : idCol[i] ? { type: 'id' as ColType } : {}),
       // Total row only when asked for; the STIPL Old / New Excel pass false, so no Total row is written
       ...(!withTotal ? {} : c.total === 'sum' ? { total: 'sum' as const } : c.total === 'wavg' ? { total: { wavg: litres } } : c.total === 'ratio' ? { total: { ratio: [amount, litres] as [number, number] } } : {}),
     })),
-    rows: rows.map((r) => cols.map((c) => (c.num ? asNumber(c.value(r)) : c.value(r)))),
+    rows: rows.map((r) => cols.map((c, i) => (c.num ? asNumber(c.value(r)) : idCol[i] ? (String(c.value(r) ?? '').trim() === '' ? '' : Number(String(c.value(r)).trim())) : c.value(r)))),
   };
 }
 
@@ -303,16 +312,26 @@ const FarmerCollection: React.FC = () => {
   // userReportConfig -> report[0] = Farmer Collection: only the columns allowed for this login are shown / exported
   const access = useReportColumns('farmercollection');
   const columns = useMemo(() => access.arrange(COLUMNS, (c) => c.key, COLUMN_ALIASES), [access]);
-  const shownKeys = useMemo(() => new Set(columns.map((c) => c.key)), [columns]);
 
+  const plantIds = useMemo(() => new Set(centres.filter((c) => c.mccId === applied.plant).map((c) => c.id)), [centres, applied.plant]);
   const rows = useMemo(() => live.rows.filter((r) =>
-    (!applied.plant || applied.plant === 'all' || r.plant === applied.plant) &&
+    (!applied.plant || applied.plant === 'all' || plantIds.has(r.stationId)) &&
     (!applied.centre || applied.centre === 'all' || r.stationId === applied.centre) &&
     (applied.kind === 'both' || r.kind === applied.kind) &&
     (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.from && r.date <= applied.to
-  ), [live.rows, applied]);
+  ), [live.rows, applied, plantIds]);
 
-  const pager = usePagination(rows);
+  // Static condition: the Bansi login (user id 307) sees the Farmer Collection in the Excel layout (VSP Name blocks + bold totals)
+  const bansiUser = isBansiUser();
+  const centreNames = useMemo(() => new Map(centres.map((c) => [c.id, titleCase(c.name || c.id)])), [centres]);
+  const centreCodes = useMemo(() => new Map(centres.map((c) => [c.id, c.code ?? ''])), [centres]);
+  const bansiSheet = useMemo(
+    () => (bansiUser ? buildBansiSheet(rows, applied.from, applied.to, (id) => centreNames.get(id) ?? '', (id) => centreCodes.get(id) ?? '') : null),
+    [bansiUser, rows, applied.from, applied.to, centreNames, centreCodes],
+  );
+  const rowsPager = usePagination(rows);
+  const linesPager = usePagination(bansiSheet?.lines ?? []);
+  const pager = bansiSheet ? linesPager : rowsPager;
 
   const totals = useMemo(() => {
     const litres = rows.reduce((a, r) => a + r.litres, 0);
@@ -344,7 +363,8 @@ const FarmerCollection: React.FC = () => {
     setSubmitted(true);
     // bring the results (and the loader) up so nothing has to be scrolled
     window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
-    pager.reset();
+    rowsPager.reset();
+    linesPager.reset();
   };
 
   const plantName = applied.plant === 'all' ? 'All' : centres.find((c) => c.mccId === applied.plant)?.plantName ?? '';
@@ -369,8 +389,7 @@ const FarmerCollection: React.FC = () => {
     };
   };
 
-  // Bansi login (user id 307) keeps the Total row in both Old and New Excel; every other login gets the plain STIPL sheet (no Total row)
-  const bansiUser = BANSI_USER_IDS.includes(String(GLOBALS.userid ?? '').trim());
+  // Every login gets the plain STIPL sheet (no Total row); the Bansi login gets the Bansi sheet instead (see `actions` below)
   const fileScope = applied.centre === 'all' || !applied.centre ? 'All' : applied.centre;
   // Old Excel = Date first layout (22 columns, no Total row), New Excel = Station Id first layout (also no Total row, same as STIPL)
   const baseActions: ExportAction[] = reportActions({
@@ -381,20 +400,21 @@ const FarmerCollection: React.FC = () => {
     stiplExcel: {
       // Old Excel = farmercollection.xlsx layout, New Excel = 101010.xlsx layout; data only like the STIPL portal (NO Total row), except for the Bansi login which keeps the Total row.
       // File name = VLC ("All" when All is selected) - Old / New - from - to
-      old: () => sheetTable(OLD_ORDER, rows, `${fileScope}-Old-${applied.from}-${applied.to}`, 'num2', bansiUser),
-      new: () => sheetTable(NEW_ORDER, rows, `${fileScope}-New-${applied.from}-${applied.to}`, 'num2', bansiUser),
+      old: () => sheetTable(OLD_ORDER, rows, `${fileScope}-Old-${applied.from}-${applied.to}`, 'num2', false),
+      new: () => sheetTable(NEW_ORDER, rows, `${fileScope}-New-${applied.from}-${applied.to}`, 'num2', false),
     },
   });
-  // Bansi login (user id 307) + VLC "All": New Excel Export gives the centre-wise "All" sheet. Everything else (and Old Excel Export) is unchanged.
-  const centreNames = new Map(centres.map((c) => [c.id, c.name || c.id]));
+  // Bansi login (user id 307): BOTH "Old Excel Export" and "New Excel Export" give the same sheet as the table on screen
+  // (VSP Name blocks, bold totals). Every other login keeps the normal Old / New Excel unchanged.
   const actions: ExportAction[] = baseActions.map((a) =>
-    a.id === 'excel' && isBansiAll(applied.centre)
+    (a.id === 'excel' || a.id === 'old') && bansiSheet
       ? {
           ...a,
           run: async () => {
             try {
-              await exportBansiAllExcel(rows, applied.from, applied.to, (id) => centreNames.get(id) ?? '');
-              toast.show(`Exported ${rows.length} entries as New Excel`, 'ok');
+              // the two files get different names, so downloading both does not give "(1)" copies
+              await exportBansiSheet(bansiSheet, a.id === 'old' ? `${fileScope} Old` : fileScope);
+              toast.show(`Exported ${rows.length} entries as ${a.id === 'old' ? 'Old' : 'New'} Excel`, 'ok');
             } catch {
               toast.show(MSG.exportFailed, 'error');
             }
@@ -439,8 +459,10 @@ const FarmerCollection: React.FC = () => {
           <ReportLoader label="Loading farmer collection…" done={live.done} total={live.total} />
         ) : rows.length === 0 ? (
           <EmptyState icon={SearchX} title="No collection found" text="Try another date range, shift or milk type." />
+        ) : bansiSheet ? (
+          <BansiCollectionTable from={bansiSheet.from} to={bansiSheet.to} lines={linesPager.visible} />
         ) : (
-          <DataTable columns={columns} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection" minWidth={Math.max(520, shownKeys.size * 73)} />
+          <DataTable columns={columns} rows={rowsPager.visible} rowKey={(r) => r.id} ariaLabel="Farmer collection"  />
         )}
 
         {!loading && rows.length > 0 && (

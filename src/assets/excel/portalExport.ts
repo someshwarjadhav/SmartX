@@ -1,4 +1,5 @@
-import { toSylk } from '../sylk';
+import { toSylk } from '../../lib/sylk';
+import { excelFileName } from './fileName';
 
 export interface ExportCol<T = unknown> {
   header: string;
@@ -55,7 +56,7 @@ export async function exportExcel<T>(name: string, cols: ExportCol<T>[], rows: T
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ') || 'Report');
-  XLSX.writeFile(wb, `${name}.xlsx`);
+  XLSX.writeFile(wb, excelFileName(name), { compression: true });
 }
 
 

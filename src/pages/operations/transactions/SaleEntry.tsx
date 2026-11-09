@@ -17,7 +17,7 @@ import { ErrorBlock } from "../../../components/operations/Widget";
 import { useSmoothLoading } from "../../../hooks/useSmoothLoading";
 import { useCentreOptions } from "../../../hooks/useCentres";
 import { useToast } from "../../../context/ToastContext";
-import { exportExcel, type ExportCol } from "../../../lib/portal/export";
+import { exportExcel, type ExportCol } from "../../../assets/excel/portalExport";
 import { todayISO } from "../../../lib/portal/format";
 import { DEFAULT_PAGE_SIZE } from "../../../lib/portal/global";
 import { vlccName } from "../../../services/vlcc/names";
