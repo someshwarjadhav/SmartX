@@ -1,4 +1,5 @@
-import type { VlcRecord } from "./vlcMaster.api.ts";
+import type { VlcRecord } from "../../services/master/vlcMaster.api.ts";
+import { excelFileName } from './fileName';
 
 const loadXlsx = () => import("xlsx");
 
@@ -44,5 +45,5 @@ export async function exportVlcMaster(
     }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "VillageMaster");
-  XLSX.writeFile(wb, `${name}.xlsx`, { compression: true });
+  XLSX.writeFile(wb, excelFileName(name), { compression: true });
 }

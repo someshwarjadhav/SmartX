@@ -10,7 +10,7 @@ import { StatCard } from '../../../components/operations/ui/StatCard';
 import { QueryBoundary } from '../../../components/operations/Widget';
 import { MilkLoader } from '../../../components/operations/MilkLoader';
 import { CardTitle, ReportBar, ReportDataBadge, ReportPage, Reveal, type ExportKind } from '../../../components/operations/ReportKit';
-import { exportCSV, exportExcel, exportPDF, type ExportCol } from '../../../lib/portal/export';
+import { exportCSV, exportExcel, exportPDF, type ExportCol } from '../../../assets/excel/portalExport';
 import { useToast } from '../../../context/ToastContext';
 import { nf, fmtDate } from '../../../lib/portal/format';
 import { cn } from '../../../lib/portal/cn';

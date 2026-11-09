@@ -69,6 +69,7 @@ import {
 import { useCentreOptions } from "../../hooks/useCentres";
 import { Select } from "../../components/ui/Select";
 import { hasRoute, useNav } from "../../components/layout/operations/nav";
+import { SHIFT_WINDOW } from "../../lib/shift";
 
 /* ---------- helpers ---------- */
 
@@ -202,7 +203,7 @@ const IntakeHero: React.FC<{
                 <span className="leading-tight">Shift time</span>
               </dt>
               <dd className="mt-1 text-[13px] leading-tight font-semibold sm:text-sm">
-                {today.shift === "Morning" ? "4:00 AM – 12:00 PM" : "12:00 PM – 4:00 AM"}
+                {SHIFT_WINDOW[today.shift]}
               </dd>
             </div>
             <div className="min-w-0 rounded-xl bg-white/8 px-3 py-2.5">

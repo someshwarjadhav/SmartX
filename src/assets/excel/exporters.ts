@@ -1,6 +1,8 @@
-import { toSylk } from './sylk';
+import { toSylk } from '../../lib/sylk';
+import { excelFileName } from './fileName';
 
-export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money' | 'num2' | 'general';
+/** 'id' = a whole number written as it is (farmer id, branch id ...): a real number, no thousands comma */
+export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money' | 'num2' | 'general' | 'id';
 
 /**
  * How the Total row is calculated for a column (Excel gets a real formula, PDF / CSV / print get the same value):
@@ -107,7 +109,7 @@ export function totalsOf(t: ExportTable): Array<string | number> | undefined {
 const IN = 'en-IN';
 const num = (v: number, d: number): string => new Intl.NumberFormat(IN, { minimumFractionDigits: d, maximumFractionDigits: d }).format(v);
 
-const DECIMALS: Record<ColType, number | undefined> = { text: undefined, int: 0, dec1: 1, dec2: 2, money: 2, num2: 2, general: undefined };
+const DECIMALS: Record<ColType, number | undefined> = { text: undefined, int: 0, dec1: 1, dec2: 2, money: 2, num2: 2, general: undefined, id: undefined };
 
 function show(v: string | number, type: ColType | undefined, rupee: string): string {
   if (typeof v !== 'number') return String(v ?? '');
@@ -231,7 +233,7 @@ export function exportCSV(t: ExportTable): void {
 /*  Excel                                                              */
 /* ------------------------------------------------------------------ */
 
-const XLSX_FORMAT: Record<ColType, string | undefined> = { text: undefined, int: '#,##0', dec1: '#,##0.0', dec2: '#,##0.00', money: '"₹"#,##0.00', num2: '0.00', general: undefined };
+const XLSX_FORMAT: Record<ColType, string | undefined> = { text: undefined, int: '#,##0', dec1: '#,##0.0', dec2: '#,##0.00', money: '"₹"#,##0.00', num2: '0.00', general: undefined, id: '0' };
 
 /**
  * One worksheet for every Excel export.
@@ -277,7 +279,9 @@ function buildSheet(XLSX: XlsxApi, t: ExportTable, titleBlock: boolean) {
     let longest = c.header.length + 3;
     for (const r of t.rows) longest = Math.max(longest, widthOf(r[i], c.type));
     if (totals) longest = Math.max(longest, widthOf(totals[i], c.type));
-    return { wch: Math.min(70, Math.max(9, longest + 2)) };
+    // name columns (Name / Station Name / Farmer Name) keep a fixed width, every other column fits its longest value
+    const isName = /name/i.test(c.header);
+    return { wch: isName ? 32 : Math.min(70, Math.max(9, longest + 2)) };
   });
 
   // merges: title lines, header groups, grouped (vertical) cells
@@ -344,9 +348,9 @@ function buildSheet(XLSX: XlsxApi, t: ExportTable, titleBlock: boolean) {
  * xlsx-js-style = SheetJS with cell styles (bold Total row). It is picked up only if it is installed (`npm install`);
  * if it is not, the Excel still downloads with the same data, just without the bold Total row, and nothing breaks.
  */
-type XlsxApi = typeof import('xlsx');
+export type XlsxApi = typeof import('xlsx');
 const styled = import.meta.glob('../../node_modules/xlsx-js-style/dist/xlsx.min.js');
-async function loadXlsx(): Promise<XlsxApi> {
+export async function loadXlsx(): Promise<XlsxApi> {
   const load = Object.values(styled)[0];
   if (load) {
     try {
@@ -367,16 +371,32 @@ export async function exportExcel(t: ExportTable): Promise<void> {
   const ws = buildSheet(XLSX, t, false);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, t.title.slice(0, 31).replace(/[\\/?*[\]:]/g, ' '));
-  XLSX.writeFile(wb, `${t.filename}.xlsx`);
+  XLSX.writeFile(wb, excelFileName(t.filename), { compression: true });
 }
 
 /** STIPL style Excel (old / new export): header on row 1, data below, total row with formulas, sheet "Sheet1". */
 export async function exportPlainExcel(t: ExportTable): Promise<void> {
   const XLSX = await loadXlsx();
   const ws = buildSheet(XLSX, t, false);
+  // Old / New Excel are plain data: every number column holds REAL numbers and no cell holds a formula,
+  // so selecting a column in Excel shows its Sum straight away (nothing asks for a formula).
+  const first = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
+  for (let r = 1; r <= first.e.r; r++) {
+    t.columns.forEach((c, ci) => {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: ci })];
+      if (!cell) return;
+      if (cell.f) delete cell.f;
+      const numberColumn = c.type !== undefined && c.type !== 'text';
+      if (numberColumn && cell.t === 's' && /^-?\d+(\.\d+)?$/.test(String(cell.v).replace(/,/g, '').trim())) {
+        cell.t = 'n';
+        cell.v = Number(String(cell.v).replace(/,/g, '').trim());
+        delete cell.w;
+      }
+    });
+  }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  XLSX.writeFile(wb, `${t.filename}.xlsx`);
+  XLSX.writeFile(wb, excelFileName(t.filename), { compression: true });
 }
 
 /** kept for older pages: same as the plain STIPL sheet */

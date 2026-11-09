@@ -16,7 +16,7 @@ import {
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { useCentreOptions } from "../../../hooks/useCentres";
-import { exportExcel, exportPDF, type ExportCol } from "../../../lib/portal/export";
+import { exportExcel, exportPDF, type ExportCol } from "../../../assets/excel/portalExport";
 import { todayISO } from "../../../lib/portal/format";
 import {
   downloadBillsExcel,

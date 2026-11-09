@@ -1,3 +1,4 @@
+import { excelFileName } from "../../../assets/excel/fileName.ts";
 import { validateDateRange } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -42,7 +43,7 @@ import {
   exportRateFileCsv,
   readRateFile,
   type RateFile,
-} from "../../../services/master/rate.excel.ts";
+} from "../../../assets/excel/rate.excel.ts";
 
 const msg = (e: unknown, fallback: string) =>
   e instanceof ApiError ? e.message : fallback;
@@ -251,7 +252,7 @@ const UploadCard: React.FC<{
             </span>
             <a
               href={SAMPLE_RATE_URL}
-              download="Rate.xlsx"
+              download={excelFileName("Rate")}
               className="font-semibold text-brand underline"
             >
               Download Sample File

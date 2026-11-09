@@ -24,6 +24,7 @@ import { sampleStamp } from "../../services/farmer/farmerBook";
 import { isLoadingQ, useSamples } from "../../hooks/useSmartxData";
 import { getSession } from "../../services/session";
 import { cn } from "../../lib/cn";
+import { clipTitle } from '../../lib/clipTitle';
 
 const REFRESH_MS = 60_000;
 
@@ -337,7 +338,7 @@ const LiveCollection: React.FC = () => {
           ) : (
             <>
               <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
+                <table className="clip-cells w-full min-w-[720px] border-separate border-spacing-0 text-sm" onMouseOver={clipTitle}>
                   <thead>
                     <tr className="text-left text-xs font-semibold text-mute">
                       {["Farmer", "Centre", "Time", "Milk", "Litres", "Fat", "SNF", "Amount", ""].map((h, i) => (

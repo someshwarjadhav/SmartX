@@ -14,7 +14,7 @@ import { Notice } from '../../components/operations/Widget';
 import { MilkLoader } from '../../components/operations/MilkLoader';
 import { vlccOption } from '../../services/vlcc/names';
 import { addDays, fmtDate, inr, nf, todayISO } from '../../lib/portal/format';
-import { exportCSV, exportPDF, type ExportCol } from '../../lib/portal/export';
+import { exportCSV, exportPDF, type ExportCol } from '../../assets/excel/portalExport';
 import { DEFAULT_PAGE_SIZE } from '../../lib/portal/global';
 import { KIND_META, type Kind } from '../../services/utils/milk';
 import { isoFromTrdate } from '../../services/utils/date';

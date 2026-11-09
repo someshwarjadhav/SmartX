@@ -1,5 +1,5 @@
-import { GLOBALS } from './portal/global';
-import { BANSI_USER_IDS } from './bansiExcel';
+import { excelFileName } from './fileName';
+import { isBansiUser as isBansiLogin } from './bansiExcel';
 
 /**
  * Bansi's Payment Summary Excel: same sheet layout as the Bansi "All" collection Excel
@@ -7,7 +7,7 @@ import { BANSI_USER_IDS } from './bansiExcel';
  * grand "Total :" row at the end). Only the Bansi Dairy Nagpur login (user id 307) gets this sheet from the
  * Excel export of Bank / Cash Payment Summary; every other login keeps the normal export.
  */
-export const isBansiUser = (): boolean => BANSI_USER_IDS.includes(String(GLOBALS.userid ?? '').trim());
+export const isBansiUser = (): boolean => isBansiLogin();
 
 /** how a numeric column is rolled up into the centre / grand total rows */
 export type PayAgg = 'sum' | 'wavg';
@@ -114,5 +114,5 @@ export async function exportBansiPaymentExcel<T>(input: BansiPayInput<T>): Promi
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Report');
   const file = (d: string): string => dmy(d).replace(/\//g, '-');
-  XLSX.writeFile(wb, `${input.fileLabel} ${file(input.from)}_${file(input.to)}.xlsx`);
+  XLSX.writeFile(wb, excelFileName(`${input.fileLabel} ${file(input.from)}_${file(input.to)}`), { compression: true });
 }

@@ -14,6 +14,8 @@ import { getDpuCenter, parseCenters } from '../services/center/center.api.ts';
 import type { Center } from '../services/mappers/center.mapper.ts';
 import { isoFromTrdate } from '../services/utils/date';
 import { time24 } from '../lib/format';
+import { titleCase, stripRoute } from '../lib/titleCase';
+import { getMccRoute, getVillageDetails } from '../services/master/vlcMaster.api';
 import type { RawFarmerRow, RawVlccRow } from '../services/types/raw';
 
 export interface LiveReportState<T> {
@@ -70,6 +72,37 @@ function loadReportCentres(key: string, tries: CentreTry[]): Promise<Center[]> {
   return p;
 }
 
+/* ---------- Routes (Plant/MCC dropdown = the login's routes, same as the live portal) ---------- */
+
+type RouteOf = Map<string, { id: string; name: string }>;
+const routeCache = new Map<string, Promise<RouteOf>>();
+
+/** getMccRoute (the routes of the login) + getVillageDetails (the centres of every route) -> centre id -> route */
+function loadRouteMap(mccid: string, plantid: string, total: number): Promise<RouteOf> {
+  const key = `${mccid}|${plantid}`;
+  const hit = routeCache.get(key);
+  if (hit) return hit;
+  const p = (async (): Promise<RouteOf> => {
+    const out: RouteOf = new Map();
+    try {
+      const routes = await getMccRoute(mccid, plantid);
+      const lists = await Promise.all(routes.map((r) => getVillageDetails(mccid, r.routeId).then((v) => ({ r, v })).catch(() => ({ r, v: [] as Awaited<ReturnType<typeof getVillageDetails>> }))));
+      for (const { r, v } of lists) {
+        // an answer that holds every centre of the login for each route is the "all villages" fallback, not this route's own list
+        if (routes.length > 1 && total > 0 && v.length >= total) continue;
+        for (const x of v) if (x.villageId && !out.has(x.villageId)) out.set(x.villageId, { id: r.routeId, name: r.routeName || r.routeId });
+      }
+      console.info(`[routes] ${routes.length} route(s):`, routes.map((r) => `${r.routeName} | ${r.routeId}`), `-> ${out.size} centres placed`);
+    } catch (e) {
+      console.warn('[routes] could not load the routes:', e instanceof Error ? e.message : e);
+    }
+    return out;
+  })();
+  routeCache.set(key, p);
+  void p.then((m) => { if (!m.size) routeCache.delete(key); });
+  return p;
+}
+
 /** Centres from the DPU centre API; the centres saved at login are used until it answers (or if it fails). */
 function useReportCenters(): Center[] {
   const session = getSession();
@@ -91,8 +124,26 @@ function useReportCenters(): Center[] {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, vlccKey]);
-  return dpu.length ? dpu : saved;
+  const base = dpu.length ? dpu : saved;
+  const [routeOf, setRouteOf] = useState<RouteOf>(new Map());
+  const baseCount = base.length;
+  useEffect(() => {
+    const mccid = session?.mccLoginId || GLOBALS.mccLoginId || session?.mccId || GLOBALS.mccid || '';
+    if (!mccid || !baseCount) return;
+    let alive = true;
+    void loadRouteMap(mccid, GLOBALS.plantid || '', baseCount).then((m) => { if (alive) setRouteOf(m); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, baseCount]);
+  return useMemo(() => (routeOf.size ? base.map((c) => { const r = routeOf.get(c.id); return r ? { ...c, routeId: r.id, routeName: r.name } : c; }) : base), [base, routeOf]);
 }
+
+/**
+ * The plant / route a centre belongs to. It comes from the centre API (route id, else route name), so a login with many
+ * routes (Bansi) gets one Plant/MCC entry per route. Only when the API sends no route at all the first 3 digits of the
+ * centre id are used, as before.
+ */
+export const plantKeyOf = (c: Center, fallback = ''): string => (c.routeId || c.routeName || c.id.slice(0, 3) || fallback).trim();
 
 /** Dropdown text: "VILLAGE NAME | 7090810" (name and id together). */
 export const centreLabel = (id: string, name?: string): string => (name && name.trim() && name.trim() !== id ? `${name.trim()} | ${id}` : id);
@@ -135,6 +186,7 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
     vlccIds: ids,
   }, emit, signal), { hideOldWhileLoading: hideOld });
   const names = useMemo(() => new Map(centers.map((c) => [c.id, c.name || c.label || c.id])), [centers]);
+  const plantOf = useMemo(() => new Map(centers.map((c) => [c.id, plantKeyOf(c)])), [centers]);
   const rows = useMemo(() => {
     const used = new Map<string, number>();
     const list = mapFarmers(q.rows).map((r): CollectionEntry => {
@@ -148,13 +200,13 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
       return {
         id: n ? `${base}#${n}` : base,
         stationId: r.vlccid,
-        plant: r.vlccid.slice(0, 3) || session?.mccId || '',
+        plant: plantOf.get(r.vlccid) || r.vlccid.slice(0, 3) || session?.mccId || '',
         date,
         time: r.time || '',
         shift,
         farmerId: r.farmerId,
-        farmer: r.farmerName,
-        centre: names.get(r.vlccid) || r.village || r.vlccid,
+        farmer: titleCase(r.farmerName),
+        centre: titleCase(names.get(r.vlccid) || r.village || r.vlccid),
         kind,
         litres: r.liter,
         fat: r.fat,
@@ -173,7 +225,7 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
     const keyed = list.map((r) => [rowOrder(r), r] as const);
     keyed.sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
     return keyed.map((x) => x[1]);
-  }, [q.rows, names, session?.mccId]);
+  }, [q.rows, names, plantOf, session?.mccId]);
   return { q, rows };
 }
 
@@ -261,25 +313,31 @@ export function useMilkVlccEntries(filter: LiveFilter, enabled = true): LiveRepo
   };
 }
 
-export interface CentreOpt { id: string; name: string; mccId: string; plantName: string; label: string }
+export interface CentreOpt { id: string; name: string; mccId: string; plantName: string; label: string; /** the centre's own station code (0001 ...), when the centre API sends one */ code?: string }
 
 export function useMilkCenterOptions(): CentreOpt[] {
   const centers = useReportCenters();
   const session = getSession();
   return useMemo(() => {
     const mcc = session?.mccId || '';
-    const routeOf = (prefix: string) => centers.find((c) => c.id.startsWith(prefix) && c.routeName)?.routeName || '';
-    const plant = (m: string) => routeOf(m) || session?.mccName || m;
+    // route name of every plant key (taken from the first centre of that route that has one)
+    const routeNames = new Map<string, string>();
+    for (const c of centers) {
+      const key = plantKeyOf(c, mcc);
+      if (c.routeName && !routeNames.has(key)) routeNames.set(key, c.routeName);
+    }
+    const plant = (m: string) => stripRoute(routeNames.get(m) || session?.mccName || m);
     const list = centers.length
-      ? centers.map((c) => ({ id: c.id, name: c.name || c.label || '', mccId: c.id.slice(0, 3) || mcc }))
-      : (session?.vlccIds ?? []).map((id) => ({ id, name: session?.vlccNames?.[id] || '', mccId: id.slice(0, 3) || mcc }));
-    // VLC dropdowns show "NAME | ID" (id comes from the getCenter API)
+      ? centers.map((c) => ({ id: c.id, name: c.name || c.label || '', mccId: plantKeyOf(c, mcc), code: c.stationId || session?.stationByVlcc?.[c.id] || undefined }))
+      : (session?.vlccIds ?? []).map((id) => ({ id, name: session?.vlccNames?.[id] || '', mccId: id.slice(0, 3) || mcc, code: session?.stationByVlcc?.[id] || undefined }));
+    // VLC dropdowns (every report, Farmer Master ...): "Name | ID" - the name (first letter of every word in capitals) and the
+    // centre id exactly as the centre API (getCenter / FarmerCollectionDpu) sends them
     return list.map((c) => {
-      const name = c.name.trim();
-      const label = !name || name === c.id ? c.id : `${name} | ${c.id}`;
+      const name = titleCase(c.name);
+      const label = !name || name.toUpperCase() === c.id.toUpperCase() ? c.id : `${name} | ${c.id}`;
       return { ...c, plantName: plant(c.mccId), label };
     });
-  }, [centers, session?.vlccIds, session?.vlccNames, session?.mccId, session?.mccName]);
+  }, [centers, session?.vlccIds, session?.vlccNames, session?.stationByVlcc, session?.mccId, session?.mccName]);
 }
 
 /** Plant/MCC dropdown: only the plant (route) name, e.g. "MAIN ROUTE" - no id, no "All". The value stays the MCC id. */
@@ -287,7 +345,7 @@ export function usePlantOptions(centres: CentreOpt[]): { value: string; label: s
   return useMemo(() => {
     const seen = new Map<string, string>();
     for (const c of centres) if (!seen.has(c.mccId)) seen.set(c.mccId, c.plantName);
-    return [...seen].map(([value, name]) => ({ value, label: name || value }));
+    return [...seen].map(([value, name]) => ({ value, label: titleCase(stripRoute(name || value)) }));
   }, [centres]);
 }
 

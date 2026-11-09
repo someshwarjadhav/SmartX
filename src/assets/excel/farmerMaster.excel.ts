@@ -1,13 +1,14 @@
-import { EXCEL_COLUMNS, type ExcelColumn } from './farmerMaster.rules.ts';
-import type { MasterRecord } from './farmerMaster.api.ts';
+import { EXCEL_COLUMNS, type ExcelColumn } from '../../services/master/farmerMaster.rules.ts';
+import { excelFileName } from './fileName';
+import type { MasterRecord } from '../../services/master/farmerMaster.api.ts';
 
 const loadXlsx = () => import('xlsx');
 
 function save(XLSX: Awaited<ReturnType<typeof loadXlsx>>, wb: import('xlsx').WorkBook, name: string) {
-  XLSX.writeFile(wb, name, { compression: true });
+  XLSX.writeFile(wb, excelFileName(name), { compression: true });
 }
 
-const widths = [10, 20, 20, 22, 14, 28, 14, 20, 12, 12, 16];
+const widths = [10, 20, 20, 22, 14, 28, 14, 20, 12, 12, 16, 12];
 
 function sheetOf(XLSX: Awaited<ReturnType<typeof loadXlsx>>, rows: Array<Array<string | number>>) {
   const ws = XLSX.utils.aoa_to_sheet([[...EXCEL_COLUMNS], ...rows]);
@@ -32,8 +33,8 @@ export async function downloadSample(centres: SampleCentre[], firstFarmerId: num
   const v = centres[0]?.id ?? '';
   const num = (s: string) => (s && /^\d+$/.test(s) ? Number(s) : s);
   const rows: Array<Array<string | number>> = [
-    [firstFarmerId, 'Ravi Patil', 'Ravi Patil', 'Sangli', '9370950000', 'State Bank of India Sangli', 'SBIN0001234', '122110400008311', 1, num(v), ''],
-    [firstFarmerId + 1, 'Raj Patil', 'Raj Patil', 'Sangli', '9370950001', 'State Bank of India Sangli', 'SBIN0001234', '122110400008312', 1, num(v), ''],
+    [firstFarmerId, 'Ravi', 'ABC XYZ', 'sangli', '9370950000', 'state bank of india sangli', 'idbi00s059', '122110400008311', 1, num(v), '', 'cow'],
+    [firstFarmerId + 1, 'Raj', 'ABC XYZ', 'sangli', '9370950000', 'state bank of india sangli', 'idbi00s059', '122110400008312', 1, num(v), '', 'buff'],
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, sheetOf(XLSX, rows), 'Sheet1');
@@ -59,6 +60,7 @@ export async function exportRecords(records: MasterRecord[], name: string) {
       farmerstatus: r.active ? 1 : 0,
       villageid: Number(r.vlccid) || r.vlccid,
       farmeraadhaar: r.aadhaar,
+      farmercow: r.cow ?? '',
     };
     return EXCEL_COLUMNS.map((c) => cells[c]);
   });

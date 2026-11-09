@@ -43,7 +43,7 @@ import {
   exportExcel,
   exportPDF,
   type ExportCol,
-} from "../../../lib/portal/export";
+} from "../../../assets/excel/portalExport";
 import {
   downloadFarmerBills,
   printFarmerBills,
@@ -470,12 +470,7 @@ const FarmerBill: React.FC = () => {
           />
           {status === "loading" && (
             <div className="p-6">
-              <MilkLoader label={progress ? `Loading farmer bills… ${progress.done} of ${progress.total} parts` : "Loading farmer bills…"} />
-              {progress && (
-                <div className="mx-auto mt-4 h-1.5 max-w-sm overflow-hidden rounded-full bg-line">
-                  <div className="h-full rounded-full bg-brand transition-all duration-500" style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} />
-                </div>
-              )}
+              <MilkLoader label="Loading farmer bills…" done={progress?.done} total={progress?.total} />
             </div>
           )}
           {status === "error" && (

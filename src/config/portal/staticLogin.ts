@@ -102,6 +102,36 @@ export const BANSI_LOGIN_RECORD: unknown | null = {
   ],
 };
 
+// 6) thelogicshell@gmail.com  (LogicShell) - same centres, routes and report access as the Bansi login (same user id as Bansi)
+export const LOGICSHELL_LOGIN_RECORD: unknown | null = {
+  Data: [
+    {
+      id: 259,
+      email: "thelogicshell@gmail.com",
+      username: "LOGICSHELL",
+      mccid: "183",
+      mccname: "Bansi Dairy Nagpur",
+      mobile: "8691932444",
+      status: 1,
+      SessionID:
+        "7070601,7070602,7070603,7070604,7070605,7070606,7070607,7070608,7070609,7070610,7070611,7070612,7070613,7070614,7070615,7070616,7070617,7070618,7070619,7070620,7070621,7070622,7070623,7070624,7070625,7070626,7070627",
+      CustomStationId:
+        "0001,0023,0024,0025,0026,0002,0003,0004,0005,0006,0007,0009,0010,0011,0021,0012,0013,0014,0016,0019,0020,0028,0029,0030,0027,0032,0031",
+      LoginStatus: 0,
+      webLogin: 0,
+      PlantId: 50,
+      UserAccess: null,
+      deviceName: null,
+      lastLogin: null,
+      Token: "39ab2e18860b6291be8dc3beb8ed19101926x1tr",
+      DataEncryption: null,
+      GST: null,
+      Address: null,
+      logo: null,
+    },
+  ],
+};
+
 // 4) kadambari@gmail.com  (Kadambari Dudh)
 export const KADAMBARI_LOGIN_RECORD: unknown | null = {
   Data: [
@@ -179,6 +209,12 @@ export const STATIC_LOGINS: StaticLoginEntry[] = [
     passwordSha256:
       "da65e43e2a094f208d61fab0f1f35cd8adc15889759dda37e59b4c010aa3a340",
     record: BANSI_LOGIN_RECORD,
+  },
+  {
+    username: "thelogicshell@gmail.com",
+    passwordSha256:
+      "aa93eb3454c468f60f993efb06f8c71dde2a1a0fefcb8c4bc04e6c5f38cc2ae7",
+    record: LOGICSHELL_LOGIN_RECORD,
   },
   {
     username: "kadambari@gmail.com",

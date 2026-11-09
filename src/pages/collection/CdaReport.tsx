@@ -23,7 +23,7 @@ import { useToast } from '../../hooks/useToast';
 import { cn } from '../../lib/cn';
 import { fmtDate, nf, toISO } from '../../lib/format';
 import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
-import { exportExcel, type ExportColumn, type ExportTable } from '../../lib/exporters';
+import { exportExcel, type ExportColumn, type ExportTable } from '../../assets/excel/exporters';
 import { MSG } from '../../lib/messages';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
@@ -55,9 +55,14 @@ interface Metrics {
 
 interface CdaRow {
   id: string;
+  /** the centre's number in front of its id: "1. 500381" (station code, else its place in the centre list) */
+  serial: number;
   vlccId: string;
   vlcc: string;
-  type: 'Cow' | 'Buffalo' | 'Mix' | 'Both';
+  type: 'Cow' | 'Buffalo' | 'Mix';
+  /** the picked date range (every row covers all of it) */
+  from: string;
+  to: string;
   composite: Metrics;
   dispatch: Metrics;
   actual: Metrics;
@@ -95,40 +100,52 @@ function metricsOf(items: CdaRaw[], pick: (r: CdaRaw) => CdaSide): Metrics {
   };
 }
 
-const delta = (a: Metrics, b: Metrics): Diff => ({
-  weight: r2(a.weight - b.weight),
-  fat: r2(a.fat - b.fat),
-  snf: r2(a.snf - b.snf),
-  rate: r2(a.rate - b.rate),
-  amount: r2(a.amount - b.amount),
+/**
+ * Differences exactly as the client's "VLC Difference Report" sheet shows them:
+ *   Composite-Actual = Actual - Composite, Dispatch-Actual = Actual - Dispatch, Composite-Dispatch = Dispatch - Composite
+ */
+const delta = (from: Metrics, to: Metrics): Diff => ({
+  weight: r2(to.weight - from.weight),
+  fat: r2(to.fat - from.fat),
+  snf: r2(to.snf - from.snf),
+  rate: r2(to.rate - from.rate),
+  amount: r2(to.amount - from.amount),
 });
 
-const rowOf = (vlccId: string, vlcc: string, type: CdaRow['type'], items: CdaRaw[]): CdaRow => ({
-  id: `${vlccId}|${type}`,
-  vlccId,
-  vlcc,
-  type,
-  composite: metricsOf(items, (r) => r.v),
-  dispatch: metricsOf(items, (r) => r.d),
-  actual: metricsOf(items, (r) => r.f),
-});
+const isEmpty = (m: Metrics): boolean => !m.weight && !m.fat && !m.snf && !m.kgFat && !m.kgSnf && !m.rate && !m.amount;
+
+const MILK_NAME: Record<'C' | 'B' | 'M', CdaRow['type']> = { C: 'Cow', B: 'Buffalo', M: 'Mix' };
 
 /* ---------- Table ---------- */
 
 const tone = (n: number): string => (n > 0 ? 'text-ok' : n < 0 ? 'text-danger' : '');
-const both = (r: CdaRow): string | undefined => (r.type === 'Both' ? 'bg-soft/60 font-semibold' : undefined);
 
 const SET: Array<[keyof Metrics, string]> = [
   ['weight', 'Weight'], ['fat', 'Fat'], ['snf', 'SNF'], ['kgFat', 'Kg Fat'], ['kgSnf', 'Kg SNF'], ['rate', 'Rate'], ['amount', 'Amount'],
 ];
 const DIFF_SET: Array<[keyof Diff, string]> = [['weight', 'Weight'], ['fat', 'Fat'], ['snf', 'SNF'], ['rate', 'Rate'], ['amount', 'Amount']];
 
+const compositeActual = (r: Pick<CdaRow, 'composite' | 'actual'>): Diff => delta(r.composite, r.actual);
+const dispatchActual = (r: Pick<CdaRow, 'dispatch' | 'actual'>): Diff => delta(r.dispatch, r.actual);
+const compositeDispatch = (r: Pick<CdaRow, 'composite' | 'dispatch'>): Diff => delta(r.composite, r.dispatch);
+
+/** what the last row of the sheet shows: all the rows added up */
+interface CdaTotal {
+  type: string;
+  composite: Metrics;
+  dispatch: Metrics;
+  actual: Metrics;
+}
+
+/** fixed widths (px) - names end with "..." (hover shows the whole name) so the long table does not stretch */
+const W = { id: 92, name: 190, type: 70, date: 92, metric: 78, amount: 96 };
+
 const setCols = (prefix: string, pick: (r: CdaRow) => Metrics): GroupColumn<CdaRow>[] =>
   SET.map(([k, label]) => ({
     key: `${prefix}-${k}`,
     header: label,
     align: 'right' as const,
-    className: both,
+    width: k === 'amount' ? W.amount : W.metric,
     cell: (r: CdaRow) => <span className={cn('tnum', k === 'amount' && 'font-semibold')}>{nf(pick(r)[k], 2)}</span>,
   }));
 
@@ -137,27 +154,21 @@ const diffCols = (prefix: string, pick: (r: CdaRow) => Diff): GroupColumn<CdaRow
     key: `${prefix}-${k}`,
     header: label,
     align: 'right' as const,
-    className: both,
+    width: k === 'amount' ? W.amount : W.metric,
     cell: (r: CdaRow) => <span className={cn('tnum', k === 'amount' && 'font-semibold', tone(pick(r)[k]))}>{nf(pick(r)[k], 2)}</span>,
   }));
 
-const compositeActual = (r: CdaRow): Diff => delta(r.composite, r.actual);
-const dispatchActual = (r: CdaRow): Diff => delta(r.dispatch, r.actual);
-const compositeDispatch = (r: CdaRow): Diff => delta(r.composite, r.dispatch);
-
 const COLUMNS: GroupColumn<CdaRow>[] = [
-  {
-    key: 'vlcc',
-    header: 'VLCC',
-    group: (r) => r.vlccId,
-    cell: (r) => <span className="font-semibold">{r.vlcc}</span>,
-  },
+  { key: 'vlcId', header: 'VLC ID', width: W.id, cell: (r) => <span className="tnum font-semibold">{r.serial}. {r.vlccId}</span> },
+  { key: 'vlcName', header: 'VLC Name', width: W.name, cell: (r) => <span className="block truncate font-semibold" title={r.vlcc}>{r.vlcc}</span> },
   {
     key: 'type',
     header: 'Type',
-    className: both,
-    cell: (r) => (r.type === 'Both' ? <span className="font-semibold">Total</span> : <KindChip kind={r.type === 'Cow' ? 'cow' : r.type === 'Buffalo' ? 'buffalo' : 'mix'} />),
+    width: W.type,
+    cell: (r) => <KindChip kind={r.type === 'Cow' ? 'cow' : r.type === 'Buffalo' ? 'buffalo' : 'mix'} />,
   },
+  { key: 'from', header: 'From Date', width: W.date, cell: (r) => <span className="tnum">{r.from}</span> },
+  { key: 'to', header: 'To Date', width: W.date, cell: (r) => <span className="tnum">{r.to}</span> },
   ...setCols('c', (r) => r.composite),
   ...setCols('d', (r) => r.dispatch),
   ...setCols('a', (r) => r.actual),
@@ -167,14 +178,41 @@ const COLUMNS: GroupColumn<CdaRow>[] = [
 ];
 
 const HEADER_GROUPS = [
-  { label: '', span: 2 },
+  { label: '', span: 5 },
   { label: 'Composite', span: 7 },
   { label: 'Dispatch', span: 7 },
   { label: 'Actual', span: 7 },
-  { label: 'Composite − Actual', span: 5 },
-  { label: 'Dispatch − Actual', span: 5 },
-  { label: 'Composite − Dispatch', span: 5 },
+  { label: 'Composite-Actual', span: 5 },
+  { label: 'Dispatch-Actual', span: 5 },
+  { label: 'Composite-Dispatch', span: 5 },
 ];
+
+const TOTAL_CELL = 'border border-line px-2.5 py-2.5 text-right font-bold tnum whitespace-nowrap';
+
+/** the bold last row of the table: Total / All selected VLCs / type / dates / every column added up */
+const TotalFooter: React.FC<{ total: CdaTotal; from: string; to: string }> = ({ total, from, to }) => {
+  const m = (x: Metrics) => SET.map(([k]) => x[k]);
+  const d = (x: Diff) => DIFF_SET.map(([k]) => x[k]);
+  const values = [
+    ...m(total.composite), ...m(total.dispatch), ...m(total.actual),
+    ...d(compositeActual(total)), ...d(dispatchActual(total)), ...d(compositeDispatch(total)),
+  ];
+  const diffFrom = SET.length * 3;
+  return (
+    <tfoot>
+      <tr className="bg-brand/15 font-bold">
+        <td className="border border-line border-t-2 border-t-ink/40 px-2.5 py-2.5 font-bold">Total</td>
+        <td className="border border-line border-t-2 border-t-ink/40 px-2.5 py-2.5 font-bold">All selected VLCs</td>
+        <td className="border border-line border-t-2 border-t-ink/40 px-2.5 py-2.5 font-bold">{total.type}</td>
+        <td className="tnum border border-line border-t-2 border-t-ink/40 px-2.5 py-2.5 font-bold">{from}</td>
+        <td className="tnum border border-line border-t-2 border-t-ink/40 px-2.5 py-2.5 font-bold">{to}</td>
+        {values.map((v, i) => (
+          <td key={i} className={cn(TOTAL_CELL, 'border-t-2 border-t-ink/40', i >= diffFrom && tone(v))}>{nf(v, 2)}</td>
+        ))}
+      </tr>
+    </tfoot>
+  );
+};
 
 /* ---------- Filter card ---------- */
 
@@ -282,17 +320,7 @@ const CdaReport: React.FC = () => {
   /** the centres a run covers: one VLC, or (All) every centre of the picked plant / of every plant */
   const idsOf = (f: Filters): string[] => centreIdsFor(centres, f.plant, f.vlcId);
   const labelOf = useMemo(() => new Map(centres.map((c) => [c.id, c.label])), [centres]);
-  const nameOf = (id: string): string => {
-    const l = labelOf.get(id);
-    // "Shri Sheelavanti | 500002" -> "500002 - Shri Sheelavanti"
-    if (!l || l === id) return id;
-    const name = l.split(' | ')[0] ?? l;
-    return `${id} - ${name}`;
-  };
-
   const shownVlc = scope.centre;
-  const plantName = applied.plant === 'all' ? 'All' : centres.find((c) => c.mccId === applied.plant)?.plantName ?? '';
-  const vlcTitle = applied.vlcId === 'all' ? 'All' : labelOf.get(applied.vlcId) ?? applied.vlcId;
 
   const load = async (f: Filters) => {
     const id = ++runId.current;
@@ -326,24 +354,59 @@ const CdaReport: React.FC = () => {
     setLoading(false);
   };
 
+  /** the centres in the order of their id: the number in front of an id ("1. 500381") is the centre's station code, else its place here */
+  const orderedIds = (f: Filters): string[] => [...idsOf(f)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const serialOf = (id: string, place: number): number => {
+    const code = centres.find((c) => c.id === id)?.code?.trim() ?? '';
+    const n = /^\d+$/.test(code) && code !== id ? Number(code) : NaN;
+    return Number.isFinite(n) && n > 0 && n < 10000 ? n : place;
+  };
+
+  /** one row for every VLC and milk type that has a record, the whole date range added up (From Date / To Date columns) */
   const rows = useMemo<CdaRow[]>(() => {
     const out: CdaRow[] = [];
-    for (const vlccId of idsOf(applied)) {
+    const kinds: Array<'C' | 'B' | 'M'> = applied.milk === 'cow' ? ['C'] : applied.milk === 'buffalo' ? ['B'] : applied.milk === 'mix' ? ['M'] : ['C', 'B', 'M'];
+    orderedIds(applied).forEach((vlccId, i) => {
       const mine = raw.filter((r) => r.vlccId === vlccId);
-      if (!mine.length) continue;
-      const vlcc = nameOf(vlccId);
-      const cow = mine.filter((r) => r.milk === 'C');
-      const buf = mine.filter((r) => r.milk === 'B');
-      const mix = mine.filter((r) => r.milk === 'M');
-      if (applied.milk === 'cow' || applied.milk === 'both') out.push(rowOf(vlccId, vlcc, 'Cow', cow));
-      if (applied.milk === 'buffalo' || applied.milk === 'both') out.push(rowOf(vlccId, vlcc, 'Buffalo', buf));
-      if (applied.milk === 'mix' || applied.milk === 'both') out.push(rowOf(vlccId, vlcc, 'Mix', mix));
-      // Both = Cow, Buffalo, Mix and one Total (Cow + Buffalo + Mix) for every VLC
-      if (applied.milk === 'both') out.push(rowOf(vlccId, vlcc, 'Both', mine));
-    }
+      if (!mine.length) return;
+      const vlcc = (labelOf.get(vlccId) ?? '').split(' | ')[0] || vlccId;
+      for (const k of kinds) {
+        const items = mine.filter((r) => r.milk === k);
+        if (!items.length) continue;
+        const composite = metricsOf(items, (r) => r.v);
+        const dispatch = metricsOf(items, (r) => r.d);
+        const actual = metricsOf(items, (r) => r.f);
+        if (isEmpty(composite) && isEmpty(dispatch) && isEmpty(actual)) continue;
+        out.push({ id: `${vlccId}|${k}`, serial: serialOf(vlccId, i + 1), vlccId, vlcc, type: MILK_NAME[k], from: applied.fromDate, to: applied.toDate, composite, dispatch, actual });
+      }
+    });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [raw, applied, labelOf]);
+  }, [raw, applied, labelOf, centres]);
+
+  /** the Total row: the rows above added up (weight, Kg and amount are sums; fat / SNF / rate are averages weighted by weight) - the same numbers the Excel Total row formulas give */
+  const total = useMemo<CdaTotal>(() => {
+    const sum = (pick: (r: CdaRow) => Metrics): Metrics => {
+      const ms = rows.map(pick);
+      const weight = ms.reduce((a, x) => a + x.weight, 0);
+      const avg = (f: (x: Metrics) => number): number => (weight ? ms.reduce((a, x) => a + x.weight * f(x), 0) / weight : 0);
+      return {
+        weight: r2(weight),
+        fat: r2(avg((x) => x.fat)),
+        snf: r2(avg((x) => x.snf)),
+        kgFat: r2(ms.reduce((a, x) => a + x.kgFat, 0)),
+        kgSnf: r2(ms.reduce((a, x) => a + x.kgSnf, 0)),
+        rate: r2(avg((x) => x.rate)),
+        amount: r2(ms.reduce((a, x) => a + x.amount, 0)),
+      };
+    };
+    return {
+      type: [...new Set(rows.map((r) => r.type))].join(' + '),
+      composite: sum((r) => r.composite),
+      dispatch: sum((r) => r.dispatch),
+      actual: sum((r) => r.actual),
+    };
+  }, [rows]);
 
   const pager = usePagination(rows);
 
@@ -369,41 +432,13 @@ const CdaReport: React.FC = () => {
     window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
 
-  const buildTable = (): ExportTable => {
-    const cols = (names: string[]) => names.map((header) => ({ header, type: 'dec2' as const }));
-    const metric = SET.map(([, l]) => l);
-    const diff = DIFF_SET.map(([, l]) => l);
-    const metrics = (m: Metrics) => SET.map(([k]) => m[k]);
-    const diffs = (d: Diff) => DIFF_SET.map(([k]) => d[k]);
-    return {
-      filename: `cda-report-${applied.fromDate}-${applied.toDate}`,
-      title: 'CDA report',
-      subtitle: `${plantName ? `${plantName}  |  ` : ''}${vlcTitle}  |  ${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`,
-      headerGroups: HEADER_GROUPS,
-      columns: [{ header: 'VLCC' }, { header: 'Type' }, ...cols(metric), ...cols(metric), ...cols(metric), ...cols(diff), ...cols(diff), ...cols(diff)],
-      rows: rows.map((r) => [
-        r.vlcc, r.type === 'Both' ? 'Total' : r.type,
-        ...metrics(r.composite), ...metrics(r.dispatch), ...metrics(r.actual),
-        ...diffs(compositeActual(r)), ...diffs(dispatchActual(r)), ...diffs(compositeDispatch(r)),
-      ]),
-      merge: [{ col: 0, by: [0] }],
-    };
-  };
-
   /**
-   * Excel Export = the client's "VLC Difference Report" sheet: header on row 1, ONE row for every date / shift / milk type
-   * (VLC ID, VLC Name, Date, Shift, Milk Type, Composite x7, Dispatch x7, Actual x7, then the three differences x5 = 41 columns)
-   * and a Total row at the end with real Excel formulas.
+   * Excel Export = the client's "VLC Difference Report" sheet: header on row 1, ONE row for every VLC and milk type
+   * (VLC ID "1. 500381", VLC Name, Type, From Date, To Date, Composite x7, Dispatch x7, Actual x7, then the three differences x5 = 41 columns)
+   * and a bold Total row at the end ("Total" / "All selected VLCs") with real Excel formulas.
    */
   const buildExcelTable = (): ExportTable => {
-    const SHIFT_ORDER: Record<string, number> = { M: 0, E: 1 };
-    const MILK_ORDER: Record<string, number> = { C: 0, B: 1, M: 2 };
-    const wanted = new Set(idsOf(applied));
-    const detail = raw
-      .filter((r) => wanted.has(r.vlccId))
-      .sort((a, b) => a.vlccId.localeCompare(b.vlccId, undefined, { numeric: true }) || a.date.localeCompare(b.date) || (SHIFT_ORDER[a.shift] ?? 2) - (SHIFT_ORDER[b.shift] ?? 2) || (MILK_ORDER[a.milk] ?? 3) - (MILK_ORDER[b.milk] ?? 3));
-
-    const columns: ExportColumn[] = [{ header: 'VLC ID' }, { header: 'VLC Name' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Milk Type' }];
+    const columns: ExportColumn[] = [{ header: 'VLC ID' }, { header: 'VLC Name' }, { header: 'Type' }, { header: 'From Date' }, { header: 'To Date' }];
     // Composite / Dispatch / Actual: 7 columns each, starting at column 5, 12 and 19
     (['Composite', 'Dispatch', 'Actual'] as const).forEach((group, g) => {
       const w = 5 + g * 7;
@@ -413,11 +448,11 @@ const CdaReport: React.FC = () => {
         { header: `${group} SNF`, type: 'dec2', total: { wavg: w } },
         { header: `${group} Kg Fat`, type: 'dec2', total: 'sum' },
         { header: `${group} Kg SNF`, type: 'dec2', total: 'sum' },
-        { header: `${group} Rate`, type: 'dec2', total: { ratio: [w + 6, w] } },
+        { header: `${group} Rate`, type: 'dec2', total: { wavg: w } },
         { header: `${group} Amount`, type: 'dec2', total: 'sum' },
       );
     });
-    // differences: 5 columns each (Weight, Fat, SNF, Rate, Amount). Their Total = total of the first group minus total of the second.
+    // differences: 5 columns each (Weight, Fat, SNF, Rate, Amount). Their Total = the second group's total minus the first group's total.
     const OFFSET = [0, 1, 2, 5, 6]; // position of Weight, Fat, SNF, Rate, Amount inside a 7-column group
     const GROUP_AT = { Composite: 5, Dispatch: 12, Actual: 19 } as const;
     const DIFFS: Array<[string, keyof typeof GROUP_AT, keyof typeof GROUP_AT]> = [
@@ -427,36 +462,32 @@ const CdaReport: React.FC = () => {
     ];
     for (const [label, a, b] of DIFFS) {
       DIFF_SET.forEach(([, name], j) => {
-        columns.push({ header: `${label} ${name}`, type: 'dec2', total: { diff: [GROUP_AT[a] + OFFSET[j]!, GROUP_AT[b] + OFFSET[j]!] } });
+        columns.push({ header: `${label} ${name}`, type: 'dec2', total: { diff: [GROUP_AT[b] + OFFSET[j]!, GROUP_AT[a] + OFFSET[j]!] } });
       });
     }
 
-    const tableRows = detail.map((r) => {
-      const vlcName = (labelOf.get(r.vlccId) ?? '').split(' | ')[0] ?? '';
-      const comp = metricsOf([r], (x) => x.v);
-      const disp = metricsOf([r], (x) => x.d);
-      const act = metricsOf([r], (x) => x.f);
-      const m = (x: Metrics) => SET.map(([k]) => x[k]);
-      const d = (x: Diff) => DIFF_SET.map(([k]) => x[k]);
-      return [
-        r.vlccId,
-        vlcName && vlcName !== r.vlccId ? vlcName : '',
-        r.date ? fmtDate(r.date) : '',
-        r.shift === 'M' || r.shift === 'E' ? r.shift : 'Both',
-        r.milk,
-        ...m(comp), ...m(disp), ...m(act),
-        ...d(delta(comp, act)), ...d(delta(disp, act)), ...d(delta(comp, disp)),
-      ];
-    });
+    const m = (x: Metrics) => SET.map(([k]) => x[k]);
+    const d = (x: Diff) => DIFF_SET.map(([k]) => x[k]);
+    const tableRows = rows.map((r) => [
+      `${r.serial}. ${r.vlccId}`, r.vlcc, r.type, applied.fromDate, applied.toDate,
+      ...m(r.composite), ...m(r.dispatch), ...m(r.actual),
+      ...d(compositeActual(r)), ...d(dispatchActual(r)), ...d(compositeDispatch(r)),
+    ]);
     const dates = applied.fromDate === applied.toDate ? fmtDate(applied.fromDate) : `${fmtDate(applied.fromDate)} to ${fmtDate(applied.toDate)}`;
-    return { filename: `CDA Report ${dates}`, title: 'VLC Difference Report', columns, rows: tableRows };
+    return {
+      filename: `CDA Report ${dates}`,
+      title: 'VLC Difference Report',
+      columns,
+      rows: tableRows,
+      totals: ['Total', 'All selected VLCs', total.type, applied.fromDate, applied.toDate],
+    };
   };
 
-  const excelRows = raw.length;
+  const excelRows = rows.length;
   // PDF Export and CSV Export are switched off (commented out) on this report for now.
   // To show them again: use the first line below and delete the second one.
-  // const base: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print'] });
-  const base: ExportAction[] = reportActions({ build: buildTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print', 'pdf', 'csv'] });
+  // const base: ExportAction[] = reportActions({ build: buildExcelTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print'] });
+  const base: ExportAction[] = reportActions({ build: buildExcelTable, count: rows.length, unit: 'rows', toast: toast.show, without: ['print', 'pdf', 'csv'] });
   const actions: ExportAction[] = base.map((a) =>
     a.id === 'excel'
       ? {
@@ -507,7 +538,7 @@ const CdaReport: React.FC = () => {
               ) : rows.length === 0 ? (
                 <EmptyState icon={SearchX} title="No data found" text="No CDA record for this VLC and these dates." />
               ) : (
-                <GroupedTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="CDA report" headerGroups={HEADER_GROUPS} minWidth={2300} />
+                <GroupedTable columns={COLUMNS} rows={pager.visible} rowKey={(r) => r.id} ariaLabel="CDA report" headerGroups={HEADER_GROUPS} minWidth={COLUMNS.reduce((a, c) => a + (c.width ?? 90), 0)} footer={<TotalFooter total={total} from={applied.fromDate} to={applied.toDate} />} />
               )}
 
               {!loading && rows.length > 0 && (

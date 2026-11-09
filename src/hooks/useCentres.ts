@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { useCenters } from './useSessionData';
 import { getSession } from '../services/session';
 import { vlccName } from '../services/vlcc/names';
+import { titleCase, stripRoute } from '../lib/titleCase';
 
 export interface CentreOption {
   id: string;
@@ -31,9 +32,10 @@ const subscribe = (l: () => void) => {
 
 export const ALL_CENTRES = 'ALL';
 
-const centreLabel = (id: string, name: string, station?: string): string => {
-  const code = station || id;
-  return name ? `${name} | ${code}` : code;
+// "Name | ID": the name (first letter of every word in capitals) and the centre id from the centre API
+const centreLabel = (id: string, name: string, _station?: string): string => {
+  const n = titleCase(name);
+  return n && n.toUpperCase() !== id.toUpperCase() ? `${n} | ${id}` : id;
 };
 
 const allCentres = (centers: ReturnType<typeof useCenters>): CentreOption[] => {
@@ -50,7 +52,7 @@ export function useMccOptions(): MccOption[] {
   const list = prefixes.length ? prefixes : own ? [own] : [];
   return list.map((id) => {
     const route = centers.find((c) => c.id.startsWith(id) && c.routeName)?.routeName;
-    return { id, label: route || s?.mccName || id };
+    return { id, label: stripRoute(route || s?.mccName || id) };
   });
 }
 

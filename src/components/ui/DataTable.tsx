@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { cn } from '../../lib/cn';
 import { TableLoader } from './TableLoader';
+import { clipTitle } from '../../lib/clipTitle';
 
 type Align = 'left' | 'right' | 'center';
 type MobileRole = 'title' | 'action' | 'data' | 'hidden';
@@ -13,6 +14,8 @@ export interface Column<T> {
   mobile?: MobileRole;
   mobileLabel?: string;
   className?: string;
+  /** fixed width in px: a longer value is cut with "..." (hover shows the full text) */
+  width?: number;
 }
 
 interface Props<T> {
@@ -27,6 +30,8 @@ interface Props<T> {
 
 const ALIGN: Record<Align, string> = { left: 'text-left', right: 'text-right', center: 'text-center' };
 
+const fixed = (w?: number): React.CSSProperties | undefined => (w ? { width: w, minWidth: w, maxWidth: w } : undefined);
+
 const labelOf = <T,>(c: Column<T>): string => c.mobileLabel ?? (typeof c.header === 'string' ? c.header : c.key);
 
 export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false, minWidth = 900, isSelected }: Props<T>) {
@@ -39,11 +44,11 @@ export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false
   return (
     <>
       <div className="scroll-x hidden md:block">
-        <table aria-label={ariaLabel} className="w-full text-sm" style={{ minWidth }}>
+        <table aria-label={ariaLabel} className="clip-cells w-full text-sm" style={{ minWidth }} onMouseOver={clipTitle}>
           <thead>
             <tr className="border-b border-line bg-soft/40 text-xs text-mute">
               {columns.map((c) => (
-                <th key={c.key} scope="col" className={cn('whitespace-nowrap px-3 py-3 font-semibold first:pl-5 last:pr-5', ALIGN[c.align ?? 'left'])}>
+                <th key={c.key} scope="col" style={fixed(c.width)} className={cn('whitespace-nowrap px-2.5 py-3 font-semibold first:pl-4 last:pr-4', ALIGN[c.align ?? 'left'])}>
                   {c.header}
                 </th>
               ))}
@@ -54,7 +59,7 @@ export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false
               // plain rows: a fade-in on every row made the table flash each time rows were added or a page was changed
               <tr key={rowKey(row)} className={cn('transition-colors hover:bg-brand/5', isSelected?.(row) && 'bg-brand/[0.06]')}>
                 {columns.map((c) => (
-                  <td key={c.key} className={cn('px-3 py-3 first:pl-5 last:pr-5', ALIGN[c.align ?? 'left'], c.className)}>
+                  <td key={c.key} style={fixed(c.width)} className={cn('whitespace-nowrap px-2.5 py-2.5 first:pl-4 last:pr-4', ALIGN[c.align ?? 'left'], c.className)}>
                     {c.cell(row)}
                   </td>
                 ))}

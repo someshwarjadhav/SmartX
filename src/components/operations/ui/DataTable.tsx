@@ -5,6 +5,7 @@ import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '../../../lib/portal/global
 import { PageBar } from './PageBar';
 import { TableTopBar } from './ResultPerPage';
 import { EmptyState } from '../EmptyState';
+import { clipTitle } from '../../../lib/clipTitle';
 
 export interface Column<T> {
   key: string;
@@ -13,6 +14,8 @@ export interface Column<T> {
   sort?: (row: T) => number | string;
   align?: 'left' | 'right' | 'center';
   className?: string;
+  /** fixed width in px: a longer value is cut with "..." (hover shows the full text) */
+  width?: number;
 }
 
 interface Props<T> {
@@ -65,14 +68,15 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SI
     <div>
       {rows.length > 0 && <TableTopBar total={sorted.length} page={cur + 1} size={size} onSize={setSize} />}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm" style={minWidth ? { minWidth } : undefined}>
+        <table className="clip-cells w-full min-w-[640px] border-separate border-spacing-0 text-sm" style={minWidth ? { minWidth } : undefined} onMouseOver={clipTitle}>
           <thead>
             <tr>
               {columns.map((c) => (
                 <th
                   key={c.key}
                   scope="col"
-                  className={cn('sticky top-0 whitespace-nowrap border-b border-line bg-soft/70 px-4 py-3 text-xs font-semibold text-mute first:rounded-tl-xl last:rounded-tr-xl', align(c.align), c.className)}
+                  style={c.width ? { width: c.width, minWidth: c.width, maxWidth: c.width } : undefined}
+                  className={cn('sticky top-0 whitespace-nowrap border-b border-line bg-soft/70 px-3 py-3 text-xs font-semibold text-mute first:rounded-tl-xl last:rounded-tr-xl', align(c.align), c.className)}
                 >
                   {c.sort ? (
                     <button onClick={() => toggle(c)} className={cn('inline-flex items-center gap-1 hover:text-ink', c.align === 'right' && 'flex-row-reverse')}>
@@ -92,7 +96,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SI
                 className={cn('group transition-colors hover:bg-brand/[0.06]', onRowClick && 'cursor-pointer', rowClassName?.(r))}
               >
                 {columns.map((c) => (
-                  <td key={c.key} className={cn('whitespace-nowrap border-b border-line/70 px-4 py-3 tnum', align(c.align), c.className)}>
+                  <td key={c.key} style={c.width ? { width: c.width, minWidth: c.width, maxWidth: c.width } : undefined} className={cn('whitespace-nowrap border-b border-line/70 px-3 py-2.5 tnum', align(c.align), c.className)}>
                     {c.cell(r)}
                   </td>
                 ))}

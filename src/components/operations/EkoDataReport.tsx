@@ -11,8 +11,9 @@ import { MilkLoader } from './MilkLoader';
 import { CardTitle, ReportBar, ReportPage } from "./ReportKit";
 import { useCenters } from "../../hooks/useSessionData";
 import { vlccOption } from "../../services/vlcc/names";
-import { exportExcel, type ExportCol } from "../../lib/portal/export";
+import { exportExcel, type ExportCol } from "../../assets/excel/portalExport";
 import { ekoNorm, ekoText, ekoValue, type EkoField, type EkoRow } from "../../services/report/ekoShared";
+import { clipTitle } from '../../lib/clipTitle';
 
 interface Props {
   title: string;
@@ -117,7 +118,7 @@ export default function EkoDataReport({ title, subtitle, icon: Icon, fields, loa
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
+              <table className="clip-cells w-full min-w-[640px] border-separate border-spacing-0 text-sm" onMouseOver={clipTitle}>
                 <thead>
                   <tr>
                     {columns.map((c) => (

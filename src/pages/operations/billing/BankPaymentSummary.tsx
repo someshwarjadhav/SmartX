@@ -17,8 +17,8 @@ import { useToast } from "../../../context/ToastContext";
 import { DEFAULT_PAGE_SIZE, GLOBALLABELS } from "../../../lib/portal/global";
 import { nf, todayISO } from "../../../lib/portal/format";
 import { cn } from "../../../lib/portal/cn";
-import { exportCSV, exportExcel, exportPDF, type ExportCol } from "../../../lib/portal/export";
-import { exportBansiPaymentExcel, isBansiUser } from "../../../lib/bansiPaymentExcel";
+import { exportCSV, exportExcel, exportPDF, type ExportCol } from "../../../assets/excel/portalExport";
+import { exportBansiPaymentExcel, isBansiUser } from "../../../assets/excel/bansiPaymentExcel";
 import {
   getPaymentSummary,
   PAY_TYPES,
@@ -26,6 +26,7 @@ import {
   type PayRow,
   type PayType,
 } from "../../../services/billing/bankPaymentSummary.api.ts";
+import { clipTitle } from '../../../lib/clipTitle';
 
 const dmy = (s: string) => s.split("-").reverse().join("-");
 const f2 = (n: number) => n.toFixed(2);
@@ -251,7 +252,7 @@ const BankPaymentSummary: React.FC = () => {
 
           {status !== "loading" && status !== "error" && (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] border-separate border-spacing-0 text-sm">
+              <table className="clip-cells w-full min-w-[980px] border-separate border-spacing-0 text-sm" onMouseOver={clipTitle}>
                 <thead>
                   <tr>
                     {multi && <th className={cn(TH, "text-left")}>VLC</th>}

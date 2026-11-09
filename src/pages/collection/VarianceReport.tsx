@@ -12,7 +12,7 @@ import { SearchX } from 'lucide-react';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
-import type { ExportTable } from '../../lib/exporters';
+import type { ExportTable } from '../../assets/excel/exporters';
 import { SelectField } from '../../components/ui/Fields';
 import { KindChip } from '../../components/ui/KindChip';
 import { PageHeader } from '../../components/ui/PageHeader';

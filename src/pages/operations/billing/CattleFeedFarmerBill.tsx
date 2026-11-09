@@ -17,7 +17,7 @@ import { useCentreOptions } from "../../../hooks/useCentres";
 import { DEFAULT_PAGE_SIZE, GLOBALLABELS } from "../../../lib/portal/global";
 import { todayISO } from "../../../lib/portal/format";
 import { cn } from "../../../lib/portal/cn";
-import { exportCSV, exportExcel, exportPDF, type ExportCol } from "../../../lib/portal/export";
+import { exportCSV, exportExcel, exportPDF, type ExportCol } from "../../../assets/excel/portalExport";
 import { getFarmerBills, type CfBill } from "../../../services/billing/cattleFeed.api.ts";
 
 type Status = "idle" | "loading" | "ready" | "error";

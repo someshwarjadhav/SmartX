@@ -47,7 +47,7 @@ import {
   downloadSample,
   exportRecords,
   readImportFile,
-} from "../../../services/master/farmerMaster.excel.ts";
+} from "../../../assets/excel/farmerMaster.excel.ts";
 
 const ALL = "ALL";
 const msg = (e: unknown, fallback: string) =>

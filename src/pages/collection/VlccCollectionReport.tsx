@@ -12,7 +12,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
-import { withFormulaTotals, type ExportTable, type MergeSpec } from '../../lib/exporters';
+import { withFormulaTotals, type ExportTable, type MergeSpec } from '../../assets/excel/exporters';
 import { Field, SelectField } from '../../components/ui/Fields';
 import { DateRangeFields } from '../../components/ui/DateRangeFields';
 import { PageHeader } from '../../components/ui/PageHeader';

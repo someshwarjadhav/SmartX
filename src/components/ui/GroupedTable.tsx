@@ -1,6 +1,7 @@
 import type * as React from 'react';
-import { runSpans } from '../../lib/exporters';
+import { runSpans } from '../../assets/excel/exporters';
 import { cn } from '../../lib/cn';
+import { clipTitle } from '../../lib/clipTitle';
 
 type Align = 'left' | 'right' | 'center';
 
@@ -15,6 +16,8 @@ export interface GroupColumn<T> {
    */
   group?: (row: T) => string;
   className?: (row: T) => string | undefined;
+  /** fixed width in px: a longer value is cut with "..." (hover shows the full text) */
+  width?: number;
 }
 
 interface Props<T> {
@@ -29,7 +32,8 @@ interface Props<T> {
 }
 
 const ALIGN: Record<Align, string> = { left: 'text-left', right: 'text-right', center: 'text-center' };
-const CELL = 'border border-line px-3 py-2.5';
+const CELL = 'border border-line px-2.5 py-2';
+const fixed = (w?: number): React.CSSProperties | undefined => (w ? { width: w, minWidth: w, maxWidth: w } : undefined);
 
 /**
  * Report table with merged (rowSpan) group cells and an optional two-level header - the same layout the STIPL
@@ -41,7 +45,7 @@ export function GroupedTable<T>({ columns, rows, rowKey, ariaLabel, headerGroups
 
   return (
     <div className="scroll-x">
-      <table aria-label={ariaLabel} className="w-full border-collapse text-sm" style={{ minWidth }}>
+      <table aria-label={ariaLabel} className="clip-cells w-full border-collapse text-sm" style={{ minWidth }} onMouseOver={clipTitle}>
         <thead>
           {headerGroups && (
             <tr>
@@ -54,7 +58,7 @@ export function GroupedTable<T>({ columns, rows, rowKey, ariaLabel, headerGroups
           )}
           <tr className="bg-soft/40">
             {columns.map((c) => (
-              <th key={c.key} scope="col" className={cn('whitespace-nowrap border border-line px-3 py-2.5 text-xs font-semibold text-mute', ALIGN[c.align ?? 'left'])}>
+              <th key={c.key} scope="col" style={fixed(c.width)} className={cn('whitespace-nowrap border border-line px-2.5 py-2.5 text-xs font-semibold text-mute', ALIGN[c.align ?? 'left'])}>
                 {c.header}
               </th>
             ))}
@@ -69,6 +73,7 @@ export function GroupedTable<T>({ columns, rows, rowKey, ariaLabel, headerGroups
                 return (
                   <td
                     key={c.key}
+                    style={fixed(c.width)}
                     rowSpan={span && span > 1 ? span : undefined}
                     className={cn(CELL, 'whitespace-nowrap', ALIGN[c.align ?? 'left'], c.group && 'align-middle font-semibold', c.className?.(row))}
                   >

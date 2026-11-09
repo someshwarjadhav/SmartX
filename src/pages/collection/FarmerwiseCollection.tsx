@@ -4,7 +4,7 @@ import { Droplets, FlaskConical, Milk, Moon, Search, SearchX, SlidersHorizontal,
 import type { CollectionEntry } from '../../data/farmerCollection';
 import { useMilkFarmerEntries, useMilkCenterOptions, useReportScope, useFarmerMasterOptions, centreIdsFor, farmerKey, apiMilk, apiShift } from '../../hooks/useMilkReportData';
 import { useWarmCentres } from '../../hooks/useWarmCentres';
-import { withFormulaTotals } from '../../lib/exporters';
+import { withFormulaTotals } from '../../assets/excel/exporters';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
 import { ReportLoader } from '../../components/ui/ReportLoader';
@@ -14,7 +14,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
-import type { ExportTable } from '../../lib/exporters';
+import type { ExportTable } from '../../assets/excel/exporters';
 import { Field, SelectField } from '../../components/ui/Fields';
 import { DateRangeFields } from '../../components/ui/DateRangeFields';
 import { KindChip } from '../../components/ui/KindChip';

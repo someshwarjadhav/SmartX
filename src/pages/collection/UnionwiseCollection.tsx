@@ -2,7 +2,7 @@ import type * as React from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { Search, SearchX, SlidersHorizontal } from 'lucide-react';
 import { useMilkFarmerEntries, useMilkCenterOptions } from '../../hooks/useMilkReportData';
-import { withFormulaTotals } from '../../lib/exporters';
+import { withFormulaTotals } from '../../assets/excel/exporters';
 import { ReportLoader } from '../../components/ui/ReportLoader';
 import { Button } from '../../components/ui/Button';
 import { DataTable, type Column } from '../../components/ui/DataTable';
@@ -10,7 +10,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { ExportBar, type ExportAction } from '../../components/ui/ExportBar';
 import { reportActions } from '../../components/ui/reportActions';
 import { PartialNotice } from '../../components/ui/PartialNotice';
-import type { ExportTable } from '../../lib/exporters';
+import type { ExportTable } from '../../assets/excel/exporters';
 
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useReportTable } from '../../hooks/useSessionData';

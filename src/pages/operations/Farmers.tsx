@@ -17,7 +17,7 @@ import { ChartTip } from '../../components/operations/ChartTip';
 import { ErrorBlock, Notice } from '../../components/operations/Widget';
 import { MilkLoader } from '../../components/operations/MilkLoader';
 import { useToast } from '../../context/ToastContext';
-import { exportCSV, exportExcel, exportPDF, type ExportCol } from '../../lib/portal/export';
+import { exportCSV, exportExcel, exportPDF, type ExportCol } from '../../assets/excel/portalExport';
 import { addDays, fmtDate, fmtShort, inr, nf, todayISO } from '../../lib/portal/format';
 import { DEFAULT_MILK, DEFAULT_PAGE_SIZE, DEFAULT_SHIFT, GLOBALLABELS, GLOBALSMILK, GLOBALSSHIFT } from '../../lib/portal/global';
 import { useFirstCentre } from '../../hooks/useCentres';
