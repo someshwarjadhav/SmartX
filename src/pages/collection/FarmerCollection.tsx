@@ -31,7 +31,8 @@ import { DateRangeFields } from '../../components/ui/DateRangeFields';
 import { Segmented } from '../../components/ui/Segmented';
 import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
 import { MSG } from '../../lib/messages';
-import { exportBansiAllExcel, isBansiAll } from '../../lib/bansiExcel';
+import { BANSI_USER_IDS, exportBansiAllExcel, isBansiAll } from '../../lib/bansiExcel';
+import { GLOBALS } from '../../lib/portal/global';
 
 /* ---------- Filter card ---------- */
 
@@ -247,12 +248,23 @@ const SHEET_COLS: Record<string, SheetCol> = {
   sampleNo: { header: 'Sample No', value: (r) => r.sampleNo ?? '' },
 };
 
-/** Old Excel Export: same column order as the table (Station Id first). */
-const OLD_ORDER = ['station', 'date', 'shift', 'kind', 'farmerId', 'name', 'litres', 'kg', 'fat', 'snf', 'clr', 'water', 'time', 'rate', 'amount', 'branch', 'stationName', 'kgFat', 'kgSnf', 'collDate', 'collTime', 'sampleNo'];
-/** New Excel Export: Date first, Station Id / Shift after Time. */
-const NEW_ORDER = ['date', 'farmerId', 'name', 'litres', 'kg', 'fat', 'snf', 'clr', 'water', 'kind', 'time', 'station', 'shift', 'rate', 'amount', 'branch', 'stationName', 'kgFat', 'kgSnf', 'collDate', 'collTime', 'sampleNo'];
+/**
+ * New Excel Export = the portal's 101010.xlsx: 22 columns, Station Id first, plain data rows only (NO Total row).
+ */
+const NEW_ORDER = ['station', 'date', 'shift', 'kind', 'farmerId', 'name', 'litres', 'kg', 'fat', 'snf', 'clr', 'water', 'time', 'rate', 'amount', 'branch', 'stationName', 'kgFat', 'kgSnf', 'collDate', 'collTime', 'sampleNo'];
+/**
+ * Old Excel Export = the portal's farmercollection.xlsx: 22 columns, Date first, plain data rows only (NO Total row).
+ * Number columns are real numbers (not text), so selecting a column in Excel shows its Sum.
+ */
+const OLD_ORDER = ['date', 'farmerId', 'name', 'litres', 'kg', 'fat', 'snf', 'clr', 'water', 'kind', 'time', 'station', 'shift', 'rate', 'amount', 'branch', 'stationName', 'kgFat', 'kgSnf', 'collDate', 'collTime', 'sampleNo'];
 
-function sheetTable(order: string[], rows: CollectionEntry[], filename: string, numType: ColType): ExportTable {
+/** always a real number (never text) for the numeric columns */
+const asNumber = (v: string | number): number => {
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '').trim());
+  return Number.isFinite(n) ? r2(n) : 0;
+};
+
+function sheetTable(order: string[], rows: CollectionEntry[], filename: string, numType: ColType, withTotal: boolean): ExportTable {
   const cols = order.map((k) => SHEET_COLS[k]).filter((c): c is SheetCol => !!c);
   const at = (key: string): number => cols.findIndex((c) => c.header === SHEET_COLS[key]?.header);
   const litres = at('litres');
@@ -263,9 +275,10 @@ function sheetTable(order: string[], rows: CollectionEntry[], filename: string, 
     columns: cols.map((c) => ({
       header: c.header,
       ...(c.num ? { type: numType } : {}),
-      ...(c.total === 'sum' ? { total: 'sum' as const } : c.total === 'wavg' ? { total: { wavg: litres } } : c.total === 'ratio' ? { total: { ratio: [amount, litres] as [number, number] } } : {}),
+      // Total row only when asked for; the STIPL Old / New Excel pass false, so no Total row is written
+      ...(!withTotal ? {} : c.total === 'sum' ? { total: 'sum' as const } : c.total === 'wavg' ? { total: { wavg: litres } } : c.total === 'ratio' ? { total: { ratio: [amount, litres] as [number, number] } } : {}),
     })),
-    rows: rows.map((r) => cols.map((c) => c.value(r))),
+    rows: rows.map((r) => cols.map((c) => (c.num ? asNumber(c.value(r)) : c.value(r)))),
   };
 }
 
@@ -356,16 +369,20 @@ const FarmerCollection: React.FC = () => {
     };
   };
 
-  // Old Excel = farmercollection.xlsx layout, New Excel = Station Id first layout (all 22 columns, Total row with SUM formulas)
+  // Bansi login (user id 307) keeps the Total row in both Old and New Excel; every other login gets the plain STIPL sheet (no Total row)
+  const bansiUser = BANSI_USER_IDS.includes(String(GLOBALS.userid ?? '').trim());
+  const fileScope = applied.centre === 'all' || !applied.centre ? 'All' : applied.centre;
+  // Old Excel = Date first layout (22 columns, no Total row), New Excel = Station Id first layout (also no Total row, same as STIPL)
   const baseActions: ExportAction[] = reportActions({
     build: buildTable,
     count: rows.length,
     unit: 'entries',
     toast: toast.show,
     stiplExcel: {
-      // Old Excel = the portal's farmercollection.xlsx (same columns, Total row at the end); the file name carries the dates
-      old: () => sheetTable(NEW_ORDER, rows, `farmercollection-${applied.from}-${applied.to}`, 'num2'),
-      new: () => sheetTable(OLD_ORDER, rows, `${applied.centre || 'farmer-collection'}-${applied.from}-${applied.to}`, 'num2'),
+      // Old Excel = farmercollection.xlsx layout, New Excel = 101010.xlsx layout; data only like the STIPL portal (NO Total row), except for the Bansi login which keeps the Total row.
+      // File name = VLC ("All" when All is selected) - Old / New - from - to
+      old: () => sheetTable(OLD_ORDER, rows, `${fileScope}-Old-${applied.from}-${applied.to}`, 'num2', bansiUser),
+      new: () => sheetTable(NEW_ORDER, rows, `${fileScope}-New-${applied.from}-${applied.to}`, 'num2', bansiUser),
     },
   });
   // Bansi login (user id 307) + VLC "All": New Excel Export gives the centre-wise "All" sheet. Everything else (and Old Excel Export) is unchanged.

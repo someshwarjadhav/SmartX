@@ -27,7 +27,7 @@ export const GLOBALS: GlobalData = {
 };
 
 export const GLOBALPAGESIZE = {
-  defaultPageSize: [{ size: 10 }],
+  defaultPageSize: [{ size: 100 }],
 };
 
 const MILK_OPTIONS = [
@@ -72,7 +72,8 @@ export const GLOBALLABELS = {
   allCentres: 'All',
 } as const;
 
-export const PAGE_SIZE_OPTIONS: number[] = [10, 50, 100];
+/** Same as the STIPL portal: Result per page 100 / 200 / 300 (100 by default) on every table. */
+export const PAGE_SIZE_OPTIONS: number[] = [100, 200, 300];
 export const DEFAULT_PAGE_SIZE: number = GLOBALPAGESIZE.defaultPageSize[0].size;
 
 export const limitLength = (value: string, max: number) => (value.length > max ? value.slice(0, max) : value);

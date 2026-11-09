@@ -78,12 +78,12 @@ const VlcStatusFilters: React.FC<FilterProps> = ({ value, plantOptions, onChange
       }}
       className="grid gap-x-4 gap-y-4 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-12"
     >
-      <SelectField wrapperClassName="xl:col-span-4" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant })} options={plantOptions} />
-      <Field label="Shift" className="xl:col-span-4">
+      <SelectField wrapperClassName="xl:col-span-3" label="Plant/MCC Name" value={value.plant} onChange={(plant) => onChange({ plant })} options={plantOptions} />
+      <Field label="Shift" className="xl:col-span-3">
         <Segmented<ShiftFilter> label="Shift" value={value.shift} onChange={(shift) => onChange({ shift })} options={SHIFT_FILTER_OPTIONS} className={SEGMENT} />
       </Field>
 
-      <div className="sm:col-span-2 xl:col-span-12">
+      <div className="sm:col-span-2 xl:col-span-6">
         <DateRangeFields
           from={value.fromDate}
           to={value.toDate}

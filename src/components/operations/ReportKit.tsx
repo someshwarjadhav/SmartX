@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/Button";
 import { Badge } from "./ui/Badge";
+import { ResultPerPage } from "./ui/ResultPerPage";
 import { PageHeader } from "./ui/PageHeader";
 import { nf } from "../../lib/portal/format";
 import { cn } from "../../lib/portal/cn";
@@ -186,8 +187,10 @@ const ICON: Record<BarKind, ReactNode> = {
   download: <Download size={15} />,
 };
 
-export function ReportBar<K extends BarKind = ExportKind>({ count, hideCount, disabled, kinds, onExport, left, source, labels }: {
+export function ReportBar<K extends BarKind = ExportKind>({ count, hideCount, disabled, kinds, onExport, left, source, labels, pager }: {
   count: number;
+  /** Paging of the table below: shows "Record Count: 1 - 100 of N" and the "Result per page" picker in this bar. */
+  pager?: { page: number; size: number; onSize: (n: number) => void };
   hideCount?: boolean;
   disabled: boolean;
   kinds: K[];
@@ -217,7 +220,13 @@ export function ReportBar<K extends BarKind = ExportKind>({ count, hideCount, di
   <div className="flex flex-col gap-3 border-b border-line bg-soft/50 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
     <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
       {left}
-      {!hideCount && <p className="tnum text-sm text-mute"><span className="font-bold text-ink">Record Count:</span> {nf(count)}</p>}
+      {!hideCount && (
+        <p className="tnum text-sm text-mute">
+          <span className="font-bold text-ink">Record Count:</span>{" "}
+          {pager ? `${count === 0 ? 0 : (pager.page - 1) * pager.size + 1} - ${Math.min(count, pager.page * pager.size)} of ${nf(count)}` : nf(count)}
+        </p>
+      )}
+      {pager && count > 0 && <ResultPerPage size={pager.size} onSize={pager.onSize} />}
       {source}
     </div>
     <div className="flex flex-wrap gap-2">

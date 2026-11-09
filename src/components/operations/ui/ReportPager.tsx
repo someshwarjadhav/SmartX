@@ -6,8 +6,9 @@ interface Props {
   page: number;
   size: number;
   onPage: (page: number) => void;
-  onSize: (size: number) => void;
-  /** Kept for old callers. Every table now offers 10 / 50 / 100 rows. */
+  /** The "Result per page" picker now sits in the bar above the table (ReportBar `pager`), so this is optional. */
+  onSize?: (size: number) => void;
+  /** Kept for old callers. Every table now offers 100 / 200 / 300 rows. */
   sizes?: number[];
   sizeLabel?: string;
 }

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { currentShift } from '../lib/shift';
 import type { CentreRow, RangeKey, SupplierRow } from '../types';
 import type { Summary } from '../data/dairy';
 import { useMilkFarmerEntries } from './useMilkReportData';
@@ -33,6 +34,6 @@ export function useDashboardData(range:RangeKey){
   const recentRows=[...current.rows].sort((a,b)=>`${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).slice(0,25);
   const todayRows=current.rows.filter(r=>r.date===today);const todayLitres=todayRows.reduce((a,r)=>a+r.litres,0);const todayFarmers=new Set(todayRows.map(r=>`${r.stationId}:${r.farmerId}`)).size;
   const dataReady=!current.loading;
-  return{summary,trend:daily.map(r=>({label:shortDate(r.date),Cow:r.Cow,Buffalo:r.Buffalo,Mix:r.Mix,Fat:r.Fat,SNF:r.SNF})),shifts:daily.map(r=>({label:shortDate(r.date),Morning:r.Morning,Evening:r.Evening})),centres,suppliers,recentRows,today:{litres:todayLitres,target:0,percent:0,remaining:0,shift:new Date().getHours()<14?'Morning' as const:'Evening' as const,shiftState:dataReady?(todayRows.length?'Actual portal data loaded':'No records returned today'):'Loading portal data',farmersPoured:todayFarmers},loading:current.loading||previous.loading,error:current.error||previous.error};
+  return{summary,trend:daily.map(r=>({label:shortDate(r.date),Cow:r.Cow,Buffalo:r.Buffalo,Mix:r.Mix,Fat:r.Fat,SNF:r.SNF})),shifts:daily.map(r=>({label:shortDate(r.date),Morning:r.Morning,Evening:r.Evening})),centres,suppliers,recentRows,today:{litres:todayLitres,target:0,percent:0,remaining:0,shift:currentShift(),shiftState:dataReady?(todayRows.length?'Actual portal data loaded':'No records returned today'):'Loading portal data',farmersPoured:todayFarmers},loading:current.loading||previous.loading,error:current.error||previous.error};
  },[current.rows,current.loading,current.error,previous.rows,previous.loading,previous.error,from,today,prevFrom,prevTo]);
 }

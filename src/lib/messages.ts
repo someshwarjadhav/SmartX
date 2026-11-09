@@ -11,6 +11,7 @@ export const MSG = {
 
   /* filters */
   pickCentre: 'Please select a VLC',
+  pickFarmer: 'Please select a farmer',
   noCentreInPlant: 'No VLC found for this plant',
   nothingToExport: 'There is nothing to export',
 

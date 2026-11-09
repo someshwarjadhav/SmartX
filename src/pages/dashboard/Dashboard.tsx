@@ -15,6 +15,8 @@ import {
   Milk,
   Users,
   Warehouse,
+  Sunrise,
+  Sunset,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -158,6 +160,22 @@ const IntakeHero: React.FC<{
 
       <div className="relative grid gap-2 p-5 sm:p-6 md:grid-cols-2 md:items-center xl:grid-cols-1">
         <div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+                today.shift === "Morning"
+                  ? "bg-amber-300/20 text-amber-200 ring-1 ring-amber-300/40"
+                  : "bg-indigo-300/20 text-indigo-100 ring-1 ring-indigo-300/40"
+              }`}
+            >
+              {today.shift === "Morning" ? <Sunrise size={13} aria-hidden /> : <Sunset size={13} aria-hidden />}
+              {today.shift} shift
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-white/70">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden />
+              {today.shiftState}
+            </span>
+          </div>
           <p className="text-sm font-medium text-white/70">
             Milk received today
           </p>
@@ -181,10 +199,10 @@ const IntakeHero: React.FC<{
                   className="mt-px shrink-0 text-glow"
                   aria-hidden
                 />
-                <span className="leading-tight">{today.shift} shift</span>
+                <span className="leading-tight">Shift time</span>
               </dt>
               <dd className="mt-1 text-[13px] leading-tight font-semibold sm:text-sm">
-                {today.shiftState}
+                {today.shift === "Morning" ? "4:00 AM – 12:00 PM" : "12:00 PM – 4:00 AM"}
               </dd>
             </div>
             <div className="min-w-0 rounded-xl bg-white/8 px-3 py-2.5">

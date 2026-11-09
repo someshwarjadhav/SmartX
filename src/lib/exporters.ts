@@ -238,7 +238,7 @@ const XLSX_FORMAT: Record<ColType, string | undefined> = { text: undefined, int:
  *  titleBlock: title / filter / generated lines on top (New style report); false = plain header on row 1 (STIPL old / new Excel)
  *  Total row = real Excel formulas (=SUM, weighted average ...) so the sheet keeps working when someone edits a value.
  */
-function buildSheet(XLSX: typeof import('xlsx'), t: ExportTable, titleBlock: boolean) {
+function buildSheet(XLSX: XlsxApi, t: ExportTable, titleBlock: boolean) {
   const ncol = t.columns.length;
   const top: Array<Array<string | number>> = [];
   if (titleBlock) top.push([t.title], [t.subtitle ?? ''], [`Generated ${stamp()}`], []);
@@ -330,13 +330,39 @@ function buildSheet(XLSX: typeof import('xlsx'), t: ExportTable, titleBlock: boo
       const z = XLSX_FORMAT[c.type ?? 'text'] ?? '0.00';
       ws[addr] = { t: 'n', v: Number(totals[ci]) || 0, f, z };
     });
+    // the whole Total row is bold (text cells like "Total" / "53 rows", formula cells and blank cells alike)
+    for (let ci = 0; ci < ncol; ci++) {
+      const addr = XLSX.utils.encode_cell({ r: totalRow, c: ci });
+      const cell = ws[addr] ?? (ws[addr] = { t: 's', v: '' });
+      (cell as unknown as { s?: unknown }).s = { font: { bold: true } };
+    }
   }
   return ws;
 }
 
+/**
+ * xlsx-js-style = SheetJS with cell styles (bold Total row). It is picked up only if it is installed (`npm install`);
+ * if it is not, the Excel still downloads with the same data, just without the bold Total row, and nothing breaks.
+ */
+type XlsxApi = typeof import('xlsx');
+const styled = import.meta.glob('../../node_modules/xlsx-js-style/dist/xlsx.min.js');
+async function loadXlsx(): Promise<XlsxApi> {
+  const load = Object.values(styled)[0];
+  if (load) {
+    try {
+      const mod = (await load()) as unknown as XlsxApi & { default?: XlsxApi };
+      const api = mod.default && mod.default.utils ? mod.default : mod;
+      if (api.utils) return api;
+    } catch {
+      /* fall back to the plain build below */
+    }
+  }
+  return import('xlsx');
+}
+
 /** New style Excel: title block, filters line, header, data, total row with formulas. */
 export async function exportExcel(t: ExportTable): Promise<void> {
-  const XLSX = await import('xlsx');
+  const XLSX = await loadXlsx();
   // only header row + data + total row (no title / filter / generated lines)
   const ws = buildSheet(XLSX, t, false);
   const wb = XLSX.utils.book_new();
@@ -346,7 +372,7 @@ export async function exportExcel(t: ExportTable): Promise<void> {
 
 /** STIPL style Excel (old / new export): header on row 1, data below, total row with formulas, sheet "Sheet1". */
 export async function exportPlainExcel(t: ExportTable): Promise<void> {
-  const XLSX = await import('xlsx');
+  const XLSX = await loadXlsx();
   const ws = buildSheet(XLSX, t, false);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');

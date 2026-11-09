@@ -31,7 +31,7 @@ function billHtml(b: FarmerBillData, i: BillPrintInfo, last: boolean, generated:
     )
     .join('');
   const summary = b.summary
-    .map((row) => `<tr>${row.map((p) => `<td class="${/net\s*payment/i.test(p.label) ? 'net' : ''}"><span>${esc(p.label)}</span><b>${esc(p.value)}</b></td>`).join('')}</tr>`)
+    .map((row) => `<tr>${row.map((p, j) => `<td ${j === row.length - 1 && row.length < 4 ? `colspan="${5 - row.length}"` : ''} class="${/net\s*payment/i.test(p.label) ? 'net' : ''}"><span>${esc(p.label)}</span><b>${esc(p.value)}</b></td>`).join('')}</tr>`)
     .join('');
   return `
   <section class="bill" ${last ? 'style="break-after:auto;page-break-after:auto"' : ''}>

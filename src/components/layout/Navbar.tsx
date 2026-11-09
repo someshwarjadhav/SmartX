@@ -9,6 +9,7 @@ import { initials } from '../../lib/format';
 import { useOutside } from '../../hooks/useOutside';
 import { cn } from '../../lib/cn';
 import { ModeToggle } from './ModeToggle';
+import { ShiftBadge } from './ShiftBadge';
 
 interface Props {
   onMenu: () => void;
@@ -54,6 +55,7 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
+          <ShiftBadge />
           <ModeToggle />
 
           <div className="relative" ref={menuRef}>

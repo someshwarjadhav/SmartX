@@ -5,6 +5,8 @@ import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Badge } from "../../../components/operations/ui/Badge";
 import { Pager } from "../../../components/operations/ui/Pager";
+import { ResultPerPage } from "../../../components/operations/ui/ResultPerPage";
+import { DEFAULT_PAGE_SIZE } from "../../../lib/portal/global";
 import { Segmented } from "../../../components/operations/ui/Fields";
 import { StatCard } from "../../../components/operations/ui/StatCard";
 import { EmptyState } from "../../../components/operations/EmptyState";
@@ -41,7 +43,7 @@ const RateStatus: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const [size, setSize] = useState(10);
+  const [size, setSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1);
   const showLoader = useSmoothLoading(loading);
 
@@ -107,7 +109,10 @@ const RateStatus: React.FC = () => {
                 onChange={(v) => setType(v)}
                 options={MILK_TYPES.map((m) => ({ value: m.code, label: m.label }))}
               />
-              <p className="tnum text-sm text-mute"><span className="font-bold text-ink">Record Count:</span> {from} - {to} of {total}</p>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <p className="tnum text-sm text-mute"><span className="font-bold text-ink">Record Count:</span> {from} - {to} of {total}</p>
+                {total > 0 && <ResultPerPage size={size} onSize={(n) => { setSize(n); setPage(1); }} />}
+              </div>
             </div>
 
             {error && <ErrorBlock compact message={error} onRetry={() => setTick((t) => t + 1)} busy={loading} />}
@@ -152,7 +157,7 @@ const RateStatus: React.FC = () => {
             </div>
             )}
 
-            {total > 0 && <Pager total={total} page={current} size={size} onPage={setPage} onSize={(n) => { setSize(n); setPage(1); }} />}
+            {total > 0 && <Pager total={total} page={current} size={size} onPage={setPage} />}
           </div>
         </Card>
       </Reveal>

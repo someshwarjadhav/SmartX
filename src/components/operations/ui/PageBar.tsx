@@ -29,7 +29,7 @@ const pagesToShow = (page: number, count: number): Array<number | "…"> => {
 const btn =
   "grid h-9 min-w-9 place-items-center rounded-lg border px-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40";
 
-/** SmartX-style footer shared by every API table: Showing x–y of N, numbered pages, 10/50/100 rows. */
+/** SmartX-style footer shared by every API table: Showing x–y of N, numbered pages, 100/200/300 rows. */
 export const PageBar: React.FC<Props> = ({ total, page, size, onPage, onSize, className }) => {
   const count = Math.max(1, Math.ceil(total / size));
   const cur = Math.min(Math.max(1, page), count);

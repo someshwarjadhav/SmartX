@@ -1,4 +1,4 @@
-import { validateDateRange } from "../../../lib/dateRange";
+import { validateDateRange, validatePastLimit } from "../../../lib/dateRange";
 import type * as React from "react";
 import { useMemo, useRef, useState } from "react";
 import { Landmark, Search } from "lucide-react";
@@ -80,7 +80,7 @@ const BankPaymentSummary: React.FC = () => {
       toast("Select at least one VLC", "warn");
       return;
     }
-    const rangeError = validateDateRange(from, to);
+    const rangeError = validateDateRange(from, to) ?? validatePastLimit(from);
     if (rangeError) {
       toast(rangeError, "warn");
       return;
@@ -236,6 +236,7 @@ const BankPaymentSummary: React.FC = () => {
         <Card>
           <ReportBar
             count={total}
+            pager={{ page: current, size: pageSize, onSize: (n) => { setPageSize(n); setPage(1); } }}
             disabled={!ready}
             kinds={["xls", "pdf", "csv"]}
             onExport={run}
@@ -310,10 +311,6 @@ const BankPaymentSummary: React.FC = () => {
               page={current}
               size={pageSize}
               onPage={setPage}
-              onSize={(n) => {
-                setPageSize(n);
-                setPage(1);
-              }}
             />
           )}
         </Card>

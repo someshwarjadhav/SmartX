@@ -189,11 +189,12 @@ async function loggedText(
   path: string,
   init: RequestInit,
   priority: Priority,
+  timeoutMs?: number,
 ): Promise<string> {
   const url = dpuUrl(path);
   logRequest(label, url, init);
   try {
-    const text = await gatewayText(url, init, priority, true);
+    const text = await gatewayText(url, init, priority, true, timeoutMs ? { timeoutMs } : {});
     logRaw(label, text);
     return text;
   } catch (e) {
@@ -209,9 +210,10 @@ async function dpuSend(
   path: string,
   init: RequestInit,
   priority: Priority,
+  timeoutMs?: number,
 ): Promise<unknown> {
   const label = `[dpu] ${init.method ?? "GET"} ${path}`;
-  const text = await loggedText(label, path, init, priority);
+  const text = await loggedText(label, path, init, priority, timeoutMs);
   const reply = openDpuReply(parseGatewayText(text), 0, true);
   if (stillEncrypted(reply)) {
     console.error(
@@ -230,7 +232,9 @@ async function dpuSend(
 export const dpuGet = (
   path: string,
   priority: Priority = 1,
-): Promise<unknown> => dpuSend(path, { method: "GET" }, priority);
+  /** shorter timeout than the default (a slow request then frees its slot early) */
+  timeoutMs?: number,
+): Promise<unknown> => dpuSend(path, { method: "GET" }, priority, timeoutMs);
 
 export const dpuPostJson = (
   path: string,

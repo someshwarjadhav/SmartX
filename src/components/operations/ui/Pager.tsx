@@ -7,7 +7,7 @@ interface Props {
   size: number;
   onPage: (page: number) => void;
   onSize?: (size: number) => void;
-  /** Kept for old callers. Every table now offers 10 / 50 / 100 rows. */
+  /** Kept for old callers. Every table now offers 100 / 200 / 300 rows. */
   sizes?: number[];
   className?: string;
 }
