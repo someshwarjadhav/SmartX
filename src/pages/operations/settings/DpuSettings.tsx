@@ -20,8 +20,6 @@ import {
   type DpuSettings as Dpu,
 } from '../../../services/settings/dpuSettings.api.ts';
 
-const TIMES = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
-
 const message = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
 const busyCls = (loading: boolean) => `transition-opacity duration-150 ${loading ? 'pointer-events-none opacity-60' : 'opacity-100'}`;
@@ -73,7 +71,6 @@ function useCenterData<T>(center: string, load: (c: string) => Promise<T>, empty
 }
 
 const PASS_RE = /^\d{4}$/;
-const timeOptions = (current: string) => (TIMES.includes(current) ? TIMES : [current, ...TIMES]);
 
 const CHECKS: Array<[keyof Dpu, string]> = [
   ['autoWeight', 'Auto Weight'], ['autoFat', 'Auto Fat'], ['autoShift', 'Auto Shift'],
@@ -89,8 +86,6 @@ const DpuForm: React.FC<{ ids: string[] }> = ({ ids }) => {
   );
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof Dpu>(k: K, v: Dpu[K]) => setS((x) => ({ ...x, [k]: v }));
-  const setRow = (i: number, patch: Partial<Dpu['intervals'][number]>) =>
-    setS((x) => ({ ...x, intervals: x.intervals.map((r, n) => (n === i ? { ...r, ...patch } : r)) }));
 
   const locked = !center || loading || !!error;
   const passes: Array<[keyof Dpu, string]> = [['operatorPass', 'Operator Pass'], ['supervisorPass', 'Supervisor Pass'], ['adminPass', 'Admin Pass']];
@@ -120,7 +115,7 @@ const DpuForm: React.FC<{ ids: string[] }> = ({ ids }) => {
         <div className="grid gap-4 sm:grid-cols-2"><CenterSelect value={center} onChange={setCenter} ids={ids} /></div>
         {error && <ErrorBlock message={error} onRetry={retry} compact />}
 
-        <div className={`grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] ${busyCls(loading)}`} aria-busy={loading}>
+        <div className={busyCls(loading)} aria-busy={loading}>
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
               {CHECKS.map(([k, label]) => <Check key={k} label={label} checked={s[k] as boolean} disabled={locked} onChange={(v) => set(k, v as never)} />)}
@@ -149,32 +144,6 @@ const DpuForm: React.FC<{ ids: string[] }> = ({ ids }) => {
             {center && !loading && !error && !passOk && <p className="text-sm font-semibold text-danger">Password Must be of 4 Digit</p>}
           </div>
 
-          <div className="max-h-[26rem] overflow-auto rounded-xl border border-line">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-soft text-left">
-                <tr>
-                  <th className="px-3 py-2.5 font-bold">Intervals</th>
-                  <th className="px-3 py-2.5 font-bold">Time</th>
-                  <th className="px-3 py-2.5 font-bold">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.intervals.map((row, i) => (
-                  <tr key={i} className="border-t border-line">
-                    <td className="px-3 py-2 text-mute">i{i + 1}</td>
-                    <td className="px-2 py-1.5">
-                      <Select value={row.time} disabled={locked} onChange={(e) => setRow(i, { time: e.target.value })}>
-                        {timeOptions(row.time).map((t) => <option key={t} value={t}>{t}</option>)}
-                      </Select>
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <Input inputMode="decimal" disabled={locked} value={row.amount} onChange={(e) => setRow(i, { amount: e.target.value.replace(/[^\d.]/g, '') })} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
 
         <Button className="w-full" loading={saving} disabled={locked || !passOk} onClick={submit}>Submit</Button>
