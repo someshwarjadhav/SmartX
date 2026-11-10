@@ -20,16 +20,16 @@ import type { RawFarmerRow, RawVlccRow } from '../services/types/raw';
 
 export interface LiveReportState<T> {
   rows: T[];
-  /** true only while there is nothing to show yet (first rows arrive -> the table appears) */
+ 
   loading: boolean;
-  /** true while requests are still running, even if some rows are already on screen */
+
   fetching: boolean;
-  /** requests finished so far (done of total) for the progress strip */
+ 
   done: number;
   error: string | null;
   retry: () => void;
   updatedAt: number | null;
-  /** requests that still failed after a retry (data is incomplete when > 0) */
+ 
   failed: number;
   total: number;
 }
@@ -39,10 +39,10 @@ export interface LiveFilter {
   shift?: Shift | 'both';
   milk?: MilkKind | 'both';
   vlccId?: string | 'all';
-  /** ask only these centres (used when a page already knows which centres it needs, e.g. one plant) */
+ 
   vlccIds?: string[];
 }
-/* ---------- Centres for the report dropdowns (DPU FarmerCollectionDpu) ---------- */
+
 
 const centreCache = new Map<string, Promise<Center[]>>();
 
@@ -72,12 +72,12 @@ function loadReportCentres(key: string, tries: CentreTry[]): Promise<Center[]> {
   return p;
 }
 
-/* ---------- Routes (Plant/MCC dropdown = the login's routes, same as the live portal) ---------- */
+
 
 type RouteOf = Map<string, { id: string; name: string }>;
 const routeCache = new Map<string, Promise<RouteOf>>();
 
-/** getMccRoute (the routes of the login) + getVillageDetails (the centres of every route) -> centre id -> route */
+
 function loadRouteMap(mccid: string, plantid: string, total: number): Promise<RouteOf> {
   const key = `${mccid}|${plantid}`;
   const hit = routeCache.get(key);
@@ -88,7 +88,7 @@ function loadRouteMap(mccid: string, plantid: string, total: number): Promise<Ro
       const routes = await getMccRoute(mccid, plantid);
       const lists = await Promise.all(routes.map((r) => getVillageDetails(mccid, r.routeId).then((v) => ({ r, v })).catch(() => ({ r, v: [] as Awaited<ReturnType<typeof getVillageDetails>> }))));
       for (const { r, v } of lists) {
-        // an answer that holds every centre of the login for each route is the "all villages" fallback, not this route's own list
+        
         if (routes.length > 1 && total > 0 && v.length >= total) continue;
         for (const x of v) if (x.villageId && !out.has(x.villageId)) out.set(x.villageId, { id: r.routeId, name: r.routeName || r.routeId });
       }
@@ -103,7 +103,6 @@ function loadRouteMap(mccid: string, plantid: string, total: number): Promise<Ro
   return p;
 }
 
-/** Centres from the DPU centre API; the centres saved at login are used until it answers (or if it fails). */
 function useReportCenters(): Center[] {
   const session = getSession();
   const saved = useCenters();
@@ -122,7 +121,7 @@ function useReportCenters(): Center[] {
     let alive = true;
     void loadReportCentres(`${scope}|${tries.map((t) => `${t.param}=${t.value}`).join('/')}`, tries).then((list) => { if (alive) setDpu(list); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [scope, vlccKey]);
   const base = dpu.length ? dpu : saved;
   const [routeOf, setRouteOf] = useState<RouteOf>(new Map());
@@ -133,19 +132,14 @@ function useReportCenters(): Center[] {
     let alive = true;
     void loadRouteMap(mccid, GLOBALS.plantid || '', baseCount).then((m) => { if (alive) setRouteOf(m); });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [scope, baseCount]);
   return useMemo(() => (routeOf.size ? base.map((c) => { const r = routeOf.get(c.id); return r ? { ...c, routeId: r.id, routeName: r.name } : c; }) : base), [base, routeOf]);
 }
 
-/**
- * The plant / route a centre belongs to. It comes from the centre API (route id, else route name), so a login with many
- * routes (Bansi) gets one Plant/MCC entry per route. Only when the API sends no route at all the first 3 digits of the
- * centre id are used, as before.
- */
+
 export const plantKeyOf = (c: Center, fallback = ''): string => (c.routeId || c.routeName || c.id.slice(0, 3) || fallback).trim();
 
-/** Dropdown text: "VILLAGE NAME | 7090810" (name and id together). */
 export const centreLabel = (id: string, name?: string): string => (name && name.trim() && name.trim() !== id ? `${name.trim()} | ${id}` : id);
 
 const toISO = (raw: string): string => {
@@ -165,7 +159,6 @@ const smartShift = (shift: string | null): Shift => shift === 'Evening' ? 'Eveni
 
 const KIND_RANK: Record<string, number> = { cow: 0, buffalo: 1, mix: 2 };
 
-/** Same order everywhere: date, Morning before Evening, milk type, farmer number, time. */
 const rowOrder = (r: CollectionEntry): string => {
   const id = /^\d+$/.test(r.farmerId) ? String(Number(r.farmerId)).padStart(8, '0') : r.farmerId;
   return `${r.date}|${r.shift === 'Morning' ? 0 : 1}|${KIND_RANK[r.kind] ?? 3}|${id}|${time24(r.time)}`;
@@ -176,7 +169,7 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
   const centers = useReportCenters();
   const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : filter.vlccIds?.length ? filter.vlccIds : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
   const idKey = ids.join(',');
-  // a page that is not submitted yet (enabled = false) must not ask the server anything
+ 
   const queryKey = enabled && ids.length ? `${keyPrefix}:${filter.from}:${filter.to}:${filter.shift ?? 'both'}:${filter.milk ?? 'both'}:${idKey}` : null;
   const q = useQuery<RawFarmerRow>(queryKey, (emit, signal) => fetchFarmerCollection({
     from: filter.from,
@@ -193,7 +186,7 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
       const date = toISO(r.date);
       const shift = smartShift(r.shift);
       const kind = smartKind(r.milk);
-      // the row id must not depend on the position in the list: rows arrive in parts, and a changing id made every row redraw
+     
       const base = `${r.vlccid}|${r.farmerId}|${date}|${shift}|${kind}|${r.sampleNo}|${r.time}|${r.liter}|${r.amount}`;
       const n = used.get(base) ?? 0;
       used.set(base, n + 1);
@@ -231,12 +224,11 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
 
 const NO_ROWS: never[] = [];
 
-/** `hideOld` (default): after Submit the table shows the loader until the new data has arrived, never the earlier / saved rows. */
+
 export function useMilkFarmerEntries(filter: LiveFilter, enabled = true, hideOld = true): LiveReportState<CollectionEntry> {
   const { q, rows } = useRawFarmerRows(filter, 'smartx-designed-farmer-report', enabled, hideOld);
   const session = getSession();
-  // depends on the filter VALUES (not on the filter object, which is a new object on every render): the result list keeps the
-  // same identity between renders, so clicking a dropdown or button does not recalculate / redraw the whole report
+  
   const { from, to, shift, milk, vlccId } = filter;
   const filtered = useMemo(() => rows.filter((r) =>
     r.date >= from && r.date <= to &&
@@ -248,7 +240,7 @@ export function useMilkFarmerEntries(filter: LiveFilter, enabled = true, hideOld
   const busy = enabled && !!session?.vlccIds?.length && (q.status === 'loading' || q.fetching);
   return {
     rows: shown,
-    // rows are shown as soon as the first answer arrives; the loader only covers the time before that
+    
     loading: busy && shown.length === 0,
     fetching: busy,
     done: q.done,
@@ -313,14 +305,14 @@ export function useMilkVlccEntries(filter: LiveFilter, enabled = true): LiveRepo
   };
 }
 
-export interface CentreOpt { id: string; name: string; mccId: string; plantName: string; label: string; /** the centre's own station code (0001 ...), when the centre API sends one */ code?: string }
+export interface CentreOpt { id: string; name: string; mccId: string; plantName: string; label: string; code?: string }
 
 export function useMilkCenterOptions(): CentreOpt[] {
   const centers = useReportCenters();
   const session = getSession();
   return useMemo(() => {
     const mcc = session?.mccId || '';
-    // route name of every plant key (taken from the first centre of that route that has one)
+
     const routeNames = new Map<string, string>();
     for (const c of centers) {
       const key = plantKeyOf(c, mcc);
@@ -328,10 +320,9 @@ export function useMilkCenterOptions(): CentreOpt[] {
     }
     const plant = (m: string) => stripRoute(routeNames.get(m) || session?.mccName || m);
     const list = centers.length
-      ? centers.map((c) => ({ id: c.id, name: c.name || c.label || '', mccId: plantKeyOf(c, mcc), code: c.stationId || session?.stationByVlcc?.[c.id] || undefined }))
+      ? centers.map((c) => ({ id: c.id, name: c.name || c.label || '', mccId: plantKeyOf(c, mcc), code: session?.stationByVlcc?.[c.id] || (c.stationId !== c.id ? c.stationId : undefined) || undefined }))
       : (session?.vlccIds ?? []).map((id) => ({ id, name: session?.vlccNames?.[id] || '', mccId: id.slice(0, 3) || mcc, code: session?.stationByVlcc?.[id] || undefined }));
-    // VLC dropdowns (every report, Farmer Master ...): "Name | ID" - the name (first letter of every word in capitals) and the
-    // centre id exactly as the centre API (getCenter / FarmerCollectionDpu) sends them
+    
     return list.map((c) => {
       const name = titleCase(c.name);
       const label = !name || name.toUpperCase() === c.id.toUpperCase() ? c.id : `${name} | ${c.id}`;
@@ -340,7 +331,7 @@ export function useMilkCenterOptions(): CentreOpt[] {
   }, [centers, session?.vlccIds, session?.vlccNames, session?.stationByVlcc, session?.mccId, session?.mccName]);
 }
 
-/** Plant/MCC dropdown: only the plant (route) name, e.g. "MAIN ROUTE" - no id, no "All". The value stays the MCC id. */
+
 export function usePlantOptions(centres: CentreOpt[]): { value: string; label: string }[] {
   return useMemo(() => {
     const seen = new Map<string, string>();
@@ -349,12 +340,7 @@ export function usePlantOptions(centres: CentreOpt[]): { value: string; label: s
   }, [centres]);
 }
 
-/**
- * Plant -> VLC dropdowns of every report (without `withAll`: the first plant and its first centre are selected by default).
- * `plant` / `centre` are what the person picked ('' = nothing picked yet); the returned values are always a real option.
- * `withAll` (CDA Report, Farmer Collection) adds an "All" row (value 'all') on top of both dropdowns:
- * plant 'all' = every plant, centre 'all' = every centre of the picked plant(s). "All" is also the default selection.
- */
+
 export function useReportScope(centres: CentreOpt[], plant: string, centre: string, withAll = false) {
   const realPlants = usePlantOptions(centres);
   const plantOptions = useMemo(
@@ -374,16 +360,14 @@ export function useReportScope(centres: CentreOpt[], plant: string, centre: stri
   return { plantOptions, centreOptions, plant: plantValue, centre: centreValue };
 }
 
-/** value of the "All" row in the Plant / VLC dropdowns */
 export const ALL = 'all';
 
-/** centre ids a report has to ask for: one centre, or (All) every centre of the picked plant / of every plant */
+
 export function centreIdsFor(centres: CentreOpt[], plant: string, centre: string): string[] {
   if (centre && centre !== ALL) return [centre];
   return centres.filter((c) => !plant || plant === ALL || c.mccId === plant).map((c) => c.id);
 }
 
-/* ---------- Farmer dropdown: DPU FarmerMaster (loads before Submit) ---------- */
 
 const farmerCache = new Map<string, Promise<MasterFarmerOption[]>>();
 const loadFarmers = (id: string): Promise<MasterFarmerOption[]> => {
@@ -394,7 +378,7 @@ const loadFarmers = (id: string): Promise<MasterFarmerOption[]> => {
   void p.then((l) => { if (!l.length) farmerCache.delete(id); });
   return p;
 };
-/** "0003" and "3" are the same farmer */
+
 export const farmerKey = (vlccid: string, farmerId: string): string => `${vlccid}:${String(farmerId).trim().replace(/^0+(?=\d)/, '')}`;
 
 export function useFarmerMasterOptions(vlccIds: string[], names: Record<string, string>): { options: { value: string; label: string }[]; loading: boolean } {
@@ -408,7 +392,7 @@ export function useFarmerMasterOptions(vlccIds: string[], names: Record<string, 
     setLoading(true);
     void Promise.all(vlccIds.map(loadFarmers)).then((parts) => { if (alive) { setList(parts.flat()); setLoading(false); } });
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [key]);
   const options = useMemo(() => {
     const multi = vlccIds.length > 1;

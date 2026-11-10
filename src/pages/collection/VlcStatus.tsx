@@ -19,13 +19,13 @@ import { validateDateRange, validatePastLimit } from '../../lib/dateRange';
 import { Toast } from '../../components/ui/Toast';
 import { useToast } from '../../hooks/useToast';
 
-/* ---------- Types ---------- */
+
 
 type ShiftFilter = Shift | 'both';
 
 const SHIFT_FILTER_OPTIONS: { value: ShiftFilter; label: string }[] = [...SHIFT_OPTIONS, { value: 'both', label: 'Both' }];
 
-/** Filter keys = API request params (Plant/MCC Name -> plant, Shift -> shift, From/To Date). */
+
 interface Filters {
   plant: string;
   shift: ShiftFilter;
@@ -33,10 +33,9 @@ interface Filters {
   toDate: string;
 }
 
-/** One tile = one VLC. */
+
 interface VlcTile {
   id: string;
-  /** route (plant) the centre belongs to */
   route: string;
   name: string;
   active: boolean;
@@ -45,10 +44,6 @@ interface VlcTile {
   snf: number;
 }
 
-/* ---------- Data source (dummy) ---------- */
-
-
-/* ---------- Filter card ---------- */
 
 interface FilterProps {
   value: Filters;
@@ -109,11 +104,10 @@ const VlcStatusFilters: React.FC<FilterProps> = ({ value, plantOptions, onChange
   </section>
 );
 
-/* ---------- Page ---------- */
 
 const defaults = (): Filters => {
   const today = toISO(new Date());
-  // '' = first plant (no "All MCCs" row)
+ 
   return { plant: '', shift: 'both', fromDate: today, toDate: today };
 };
 
@@ -125,7 +119,7 @@ const Tile: React.FC<{ tile: VlcTile }> = ({ tile }) => (
     )}
   >
     <p className="font-display text-sm font-bold tracking-wide">{tile.name}</p>
-    <p className="tnum text-sm font-semibold text-mute">{tile.id}</p>
+    {tile.id && <p className="tnum text-sm font-semibold text-mute">{tile.id}</p>}
     <span className={cn('my-3 grid h-11 w-11 place-items-center rounded-xl', tile.active ? 'bg-ok/15 text-ok' : 'bg-danger/12 text-danger')}>
       {tile.active ? <Wifi size={22} aria-label="Active" /> : <WifiOff size={22} aria-label="Inactive" />}
     </span>
@@ -147,13 +141,13 @@ const VlcStatus: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  // only the centres of the chosen plant are asked (faster than loading every plant)
+
   const plantIds = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => c.id), [centres, applied.plant]);
   const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both', vlccIds: plantIds }, submitted && plantIds.length > 0);
-  // tiles say "inactive" for a centre that has not answered yet, so this page waits for every centre before it draws them
+  
   const loading = live.fetching;
-  const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.code || c.id, route:c.mccId, name:titleCase(c.name || c.id), active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
-  // route-wise: one block per route (plant), in the order of the Plant/MCC dropdown
+  const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.code || '', route:c.mccId, name:titleCase(c.name || c.id), active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
+
   const allPlants = applied.plant === 'all';
   const groups = useMemo(() => {
     const names = new Map(plantOptions.map((p) => [p.value, p.label]));
@@ -165,7 +159,7 @@ const VlcStatus: React.FC = () => {
     const order = [...names.keys(), ...[...byRoute.keys()].filter((k) => !names.has(k))];
     return order.filter((k) => byRoute.has(k)).map((k) => ({ route: k, name: names.get(k) ?? k, tiles: byRoute.get(k)! }));
   }, [tiles, plantOptions]);
-  // with "All": a route that sent no milk at all is not listed (27 red tiles with 0.00 say nothing); a route with data shows all its centres
+ 
   const shownGroups = allPlants ? groups.filter((g) => g.tiles.some((t) => t.active)) : groups;
   const shownTiles = shownGroups.flatMap((g) => g.tiles);
   const active = shownTiles.filter((t) => t.active).length;
@@ -183,7 +177,7 @@ const VlcStatus: React.FC = () => {
     if (submitted && JSON.stringify(applied) === JSON.stringify(next)) { live.retry(); }
     setApplied(next);
     setSubmitted(true);
-    // bring the results (and the loader) up so nothing has to be scrolled
+   
     window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
 
@@ -224,7 +218,7 @@ const VlcStatus: React.FC = () => {
                   {allPlants && (
                     <header className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
                       <h3 className="font-display text-sm font-bold">{g.name}</h3>
-                      {/* with a single plant the totals are already in the card header above: they are not repeated */}
+                      
                       {shownGroups.length > 1 && (
                         <div className="flex items-center gap-2">
                           <Badge tone="ok">Active {on}</Badge>
@@ -235,7 +229,7 @@ const VlcStatus: React.FC = () => {
                   )}
                   <ul className={'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'}>
                     {g.tiles.map((t, i) => (
-                      <Tile key={`${t.id}-${i}`} tile={t} />
+                      <Tile key={`${t.id}-${t.name}-${i}`} tile={t} />
                     ))}
                   </ul>
                 </section>
