@@ -1,4 +1,5 @@
 import type * as React from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '../../lib/cn';
 import { TableLoader } from './TableLoader';
 import { clipTitle } from '../../lib/clipTitle';
@@ -28,6 +29,21 @@ interface Props<T> {
   isSelected?: (row: T) => boolean;
 }
 
+/** true from the Tailwind `md` breakpoint (768px) up: only the table OR the card list is built, never both hidden behind CSS */
+const DESKTOP = '(min-width: 768px)';
+function useIsDesktop(): boolean {
+  const [on, setOn] = useState(() => (typeof window === 'undefined' || !window.matchMedia ? true : window.matchMedia(DESKTOP).matches));
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia(DESKTOP);
+    const sync = () => setOn(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  return on;
+}
+
 const ALIGN: Record<Align, string> = { left: 'text-left', right: 'text-right', center: 'text-center' };
 
 // a column only gets a MAXIMUM width: it hugs its own values (no empty gap) and a longer value ends with "..."
@@ -37,6 +53,7 @@ const labelOf = <T,>(c: Column<T>): string => c.mobileLabel ?? (typeof c.header 
 
 // minWidth is kept for old callers but no longer forces the table wider than its box: the columns fit their content
 export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false, isSelected }: Props<T>) {
+  const desktop = useIsDesktop();
   if (loading) return <TableLoader label="Loading data…" />;
 
   const title = columns.find((c) => c.mobile === 'title');
@@ -45,7 +62,8 @@ export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false
 
   return (
     <>
-      <div className="scroll-x hidden md:block">
+      {desktop ? (
+      <div className="scroll-x">
         <table aria-label={ariaLabel} className="clip-cells w-full text-[13px]" onMouseOver={clipTitle}>
           <thead>
             <tr className="border-b border-line bg-soft/40 text-xs text-mute">
@@ -70,8 +88,8 @@ export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false
           </tbody>
         </table>
       </div>
-
-      <ul className="divide-y divide-line/70 md:hidden">
+      ) : (
+      <ul className="divide-y divide-line/70">
         {rows.slice(0, 300).map((row) => (
           <li
             key={rowKey(row)}
@@ -94,6 +112,7 @@ export function DataTable<T>({ columns, rows, rowKey, ariaLabel, loading = false
           </li>
         ))}
       </ul>
+      )}
     </>
   );
 }

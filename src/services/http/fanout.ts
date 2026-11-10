@@ -49,6 +49,8 @@ export async function fanOut<T>(waveList: Array<Array<Job<T>>>, emit: Emit<T> | 
   let done = 0;
   let firstError: unknown;
   const total = waveList.reduce((n, w) => n + w.length, 0);
+
+  if (total <= 1) dedupe = false;
   let lastEmit = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const push = () => {
