@@ -142,7 +142,7 @@ const BankPaymentSummary: React.FC = () => {
           centreOf: (r) => r.vlcId,
           idOf: (r) => r.id,
           nameOf: (r) => r.name,
-          centreLabel: labelOf,
+          centreLabel: (id: string) => centres.find((c) => c.id === id)?.plainLabel ?? labelOf(id), // Bansi sheet: unchanged (real centre id)
           texts: [
             { header: "Bank Name", value: (r) => r.bankName },
             { header: "Account No", value: (r) => r.accountNo },

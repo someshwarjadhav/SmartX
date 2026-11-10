@@ -25,6 +25,8 @@ export interface CollectionEntry {
   shift: Shift;
   farmerId: string;
   farmer: string;
+  /** Name exactly as the server sends it (original case, empty when the server has no name). Used by the Excel exports. */
+  farmerRaw?: string;
   centre: string;
   kind: MilkKind;
   litres: number;

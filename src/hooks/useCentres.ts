@@ -7,6 +7,8 @@ import { titleCase, stripRoute } from '../lib/titleCase';
 export interface CentreOption {
   id: string;
   label: string;
+  /** "Name | centre id" (the real id, not the custom station id) - the Bansi payment Excel reads its centre code from this text */
+  plainLabel: string;
 }
 
 export interface MccOption {
@@ -32,16 +34,18 @@ const subscribe = (l: () => void) => {
 
 export const ALL_CENTRES = 'ALL';
 
-// "Name | ID": the name (first letter of every word in capitals) and the centre id from the centre API
-const centreLabel = (id: string, name: string, _station?: string): string => {
+// "Name | custom station id": the name (first letter of every word in capitals) and the custom station id from the APIs.
+// The option id (value) stays the real centre id, so the data is fetched exactly as before; no custom id -> the real id is shown.
+const centreLabel = (id: string, name: string, station?: string): string => {
   const n = titleCase(name);
-  return n && n.toUpperCase() !== id.toUpperCase() ? `${n} | ${id}` : id;
+  const shown = (station && station !== id ? station : '') || id;
+  return n && n.toUpperCase() !== shown.toUpperCase() ? `${n} | ${shown}` : shown;
 };
 
 const allCentres = (centers: ReturnType<typeof useCenters>): CentreOption[] => {
   const s = getSession();
-  if (centers.length) return centers.map((c) => ({ id: c.id, label: centreLabel(c.id, c.name || vlccName(c.id), c.stationId) }));
-  return (s?.vlccIds ?? []).map((id) => ({ id, label: centreLabel(id, vlccName(id), s?.stationByVlcc[id]) }));
+  if (centers.length) return centers.map((c) => ({ id: c.id, label: centreLabel(c.id, c.name || vlccName(c.id), s?.stationByVlcc[c.id] || c.stationId), plainLabel: centreLabel(c.id, c.name || vlccName(c.id)) }));
+  return (s?.vlccIds ?? []).map((id) => ({ id, label: centreLabel(id, vlccName(id), s?.stationByVlcc[id]), plainLabel: centreLabel(id, vlccName(id)) }));
 };
 
 export function useMccOptions(): MccOption[] {

@@ -8,6 +8,8 @@ export interface FarmerRow {
   farmerKey: string;
   farmerId: string;
   farmerName: string;
+  /** name as the server sends it: original case, empty when missing (farmerName falls back to "Farmer #id") */
+  rawName: string;
   vlccid: string;
   sampleNo: string;
   date: string;
@@ -38,6 +40,7 @@ export function mapFarmers(rows: RawFarmerRow[]): FarmerRow[] {
       farmerKey: `${vlccid}:${farmerId}`,
       farmerId,
       farmerName: str(r.farmername) || `Farmer #${farmerId}`,
+      rawName: str(r.farmername),
       vlccid,
       sampleNo: str(r.sampleno),
       date: str(r.trdate),

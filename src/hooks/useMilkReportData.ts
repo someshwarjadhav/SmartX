@@ -199,6 +199,7 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
         shift,
         farmerId: r.farmerId,
         farmer: titleCase(r.farmerName),
+        farmerRaw: r.rawName,
         centre: titleCase(names.get(r.vlccid) || r.village || r.vlccid),
         kind,
         litres: r.liter,
@@ -323,9 +324,12 @@ export function useMilkCenterOptions(): CentreOpt[] {
       ? centers.map((c) => ({ id: c.id, name: c.name || c.label || '', mccId: plantKeyOf(c, mcc), code: session?.stationByVlcc?.[c.id] || (c.stationId !== c.id ? c.stationId : undefined) || undefined }))
       : (session?.vlccIds ?? []).map((id) => ({ id, name: session?.vlccNames?.[id] || '', mccId: id.slice(0, 3) || mcc, code: session?.stationByVlcc?.[id] || undefined }));
     
+    // Dropdown text = "Name | custom station id" (the custom id comes from the APIs: login CustomStationId / centre API customstationid).
+    // The option VALUE stays the real centre id, so the data is fetched exactly as before. No custom id from the API -> the real id is shown.
     return list.map((c) => {
       const name = titleCase(c.name);
-      const label = !name || name.toUpperCase() === c.id.toUpperCase() ? c.id : `${name} | ${c.id}`;
+      const shown = c.code || c.id;
+      const label = !name || name.toUpperCase() === shown.toUpperCase() ? shown : `${name} | ${shown}`;
       return { ...c, plantName: plant(c.mccId), label };
     });
   }, [centers, session?.vlccIds, session?.vlccNames, session?.stationByVlcc, session?.mccId, session?.mccName]);

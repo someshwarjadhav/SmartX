@@ -1,5 +1,5 @@
 import { toSylk } from '../../lib/sylk';
-import { excelFileName } from './fileName';
+import { excelFileName, exactExcelFileName } from './fileName';
 
 /** 'id' = a whole number written as it is (farmer id, branch id ...): a real number, no thousands comma */
 export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money' | 'num2' | 'general' | 'id';
@@ -17,6 +17,7 @@ export interface ExportColumn {
   header: string;
   type?: ColType;
   total?: TotalKind;
+  align?: 'right';
 }
 
 /** Cells of column `col` are merged downwards while the columns listed in `by` keep the same value (grouped reports). */
@@ -27,6 +28,8 @@ export interface MergeSpec {
 
 export interface ExportTable {
   filename: string;
+  /** true = the file is saved with exactly `filename` (no download date added), e.g. the STIPL Old Excel "farmercollection.xlsx" */
+  exactFileName?: boolean;
   title: string;
   subtitle?: string;
   columns: ExportColumn[];
@@ -386,6 +389,8 @@ export async function exportPlainExcel(t: ExportTable): Promise<void> {
       const cell = ws[XLSX.utils.encode_cell({ r, c: ci })];
       if (!cell) return;
       if (cell.f) delete cell.f;
+      // right aligned column (numbers kept as text): only the look changes, the cell stays text. Needs xlsx-js-style, otherwise it is ignored.
+      if (c.align === 'right') (cell as unknown as { s?: unknown }).s = { alignment: { horizontal: 'right' } };
       const numberColumn = c.type !== undefined && c.type !== 'text';
       if (numberColumn && cell.t === 's' && /^-?\d+(\.\d+)?$/.test(String(cell.v).replace(/,/g, '').trim())) {
         cell.t = 'n';
@@ -396,7 +401,7 @@ export async function exportPlainExcel(t: ExportTable): Promise<void> {
   }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  XLSX.writeFile(wb, excelFileName(t.filename), { compression: true });
+  XLSX.writeFile(wb, t.exactFileName ? exactExcelFileName(t.filename) : excelFileName(t.filename), { compression: true });
 }
 
 /** kept for older pages: same as the plain STIPL sheet */
