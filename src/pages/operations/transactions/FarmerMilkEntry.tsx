@@ -20,6 +20,7 @@ import {
 } from "../../../services/transaction/farmerMilk.api.ts";
 import type { MasterFarmer } from "../../../services/farmer/farmerBook";
 import { ApiError } from "../../../services/http/errors";
+import { focusFirstEmpty, handleEnterNext } from "../../../hooks/useEnterNext";
 
 const SHIFTS = GLOBALSSHIFT.shiftOptions.filter(
   (s) => s.Id === "M" || s.Id === "E",
@@ -224,6 +225,15 @@ const FarmerMilkEntry: React.FC = () => {
             }
           />
 
+          <div
+            onKeyDown={(e) =>
+              handleEnterNext(e, {
+               
+                skip: (el) => el.getAttribute("list") === "farmer-milk-farmers" && !farmer,
+                onLast: (root) => (valid ? void submit() : focusFirstEmpty(root)),
+              })
+            }
+          >
           <div className="grid gap-4 px-5 pt-5 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 xl:grid-cols-5">
             <Field label="Date">
               <Input
@@ -350,6 +360,7 @@ const FarmerMilkEntry: React.FC = () => {
                 Submit
               </Button>
             </div>
+          </div>
           </div>
         </Card>
       </Reveal>

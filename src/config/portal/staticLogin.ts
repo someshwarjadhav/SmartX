@@ -102,11 +102,11 @@ export const BANSI_LOGIN_RECORD: unknown | null = {
   ],
 };
 
-// 6) thelogicshell@gmail.com  (LogicShell) - same centres, routes and report access as the Bansi login (same user id as Bansi)
+// 6) thelogicshell@gmail.com  (LogicShell) - same centres and routes as the Bansi login, but its OWN user id (271) so that its own menu / User Access applies
 export const LOGICSHELL_LOGIN_RECORD: unknown | null = {
   Data: [
     {
-      id: 259,
+      id: 271, 
       email: "thelogicshell@gmail.com",
       username: "LOGICSHELL",
       mccid: "183",

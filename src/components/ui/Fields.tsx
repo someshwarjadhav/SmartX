@@ -31,6 +31,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(({ icon, className, id, ...rest }, ref) => {
   const auto = useId();
+  const keepCase = rest.autoCapitalize === 'none' || /password|username|email/i.test(rest.autoComplete ?? '');
   return (
     <div className="relative">
       {icon && <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-mute">{icon}</span>}
@@ -39,8 +40,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({ icon, className
         id={id ?? auto}
         className={cn(
           'h-12 w-full rounded-xl border border-line bg-panel px-3.5 text-base text-ink outline-none transition placeholder:text-mute/70 focus:border-brand focus:ring-4 focus:ring-brand/15 disabled:cursor-not-allowed disabled:bg-soft/60 disabled:opacity-70 aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/10 sm:text-sm',
-          // typed words start with a capital letter (names etc.); email / password / number / date fields stay as typed
-          !rest.type || rest.type === 'text' ? 'capitalize' : '',
+          
+          (!rest.type || rest.type === 'text') && !keepCase ? 'capitalize' : '',
           icon ? 'pl-10' : '',
           className,
         )}

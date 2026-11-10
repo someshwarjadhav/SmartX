@@ -165,6 +165,9 @@ const ProfileSettings: React.FC = () => {
                   <Input
                     type={showPass ? 'text' : 'password'}
                     autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                     disabled={!editing}
                     value={form.password}
                     onChange={(e) => set('password', e.target.value)}

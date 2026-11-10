@@ -1,5 +1,6 @@
 export type MilkKind = 'cow' | 'buffalo' | 'mix';
-export type RangeKey = 7 | 30 | 90;
+
+export type RangeKey = 1 | 10 | 20 | 30;
 export type SampleFlag = 'ok' | 'low-fat' | 'low-snf';
 export type TankerStatus = 'loading' | 'transit' | 'unloading' | 'waiting' | 'done';
 

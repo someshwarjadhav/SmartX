@@ -79,6 +79,9 @@ const PassInput: React.FC<{
     <div className="relative">
       <Input
         type={show ? "text" : "password"}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         inputMode="numeric"
         aria-label={label}
         autoComplete="new-password"

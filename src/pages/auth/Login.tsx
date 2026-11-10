@@ -106,6 +106,9 @@ const Login: React.FC = () => {
                 id="login-email"
                 type="email"
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -120,6 +123,9 @@ const Login: React.FC = () => {
                   id="login-password"
                   type={show ? "text" : "password"}
                   autoComplete="current-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   icon={<Lock size={16} />}
