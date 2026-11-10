@@ -98,7 +98,7 @@ export const BANSI_LOGIN_RECORD: unknown | null = {
 export const LOGICSHELL_LOGIN_RECORD: unknown | null = {
   Data: [
     {
-      id: 271, // real user id of thelogicshell@gmail.com (User Access saves for 271). It was 259 (Bansi), so the menu never changed.
+      id: 271, 
       email: "thelogicshell@gmail.com",
       username: "LOGICSHELL",
       mccid: "183",

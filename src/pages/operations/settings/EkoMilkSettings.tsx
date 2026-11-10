@@ -95,6 +95,9 @@ const PassInput: React.FC<{
     <div className="relative">
       <Input
         type={show ? "text" : "password"}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         value={value}
         readOnly={readOnly}
         disabled={disabled}

@@ -27,6 +27,7 @@ import {
 } from "../../../services/transaction/vlcMilk.api.ts";
 import { ApiError } from "../../../services/http/errors";
 import { norm } from "../../../services/utils/loose";
+import { focusFirstEmpty, handleEnterNext } from "../../../hooks/useEnterNext";
 
 const SHIFTS = GLOBALSSHIFT.shiftOptions.filter(
   (s) => s.Id === "M" || s.Id === "E",
@@ -377,7 +378,14 @@ const VlcMilkEntry: React.FC = () => {
               </Button>
             }
           />
-          <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
+          <div
+            className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4"
+            onKeyDown={(e) =>
+              handleEnterNext(e, {
+                onLast: (root) => (valid ? void submit() : focusFirstEmpty(root)),
+              })
+            }
+          >
             <Field label="VLC">
               <Select value={vlc} onChange={(e) => setVlc(e.target.value)}>
                 {ids.map((id) => (

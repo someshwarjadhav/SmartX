@@ -1,5 +1,12 @@
-import { clearRequestMemo } from "../http/client";
-import { dpuGet, dpuSaveAttempts, encryptedShapes, type SaveAttempt } from "../http/dpu";
+import { clearRequestMemo, directGet, gatewayGet } from "../http/client";
+import {
+  dpuGet,
+  dpuSaveAttempts,
+  encryptedShapes,
+  openDpuReply,
+  type SaveAttempt,
+} from "../http/dpu";
+import { BASE_URL } from "../config";
 import { DPU } from "../http/dpuEndpoints";
 import { ApiError } from "../http/errors";
 import { encryptXorPayload } from "../../lib/portal/crypto";
@@ -38,7 +45,14 @@ export function rowsOf(json: unknown): Obj[] {
     if (!message || /no\s*(record|data|rate)/i.test(message)) return [];
     throw new ApiError(message, "server");
   }
-  for (const key of ["Message", "message", "Data", "data", "Result", "result"]) {
+  for (const key of [
+    "Message",
+    "message",
+    "Data",
+    "data",
+    "Result",
+    "result",
+  ]) {
     const inner = asJson(v[key]);
     if (Array.isArray(inner)) return inner.filter(isObj);
     if (isObj(inner)) {
@@ -64,7 +78,8 @@ const timeText = (t: string) => t.replace(/-/g, ":");
 export function toIsoDate(d: string): string {
   const t = d.trim();
   const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/.exec(t);
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  if (dmy)
+    return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
   const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
   return ymd ? `${ymd[1]}-${ymd[2]}-${ymd[3]}` : t;
 }
@@ -74,9 +89,15 @@ export function toShownDate(d: string): string {
   return iso ? `${iso[3]}-${iso[2]}-${iso[1]}` : d.trim();
 }
 
-export async function getSavedRateList(vlcId: string, status: string): Promise<SavedRate[]> {
+export async function getSavedRateList(
+  vlcId: string,
+  status: string,
+): Promise<SavedRate[]> {
   // DPU API: GET https://dpu.shivinfotech.co.in/api/Login/getSavedRateList?rateid=&status=
-  const json = await dpuGet(`/Login/getSavedRateList?rateid=${q(vlcId)}&status=${q(status)}`, 0);
+  const json = await dpuGet(
+    `/Login/getSavedRateList?rateid=${q(vlcId)}&status=${q(status)}`,
+    0,
+  );
   return rowsOf(json)
     .map((r): SavedRate => {
       const date = pick(r, ["date", "ratedate", "effectivedate", "edate"]);
@@ -86,7 +107,9 @@ export async function getSavedRateList(vlcId: string, status: string): Promise<S
         rangeType: pick(r, ["rangetype"]),
         date,
         time,
-        milkType: (pick(r, ["milktype", "mtype", "type", "milk"]) || "C").toUpperCase(),
+        milkType: (
+          pick(r, ["milktype", "mtype", "type", "milk"]) || "C"
+        ).toUpperCase(),
         active: pick(r, ["isactive", "status"]) !== "0",
         label: [date, time].filter(Boolean).join("  "),
       };
@@ -107,9 +130,32 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const FAT_KEYS = ["fat", "fatvalue", "fatstart", "fatrange", "startfat", "startvalue"];
-const SNF_KEYS = ["snf", "snfvalue", "snfstart", "snfrange", "endsnf", "endvalue", "end"];
-const RATE_KEYS = ["srate", "rate", "ratevalue", "amount", "rateamount", "price", "value"];
+const FAT_KEYS = [
+  "fat",
+  "fatvalue",
+  "fatstart",
+  "fatrange",
+  "startfat",
+  "startvalue",
+];
+const SNF_KEYS = [
+  "snf",
+  "snfvalue",
+  "snfstart",
+  "snfrange",
+  "endsnf",
+  "endvalue",
+  "end",
+];
+const RATE_KEYS = [
+  "srate",
+  "rate",
+  "ratevalue",
+  "amount",
+  "rateamount",
+  "price",
+  "value",
+];
 
 const firstNum = (r: Obj, keys: string[]): number | null => {
   const names = Object.keys(r);
@@ -144,16 +190,49 @@ export function gridFromRecords(records: Obj[]): RateGrid {
   return { snfs, rows };
 }
 
-// DPU API: GET https://dpu.shivinfotech.co.in/api/Login/ShowRateWeb?stationid=&edate=&milktype=&rateid=
+export const RATE_SHOW_PATH = "/dairy/dairy/ShowRateWeb";
+
+async function showRateJson(query: string): Promise<unknown> {
+  const path = `${RATE_SHOW_PATH}${query}`;
+  try {
+    return openDpuReply(await gatewayGet(path, 0), 0, true);
+  } catch (first) {
+    if (first instanceof ApiError && first.kind === "auth") throw first;
+    console.warn(
+      "[RateMaster] STIPL ShowRateWeb (direct) failed, trying the gateway:",
+      first,
+    );
+    try {
+      const root = BASE_URL || "https://smartx.shivinfotech.co.in";
+      const base = /^https?:/i.test(root)
+        ? root
+        : `${window.location.origin}${root}`;
+      return openDpuReply(
+        await directGet(
+          `${base}/gateway/Interceptor?path=${encodeURIComponent(path)}`,
+          0,
+        ),
+        0,
+        true,
+      );
+    } catch (second) {
+      console.warn(
+        "[RateMaster] STIPL ShowRateWeb (gateway) failed, using the DPU host instead:",
+        second,
+      );
+      return dpuGet(`${DPU.showRateWeb}${query}`, 0);
+    }
+  }
+}
+
 export async function showRate(
   stationId: string,
   isoDate: string,
   milkType: string,
   rangeType: string,
 ): Promise<RateGrid> {
-  const json = await dpuGet(
-    `${DPU.showRateWeb}?stationid=${q(stationId)}&edate=${q(isoDate)}&milktype=${q(milkType)}&rateid=${q(rangeType)}`,
-    0,
+  const json = await showRateJson(
+    `?stationid=${q(stationId)}&edate=${q(isoDate)}&milktype=${q(milkType)}&rateid=${q(rangeType)}`,
   );
   const records = rowsOf(json);
   if (!records.length) return emptyGrid();
@@ -186,15 +265,21 @@ export async function saveRateExcel(body: RateUpload): Promise<string> {
   } catch {
     /* chart stays empty */
   }
-  if (!chart.length) throw new ApiError("The rate file has no rows to upload.", "parse");
+  if (!chart.length)
+    throw new ApiError("The rate file has no rows to upload.", "parse");
 
   const current = body.currentrate?.trim() ? body.currentrate : "0";
   const iso = body.effectivedate;
   const endpoint = "/Login/RateExcel";
   const enc = (v: unknown) => encryptedShapes(v)[0];
   const PASCAL: Record<string, string> = {
-    json: "Json", stationid: "StationId", milktype: "MilkType", shift: "Shift", trdate: "TrDate",
-    effectivedate: "EffectiveDate", currentrate: "CurrentRate",
+    json: "Json",
+    stationid: "StationId",
+    milktype: "MilkType",
+    shift: "Shift",
+    trdate: "TrDate",
+    effectivedate: "EffectiveDate",
+    currentrate: "CurrentRate",
   };
   const pascal = (o: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(o).map(([k, v]) => [PASCAL[k] ?? k, v]));
@@ -215,7 +300,11 @@ export async function saveRateExcel(body: RateUpload): Promise<string> {
   const xor = (v: unknown) => ({ Payload: encryptXorPayload(v) });
   const attempts: SaveAttempt[] = [
     { label: "xor-portal-exact", path: endpoint, body: xor(portal) },
-    { label: "xor-portal-exact-pascal", path: endpoint, body: xor(pascal(portal)) },
+    {
+      label: "xor-portal-exact-pascal",
+      path: endpoint,
+      body: xor(pascal(portal)),
+    },
     { label: "xor-chart-only", path: endpoint, body: xor(chart) },
     { label: "portal-exact", path: endpoint, body: enc(portal) },
   ];
@@ -230,15 +319,28 @@ export async function saveRateExcel(body: RateUpload): Promise<string> {
 // wants is not published, so the bodies are tried in order (only 400 / 415 / 422 moves on to the next one) and the one
 // that works is remembered.
 const cap = (k: string) => k.charAt(0).toUpperCase() + k.slice(1);
-const putAttempts = (path: string, params: Record<string, string>): SaveAttempt[] => {
+const putAttempts = (
+  path: string,
+  params: Record<string, string>,
+): SaveAttempt[] => {
   const xor = (v: unknown) => ({ Payload: encryptXorPayload(v) });
   return [
     // the server answered "The Payload field is required" to an empty body and "not a valid Base-64 string" to AES text,
     // so Payload must be XOR + base64 text. The values also stay in the URL.
     { label: "xor-params", path, body: xor(params) },
-    { label: "xor-params-pascal", path, body: xor(Object.fromEntries(Object.entries(params).map(([k, v]) => [cap(k), v]))) },
+    {
+      label: "xor-params-pascal",
+      path,
+      body: xor(
+        Object.fromEntries(Object.entries(params).map(([k, v]) => [cap(k), v])),
+      ),
+    },
     { label: "xor-empty-object", path, body: xor({}) },
-    { label: "xor-query-text", path, body: xor(new URLSearchParams(params).toString()) },
+    {
+      label: "xor-query-text",
+      path,
+      body: xor(new URLSearchParams(params).toString()),
+    },
   ];
 };
 
@@ -294,9 +396,14 @@ export interface RateStatusRow {
   status: string;
 }
 
-const dayOnly = (d: string) => /^(\d{4}-\d{2}-\d{2})/.exec(d.trim())?.[1] ?? d.trim();
+const dayOnly = (d: string) =>
+  /^(\d{4}-\d{2}-\d{2})/.exec(d.trim())?.[1] ?? d.trim();
 
-export async function getRateStatus(mccid: string, plantid: string, type: string): Promise<RateStatusRow[]> {
+export async function getRateStatus(
+  mccid: string,
+  plantid: string,
+  type: string,
+): Promise<RateStatusRow[]> {
   // DPU API: GET https://dpu.shivinfotech.co.in/api/Login/GetRateStatus?mccid=&plantid=&type=
   const json = await dpuGet(
     `${DPU.getRateStatus}?mccid=${q(mccid)}&plantid=${q(plantid)}&type=${q(type)}`,
@@ -304,12 +411,27 @@ export async function getRateStatus(mccid: string, plantid: string, type: string
   );
   return rowsOf(json).map((r): RateStatusRow => {
     const vid = pick(r, ["vid", "villageid", "vlccid", "vlcid", "stationid"]);
-    const code = pick(r, ["beneficiaryname", "centercode", "customstationid"]) || vid;
+    const code =
+      pick(r, ["beneficiaryname", "centercode", "customstationid"]) || vid;
     return {
       villageId: code,
       villageName:
-        pick(r, ["villageagentaddress", "villagename", "vlcname", "vlccname", "centername", "name"]) || vlccName(vid),
-      effectiveDate: dayOnly(pick(r, ["rateeffectivedate", "effectivedate", "effectdate", "ratedate"])),
+        pick(r, [
+          "villageagentaddress",
+          "villagename",
+          "vlcname",
+          "vlccname",
+          "centername",
+          "name",
+        ]) || vlccName(vid),
+      effectiveDate: dayOnly(
+        pick(r, [
+          "rateeffectivedate",
+          "effectivedate",
+          "effectdate",
+          "ratedate",
+        ]),
+      ),
       entryDate: dayOnly(pick(r, ["entrydate", "entereddate"])),
       currentRate: pick(r, ["currentrate", "rate"]),
       downloadDate: pick(r, ["downloaddate", "dwldate"]),

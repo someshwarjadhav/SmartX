@@ -19,7 +19,11 @@ import { Field, Input, Select } from "../../../components/operations/ui/Fields";
 import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { RateGridTable } from "../../../components/operations/RateGridTable";
-import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
+import {
+  CardTitle,
+  ReportPage,
+  Reveal,
+} from "../../../components/operations/ReportKit";
 import { useToast } from "../../../context/ToastContext";
 import { useCentreOptions } from "../../../hooks/useCentres";
 import { ApiError } from "../../../services/http/errors";
@@ -54,7 +58,7 @@ const BTN_DANGER =
   "!bg-danger !text-white enabled:hover:!bg-danger/85 dark:!text-[#2a0a0a] disabled:!opacity-50";
 
 const SHIFT_CODE = { morning: "1", evening: "2" } as const;
-const SHIFT_DEFAULT = "0"; 
+const SHIFT_DEFAULT = "0";
 type ShiftPick = keyof typeof SHIFT_CODE;
 
 const Check: React.FC<{
@@ -172,7 +176,7 @@ const UploadCard: React.FC<{
     const failed: string[] = [];
     const savedCentres = new Set<string>();
     let reason = "";
- 
+
     let stop = false;
     for (const id of picked) {
       if (stop) break;
@@ -260,8 +264,8 @@ const UploadCard: React.FC<{
           </p>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_10rem]">
-          <div className="max-h-36 overflow-y-scroll rounded-xl border border-line [scrollbar-color:rgb(var(--mute))_rgb(var(--soft))] [scrollbar-width:auto]">
+        <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+          <div className="max-h-64 min-w-0 overflow-y-auto rounded-xl border border-line bg-panel [scrollbar-color:rgb(var(--mute))_transparent] [scrollbar-width:thin]">
             <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-soft px-3 py-2">
               <input
                 type="checkbox"
@@ -303,26 +307,34 @@ const UploadCard: React.FC<{
             </ul>
           </div>
 
-          <Field label="Rate Effective Date">
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </Field>
-          <Field label="Current Rate">
-            <Input
-              inputMode="decimal"
-              className="text-center"
-              value={currentRate}
-              onChange={(e) =>
-                setCurrentRate(e.target.value.replace(/[^\d.]/g, ""))
-              }
-            />
-          </Field>
+          <div className="min-w-0 space-y-5">
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_10rem]">
+              <Field label="Rate Effective Date">
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </Field>
+              <Field label="Current Rate">
+                <Input
+                  inputMode="decimal"
+                  className="text-center"
+                  value={currentRate}
+                  onChange={(e) =>
+                    setCurrentRate(e.target.value.replace(/[^\d.]/g, ""))
+                  }
+                />
+              </Field>
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-x-10 gap-y-3">
+        <div
+          className="grid grid-cols-2 items-center gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6"
+          role="group"
+          aria-label="Milk type and shift"
+        >
           {MILK_TYPES.map((m) => (
             <Check
               key={m.code}
@@ -336,29 +348,22 @@ const UploadCard: React.FC<{
             checked={shiftWise}
             onChange={setShiftWise}
           />
-          {shiftWise && (
-            <div
-              className="flex items-center gap-x-8"
-              role="radiogroup"
-              aria-label="Shift"
-            >
-              {(Object.keys(SHIFT_CODE) as ShiftPick[]).map((k) => (
-                <label
-                  key={k}
-                  className="flex cursor-pointer items-center gap-2.5 text-sm font-semibold"
-                >
-                  <input
-                    type="radio"
-                    name="rate-shift"
-                    className="h-4 w-4 shrink-0 accent-brand"
-                    checked={shiftPick === k}
-                    onChange={() => setShiftPick(k)}
-                  />
-                  {k === "morning" ? "Morning" : "Evening"}
-                </label>
-              ))}
-            </div>
-          )}
+          {shiftWise &&
+            (Object.keys(SHIFT_CODE) as ShiftPick[]).map((k) => (
+              <label
+                key={k}
+                className="flex cursor-pointer items-center gap-2.5 text-sm font-semibold"
+              >
+                <input
+                  type="radio"
+                  name="rate-shift"
+                  className="h-4 w-4 shrink-0 accent-brand"
+                  checked={shiftPick === k}
+                  onChange={() => setShiftPick(k)}
+                />
+                {k === "morning" ? "Morning" : "Evening"}
+              </label>
+            ))}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -826,7 +831,10 @@ const RateMaster: React.FC = () => {
   const [savedCentreId, setSavedCentreId] = useState("");
   const [savedVersion, setSavedVersion] = useState(0);
   return (
-    <ReportPage title="Rate Master" subtitle="Upload, view and send fat / SNF rate charts to your centres.">
+    <ReportPage
+      title="Rate Master"
+      subtitle="Upload, view and send fat / SNF rate charts to your centres."
+    >
       <Reveal delay={0.05}>
         <UploadCard
           chart={chart}

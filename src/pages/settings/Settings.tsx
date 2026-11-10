@@ -163,6 +163,9 @@ const Settings: React.FC = () => {
                   id="pf-password"
                   type={showPass ? 'text' : 'password'}
                   autoComplete="new-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   value={form.password}
                  
                   placeholder="Leave blank to keep current password"
