@@ -73,7 +73,7 @@ function persist(userId: string, raw: RawData) {
     vaultSave(MENU_KEY, { userId, raw: raw.menu } satisfies StoredMenu);
 }
 
-// Asks the menu API again. Called only on purpose (e.g. after the user changes his own access), never on page / tab changes.
+
 export async function refreshMenu(userId: string): Promise<void> {
   try {
     const raw = await getMenu(userId);
@@ -124,7 +124,8 @@ export function applySession(profile: LoginProfile) {
   const names: Record<string, string> = { ...(profile.vlccNames ?? {}) };
   for (const c of centers) if (c.name) names[c.id] = c.name;
   const stationByVlcc: Record<string, string> = {};
-  for (const c of centers) if (c.stationId) stationByVlcc[c.id] = c.stationId;
+  for (const c of centers) if (c.stationId && c.stationId !== c.id) stationByVlcc[c.id] = c.stationId;
+  Object.assign(stationByVlcc, profile.stationByVlcc ?? {});
   setSession({
     ...profile,
     vlccIds: centers.length ? centers.map((c) => c.id) : profile.vlccIds,
@@ -211,7 +212,7 @@ export function restoreSession(): LoginProfile | null {
   }
   const saved = vaultLoad<StoredData>(DATA_KEY);
   if (saved && saved.userId === (profile.userId ?? "") && saved.raw) {
-    // the menu comes from its own key (older sessions still have it inside DATA_KEY)
+   
     const menu = vaultLoad<StoredMenu>(MENU_KEY);
     const raw =
       menu && menu.userId === (profile.userId ?? "") && menu.raw

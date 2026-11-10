@@ -24,11 +24,13 @@ export interface LoginProfile {
   mccName?: string;
   userId?: string;
   centerStationId?: string;
+ 
+  stationByVlcc?: Record<string, string>;
 }
 
 type Obj = Record<string, unknown>;
 
-// Same fallback host as the other services, so login and data calls hit one server.
+
 const BASE_URL = CONFIG_BASE_URL || "https://smartx.shivinfotech.co.in";
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH || "/home/userlogin";
 const TIMEOUT_MS = 20_000;
@@ -98,6 +100,19 @@ function pickIds(rows: Obj[], names: string[]): string[] {
         if (part && !out.includes(part)) out.push(part);
       }
     }
+  }
+  return out;
+}
+
+function pickStationByVlcc(rows: Obj[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    const ids = pickIds([row], ["sessionid", "vlccid", "vlccids", "vlccode", "vlcid"]);
+    const codes = pickIds([row], ["customstationid"]);
+    ids.forEach((id, i) => {
+      const code = codes[i];
+      if (code && code !== id) out[id] = code;
+    });
   }
   return out;
 }
@@ -267,6 +282,7 @@ export function mapLoginResponse(
         "usercode",
       ])[0] ?? pickIds(records.slice(0, 1), ["id"])[0],
     centerStationId: pickStationId(records),
+    stationByVlcc: pickStationByVlcc(records),
   };
 }
 
@@ -358,8 +374,7 @@ export async function loginApi(
   username: string,
   password: string,
 ): Promise<LoginResult> {
-  // Known accounts (staticLogin.ts) sign in on every build. With VITE_STATIC_LOGIN=1 ONLY these accounts are allowed;
-  // without it (npm run dev) an unknown account simply continues to the login API below.
+ 
   const found = await resolveStaticLogin(username, password);
   if (found.kind === "match") {
     const profile = mapLoginResponse(found.record, username);

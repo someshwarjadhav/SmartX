@@ -1,12 +1,4 @@
-// Embedded sample accounts and credential material were removed from the combined app.
-// Static login is disabled; authentication must use the configured production login API.
-// export interface StaticLoginEntry { username: string; passwordSha256: string; record: unknown | null }
-// export const STATIC_LOGINS: StaticLoginEntry[] = [];
-// export const staticLoginActive = (): boolean => false;
-// export type StaticLoginResult = { kind: 'match'; record: unknown } | { kind: 'use-api' } | { kind: 'denied' };
-// export async function resolveStaticLogin(_username: string, _password: string): Promise<StaticLoginResult> {
-//   return { kind: 'use-api' };
-// }
+
 
 export interface StaticLoginEntry {
   username: string;
@@ -102,11 +94,11 @@ export const BANSI_LOGIN_RECORD: unknown | null = {
   ],
 };
 
-// 6) thelogicshell@gmail.com  (LogicShell) - same centres, routes and report access as the Bansi login (same user id as Bansi)
+// 6) thelogicshell@gmail.com  (LogicShell) - same centres and routes as the Bansi login, but its OWN user id (271) so that its own menu / User Access applies
 export const LOGICSHELL_LOGIN_RECORD: unknown | null = {
   Data: [
     {
-      id: 259,
+      id: 271, // real user id of thelogicshell@gmail.com (User Access saves for 271). It was 259 (Bansi), so the menu never changed.
       email: "thelogicshell@gmail.com",
       username: "LOGICSHELL",
       mccid: "183",
