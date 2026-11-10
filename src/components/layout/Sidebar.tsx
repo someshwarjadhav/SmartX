@@ -77,12 +77,14 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
 
       <div className="thin-scrollbar relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-1">
         {NAV.map((group) => {
-          const isOpen = rail || open.has(group.id);
+          
+          const single = group.items.length === 1 && group.items[0].label.trim().toLowerCase() === group.title.trim().toLowerCase();
+          const isOpen = rail || single || open.has(group.id);
           return (
             <div key={group.id} className="mb-1">
               {rail ? (
                 <div className="mx-3 my-2 h-px bg-white/10" aria-hidden />
-              ) : (
+              ) : single ? null : (
                 <button
                   onClick={() => toggleGroup(group.id)}
                   aria-expanded={isOpen}

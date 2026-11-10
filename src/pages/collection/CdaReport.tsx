@@ -55,12 +55,11 @@ interface Metrics {
 
 interface CdaRow {
   id: string;
-  /** the centre's number in front of its id: "1. 500381" (station code, else its place in the centre list) */
   serial: number;
   vlccId: string;
+  customId: string;
   vlcc: string;
   type: 'Cow' | 'Buffalo' | 'Mix';
-  /** the picked date range (every row covers all of it) */
   from: string;
   to: string;
   composite: Metrics;
@@ -159,7 +158,7 @@ const diffCols = (prefix: string, pick: (r: CdaRow) => Diff): GroupColumn<CdaRow
   }));
 
 const COLUMNS: GroupColumn<CdaRow>[] = [
-  { key: 'vlcId', header: 'VLC ID', width: W.id, cell: (r) => <span className="tnum font-semibold">{r.serial}. {r.vlccId}</span> },
+  { key: 'vlcId', header: 'VLC ID', width: W.id, cell: (r) => <span className="tnum font-semibold">{r.customId}</span> },
   { key: 'vlcName', header: 'VLC Name', width: W.name, cell: (r) => <span className="block truncate font-semibold" title={r.vlcc}>{r.vlcc}</span> },
   {
     key: 'type',
@@ -377,7 +376,7 @@ const CdaReport: React.FC = () => {
         const dispatch = metricsOf(items, (r) => r.d);
         const actual = metricsOf(items, (r) => r.f);
         if (isEmpty(composite) && isEmpty(dispatch) && isEmpty(actual)) continue;
-        out.push({ id: `${vlccId}|${k}`, serial: serialOf(vlccId, i + 1), vlccId, vlcc, type: MILK_NAME[k], from: applied.fromDate, to: applied.toDate, composite, dispatch, actual });
+        out.push({ id: `${vlccId}|${k}`, serial: serialOf(vlccId, i + 1), vlccId, customId: centres.find((c) => c.id === vlccId)?.code?.trim() || vlccId, vlcc, type: MILK_NAME[k], from: applied.fromDate, to: applied.toDate, composite, dispatch, actual });
       }
     });
     return out;

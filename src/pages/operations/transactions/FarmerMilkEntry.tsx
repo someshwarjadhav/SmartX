@@ -4,6 +4,9 @@ import { RotateCcw, Save, Users } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
+
+/** Weight / Fat / SNF / CLR / Rate / Amount boxes: big centred numbers, like the old SmartX LTE Farmer Milk Collection screen */
+const BIG = "!h-20 !text-center !text-2xl !font-semibold sm:!text-3xl";
 import { CardTitle, ReportPage, Reveal } from "../../../components/operations/ReportKit";
 import { useToast } from "../../../context/ToastContext";
 import { todayISO } from "../../../lib/portal/format";
@@ -302,6 +305,7 @@ const FarmerMilkEntry: React.FC = () => {
                 step="any"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
+                className={BIG}
               />
             </Field>
             <Field label="Fat">
@@ -312,6 +316,7 @@ const FarmerMilkEntry: React.FC = () => {
                 step="any"
                 value={fat}
                 onChange={(e) => setFat(e.target.value)}
+                className={BIG}
               />
             </Field>
             <Field label="SNF">
@@ -322,6 +327,7 @@ const FarmerMilkEntry: React.FC = () => {
                 step="any"
                 value={snf}
                 onChange={(e) => setSnf(e.target.value)}
+                className={BIG}
               />
             </Field>
             <Field label="CLR">
@@ -329,7 +335,7 @@ const FarmerMilkEntry: React.FC = () => {
                 readOnly
                 tabIndex={-1}
                 value={clrN === null ? "" : String(clrN)}
-                className="bg-soft/60"
+                className={`bg-soft/60 ${BIG}`}
               />
             </Field>
             <Field label="Rate" hint={rateHint}>
@@ -337,7 +343,7 @@ const FarmerMilkEntry: React.FC = () => {
                 readOnly
                 tabIndex={-1}
                 value={rateN === null ? "" : String(rateN)}
-                className="bg-soft/60"
+                className={`bg-soft/60 ${BIG}`}
               />
             </Field>
             <Field label="Amount">
@@ -345,14 +351,15 @@ const FarmerMilkEntry: React.FC = () => {
                 readOnly
                 tabIndex={-1}
                 value={amountN === null ? "" : amountN.toFixed(2)}
-                className="bg-soft/60"
+                className={`bg-soft/60 ${BIG}`}
               />
             </Field>
 
             <div className="col-span-2 flex items-end sm:col-span-3 xl:col-span-6">
               <Button
-                className="w-full sm:w-auto sm:min-w-48"
-                icon={<Save size={16} />}
+                size="lg"
+                className="w-full"
+                icon={<Save size={18} />}
                 loading={saving}
                 disabled={!valid}
                 onClick={submit}
