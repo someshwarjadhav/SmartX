@@ -2,6 +2,7 @@ import { BASE_URL } from "../config";
 import { getSession } from "../session";
 import { ApiError } from "../http/errors";
 import { gatewayText, parseGatewayText } from "../http/client";
+import { sendPath } from "../account/voucher.http";
 import { getMenu } from "../menu/menu.api.ts";
 import { asFlag } from "../report/report.api.ts";
 import {
@@ -17,7 +18,8 @@ import {
 const HOST = BASE_URL || "https://smartx.shivinfotech.co.in";
 const GET_USER_URL = `${HOST}/home/getuser`;
 
-const ADD_USER_ACCESS_PATH = "/dairy/dairy/addUserAccessMS";
+const ADD_USER_ACCESS_PATH = "/dairy/dairy/addUserAccess";
+
 
 export interface AccessUser {
   id: string;
@@ -209,10 +211,11 @@ function assertSaved(text: string) {
 }
 
 export async function postData(formData: FormData): Promise<void> {
-  const text = await gatewayText(
-    ADD_USER_ACCESS_PATH,
-    { method: "POST", body: formData },
-    0,
-  );
+  console.info("[UserAccess] addUserAccess -> POST", ADD_USER_ACCESS_PATH, "rows:", (() => { try { return (JSON.parse(String(formData.get("data"))) as unknown[]).length; } catch { return "?"; } })());
+  const text = await sendPath(ADD_USER_ACCESS_PATH, () => ({
+    method: "POST",
+    body: formData,
+  }));
+  console.info("[UserAccess] addUserAccess reply <-", text.slice(0, 200));
   assertSaved(text);
 }
