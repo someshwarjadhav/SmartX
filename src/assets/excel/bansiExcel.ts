@@ -1,5 +1,5 @@
 import type { CollectionEntry } from '../../data/farmerCollection';
-import { excelFileName } from './fileName';
+import { excelFileName, exactExcelFileName } from './fileName';
 import { GLOBALS } from '../../lib/portal/global';
 import { getSession } from '../../services/session';
 import { loadXlsx } from './exporters';
@@ -151,7 +151,8 @@ export const bansiFileName = (scope: string, from: string, to: string): string =
 // like the STIPL sheet: the name column has a fixed width (a long centre text is cut by the next cell), the others fit their numbers
 const COL_WIDTHS = [6, 36, 11, 11, 13, 7, 7, 9, 13, 13, 8, 16, 11, 11];
 
-export async function exportBansiSheet(sheet: BansiSheet, fileScope: string): Promise<void> {
+/** `exactName` (Old Excel Export): file saved as exactly that name, sheet called Sheet1, no date in the name */
+export async function exportBansiSheet(sheet: BansiSheet, fileScope: string, exactName?: string): Promise<void> {
   const XLSX = await loadXlsx();
   const NCOL = BANSI_HEAD.length;
   const pad = (row: Array<string | number>): Array<string | number> => [...row, ...Array.from({ length: Math.max(0, NCOL - row.length) }, () => '')];
@@ -191,8 +192,8 @@ export async function exportBansiSheet(sheet: BansiSheet, fileScope: string): Pr
     });
   });
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Report');
-  XLSX.writeFile(wb, excelFileName(bansiFileName(fileScope, sheet.from, sheet.to)), { compression: true });
+  XLSX.utils.book_append_sheet(wb, ws, exactName ? 'Sheet1' : 'Report');
+  XLSX.writeFile(wb, exactName ? exactExcelFileName(exactName) : excelFileName(bansiFileName(fileScope, sheet.from, sheet.to)), { compression: true });
 }
 
 /** kept for older callers */

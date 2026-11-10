@@ -75,7 +75,7 @@ export const Sidebar: React.FC<Props> = ({ collapsed, onToggle, mobile, onNaviga
         )}
       </div>
 
-      <div className="no-scrollbar relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-1">
+      <div className="thin-scrollbar relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-4 pt-1">
         {NAV.map((group) => {
           const isOpen = rail || open.has(group.id);
           return (

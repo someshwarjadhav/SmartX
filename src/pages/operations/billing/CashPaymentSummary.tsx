@@ -385,7 +385,7 @@ const CashPaymentSummary: React.FC = () => {
           centreOf: (r) => r.station,
           idOf: (r) => get(r, FIELDS.id),
           nameOf: (r) => get(r, FIELDS.name),
-          centreLabel: labelOf,
+          centreLabel: (id: string) => options.find((o) => o.id === id)?.plainLabel ?? labelOf(id), // Bansi sheet: unchanged (real centre id)
           cols: [
             { header: "Cow Qty", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.cowQty) },
             { header: "Buff Qty", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.buffQty) },

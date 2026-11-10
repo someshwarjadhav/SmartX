@@ -8,6 +8,10 @@ const DATE_IN_NAME = /\d{4}[-_.]\d{1,2}[-_.]\d{1,2}|\d{1,2}[-_.\/]\d{1,2}[-_.\/]
 export const todayStamp = (d: Date = new Date()): string =>
   `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
 
+/** Old Excel Export: the name is used exactly as given (no date added), e.g. "farmercollection" -> "farmercollection.xlsx" */
+export const exactExcelFileName = (name: string): string =>
+  `${name.replace(/\.xlsx$/i, '').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Export'}.xlsx`;
+
 /** `name` with or without ".xlsx"; always returns "<name with date>.xlsx" */
 export const excelFileName = (name: string): string => {
   const base = name.replace(/\.xlsx$/i, '').replace(/[\\/:*?"<>|]+/g, '-').trim() || 'Export';

@@ -104,6 +104,31 @@
     background-size: 22px 22px;
   }
 
+
+  .thin-scrollbar {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+  .thin-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .thin-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .thin-scrollbar::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.28);
+    border-radius: 9999px;
+  }
+  .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.5);
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    .thin-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: rgb(255 255 255 / 0.3) transparent;
+    }
+  }
   .no-scrollbar {
     scrollbar-width: none;
     -ms-overflow-style: none;
