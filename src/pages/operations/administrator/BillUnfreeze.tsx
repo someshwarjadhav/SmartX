@@ -18,6 +18,7 @@ import {
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { useCentreOptions } from "../../../hooks/useCentres";
+import { vlccCode } from "../../../services/vlcc/names";
 import { useToast } from "../../../context/ToastContext";
 import {
   FREEZE_FIELDS,
@@ -142,8 +143,8 @@ const BillUnfreeze: React.FC = () => {
       {
         key: "villageId",
         header: "Village Id",
-        sort: (r) => r.villageId,
-        cell: (r) => r.villageId || "—",
+        sort: (r) => vlccCode(r.villageId),
+        cell: (r) => vlccCode(r.villageId) || "—",
       },
       {
         key: "villageName",
@@ -284,7 +285,7 @@ const BillUnfreeze: React.FC = () => {
             <dd className="font-semibold">{toUnfreeze.id || "—"}</dd>
             <dt className="text-mute">Village</dt>
             <dd className="break-words font-semibold">
-              {toUnfreeze.villageName || "—"} ({toUnfreeze.villageId || "—"})
+              {toUnfreeze.villageName || "—"} ({vlccCode(toUnfreeze.villageId) || "—"})
             </dd>
             <dt className="text-mute">Start Date</dt>
             <dd className="font-semibold">{showDate(toUnfreeze.start) || "—"}</dd>

@@ -21,7 +21,7 @@ import { todayISO } from "../../../lib/portal/format";
 import { DEFAULT_PAGE_SIZE, GLOBALSSHIFT } from "../../../lib/portal/global";
 import { useCenters } from "../../../hooks/useSessionData";
 import { getSession } from "../../../services/session";
-import { vlccOption } from "../../../services/vlcc/names";
+import { vlccCode, vlccOption } from "../../../services/vlcc/names";
 import {
   deleteEntry,
   forgetCachedLists,
@@ -120,7 +120,8 @@ const TEXT_COLS: Array<{
   { key: "snf", header: "Snf", align: "right", get: (r) => val(r, "snf") },
   { key: "clr", header: "Clr", align: "right", get: (r) => val(r, "clr") },
   { key: "milk", header: "Milk Type", get: (r) => val(r, "milktype") },
-  { key: "station", header: "Station Id", get: (r) => val(r, "vlccid") },
+  // custom station id (0001, same number as in the VLC dropdown), not the long session id
+  { key: "station", header: "Station Id", get: (r) => vlccCode(val(r, "vlccid")) },
   {
     key: "rate",
     header: "Rate",
