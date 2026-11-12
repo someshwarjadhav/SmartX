@@ -57,6 +57,8 @@ import { validateDateRange, validatePastLimit } from "../../lib/dateRange";
 import { MSG } from "../../lib/messages";
 import {
   buildBansiSheet,
+  exportBansiPdf,
+  exportBansiReport,
   exportBansiSheet,
   isBansiUser,
 } from "../../assets/excel/bansiExcel";
@@ -888,24 +890,58 @@ const FarmerCollection: React.FC = () => {
         ),
     },
   });
-  // Bansi login (user id 307): BOTH "Old Excel Export" and "New Excel Export" give the same sheet as the table on screen
-  // (VSP Name blocks, bold totals). Every other login keeps the normal Old / New Excel unchanged.
-  const actions: ExportAction[] = baseActions.map((a) =>
+  // Bansi login (user id 307): "New Excel Export" with only Morning or only Evening gives the "Farmer Collection Report" Excel.
+  // Old Excel Export and Morning + Evening together keep the Bansi sheet as before. Every other login keeps the normal Old / New Excel unchanged.
+  const bansiExcelActions: ExportAction[] = baseActions.map((a) =>
     (a.id === "excel" || a.id === "old") && bansiSheet
       ? {
           ...a,
           run: async () => {
             try {
-              // Old = "farmercollection.xlsx" (no date, sheet Sheet1); New keeps the Bansi name, so the two never collide as "(1)" copies
-              await exportBansiSheet(
-                bansiSheet,
-                fileScope,
-                a.id === "old" ? "farmercollection" : undefined,
-              );
+              if (a.id === "excel" && applied.shift !== "both") {
+                // New Excel Export + only Morning or only Evening: the "Farmer Collection Report" sheet (date wise, bold Total row)
+                await exportBansiReport(rows, {
+                  from: applied.from,
+                  to: applied.to,
+                  shift: applied.shift,
+                  kind: applied.kind,
+                  centre: applied.centre,
+                  nameOf: (id) => centreNames.get(id) ?? "",
+                  codeOf: (id) => centreCodes.get(id) ?? "",
+                });
+              } else {
+                // everything else (Old Excel, or Morning + Evening together): the Bansi sheet exactly as before
+                // Old = "farmercollection.xlsx" (no date, sheet Sheet1); New keeps the Bansi name, so the two never collide as "(1)" copies
+                await exportBansiSheet(
+                  bansiSheet,
+                  fileScope,
+                  a.id === "old" ? "farmercollection" : undefined,
+                );
+              }
               toast.show(
                 `Exported ${rows.length} entries as ${a.id === "old" ? "Old" : "New"} Excel`,
                 "ok",
               );
+            } catch {
+              toast.show(MSG.exportFailed, "error");
+            }
+          },
+        }
+      : a,
+  );
+  // Bansi login: PDF Export has the same columns as the table / Excel (Cow, Buffalo, Mix ...); every other login keeps its PDF
+  const actions: ExportAction[] = bansiExcelActions.map((a) =>
+    a.id === "pdf" && bansiSheet
+      ? {
+          ...a,
+          run: async () => {
+            try {
+              await exportBansiPdf(
+                bansiSheet,
+                `${plantName}  |  ${centreName}  |  ${applied.shift === "both" ? "Morning & Evening" : applied.shift}  |  ${applied.kind === "both" ? "Cow, Buffalo & Mix" : applied.kind}  |  ${fmtDate(applied.from)} to ${fmtDate(applied.to)}`,
+                `farmer-collection-${applied.from}-${applied.to}`,
+              );
+              toast.show(`Exported ${rows.length} entries as PDF`, "ok");
             } catch {
               toast.show(MSG.exportFailed, "error");
             }
