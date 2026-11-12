@@ -144,7 +144,7 @@ const weighted = (rows: CollectionEntry[], pick: (r: CollectionEntry) => number,
   litres ? rows.reduce((a, r) => a + pick(r) * r.litres, 0) / litres : 0;
 
 const COLUMNS: Column<CollectionEntry>[] = [
-  { key: 'station', header: 'Station Id', cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationId}</span>, mobile: 'hidden' },
+  { key: 'station', header: 'Station Id', cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationCode || r.stationId}</span>, mobile: 'hidden' },
   { key: 'date', header: 'Date', cell: (r) => <span className="tnum whitespace-nowrap">{fmtDate(r.date)}</span> },
   {
     key: 'shift',
@@ -164,7 +164,7 @@ const COLUMNS: Column<CollectionEntry>[] = [
     cell: (r) => (
       <div className="min-w-0">
         <p className="truncate font-semibold">{r.farmer}</p>
-        <p className="tnum text-xs font-normal text-mute md:hidden">Station {r.stationId}</p>
+        <p className="tnum text-xs font-normal text-mute md:hidden">Station {r.stationCode || r.stationId}</p>
       </div>
     ),
     mobile: 'title',
@@ -213,7 +213,7 @@ const FarmerwiseCollection: React.FC = () => {
       const value = farmerKey(r.stationId, r.farmerId);
       if (have.has(value)) continue;
       have.add(value);
-      extra.push({ value, label: `${r.farmerId} | ${r.farmer}` });
+      extra.push({ value, label: `${String(r.farmerId).padStart(4, '0')} | ${r.farmer}` });
     }
     const list = [...masterFarmers, ...extra];
     // no "All Farmers" row: one farmer is always chosen
@@ -221,7 +221,8 @@ const FarmerwiseCollection: React.FC = () => {
   }, [masterFarmers, farmersLoading, pre.rows, live.rows, scope.centre]);
   // the farmer shown in the dropdown: the one picked, else the first of the list
   const farmerId = farmerOptions.some((o) => o.value === draft.farmerId && o.value !== '') ? draft.farmerId : farmerOptions[0]?.value ?? '';
-  const rows = useMemo(() => live.rows.filter((r) => (!applied.plant || applied.plant === 'all' || r.plant === applied.plant) && (!applied.vlcId || allVlc || r.stationId === applied.vlcId) && (!applied.farmerId || applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate), [live.rows, applied]);
+  const codeOf = useMemo(() => new Map(centres.map((c) => [c.id, c.code?.trim() || ''])), [centres]);
+  const rows = useMemo(() => live.rows.filter((r) => (!applied.plant || applied.plant === 'all' || r.plant === applied.plant) && (!applied.vlcId || allVlc || r.stationId === applied.vlcId) && (!applied.farmerId || applied.farmerId === 'all' || farmerKey(r.stationId, r.farmerId) === applied.farmerId) && (applied.milkType === 'both' || r.kind === applied.milkType) && (applied.shift === 'both' || r.shift === applied.shift) && r.date >= applied.fromDate && r.date <= applied.toDate).map((r) => ({ ...r, stationCode: codeOf.get(r.stationId) || r.stationCode || r.stationId })), [live.rows, applied, codeOf]);
 
   const pager = usePagination(rows);
 
@@ -271,7 +272,7 @@ const FarmerwiseCollection: React.FC = () => {
       { header: 'Station Id' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Milk Type' }, { header: 'Farmer Id' }, { header: 'Name' },
       { header: 'Station Name' }, { header: 'Liter', type: 'dec1' }, { header: 'Kg', type: 'dec1' }, { header: 'Fat', type: 'dec1' }, { header: 'Snf', type: 'dec1' }, { header: 'Clr', type: 'dec1' }, { header: 'Rate', type: 'money' }, { header: 'Amount', type: 'money' },
     ] as ExportTable['columns']),
-    rows: rows.map((r) => tbl.pick<string | number>([r.stationId, fmtDate(r.date), r.shift, KIND_TEXT[r.kind] ?? r.kind, r.farmerId, r.farmer, r.centre, r.litres, r.kg ?? 0, r.fat, r.snf, r.clr ?? 0, r.rate, r.amount])),
+    rows: rows.map((r) => tbl.pick<string | number>([r.stationCode || r.stationId, fmtDate(r.date), r.shift, KIND_TEXT[r.kind] ?? r.kind, r.farmerId, r.farmer, r.centre, r.litres, r.kg ?? 0, r.fat, r.snf, r.clr ?? 0, r.rate, r.amount])),
     totals: tbl.pickTotals(['Total', '', '', '', '', `${rows.length} entries`, '', Math.round(totals.litres * 10) / 10, '', Math.round(totals.fat * 100) / 100, Math.round(totals.snf * 100) / 100, '', '', Math.round(totals.amount * 100) / 100]),
   });
 
