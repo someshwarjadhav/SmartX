@@ -5,7 +5,7 @@ import { Download, FileSpreadsheet, Pencil, RefreshCw, Save, ShieldCheck, Shield
 import { farmerKey, nextFarmerCode, type FarmerRecord } from '../../data/farmerMaster';
 import { getData, isRememberedVerified, postData, postExcel, updateFarmerFlag, updateFarmerStatus } from '../../services/master/farmerMaster.api.ts';
 import type { FarmerInput } from '../../services/master/farmerMaster.rules.ts';
-import { useMilkCenterOptions } from '../../hooks/useMilkReportData';
+import { ALL, useMilkCenterOptions, useReportScope, type CentreOpt } from '../../hooks/useMilkReportData';
 import { AnimatedNumber } from '../../components/ui/AnimatedNumber';
 import { Avatar } from '../../components/ui/Avatar';
 import { Badge } from '../../components/ui/Badge';
@@ -87,6 +87,8 @@ interface FormProps {
   onSubmit: (record: FarmerRecord, isEdit: boolean) => void;
   onCancel: () => void;
   centreOptions: { value: string; label: string }[];
+  /** every centre with its plant (MCC), from the API: feeds the Plant/MCC Name dropdown */
+  centres: CentreOpt[];
 }
 
 interface Values {
@@ -153,10 +155,19 @@ function validate(v: Values, farmers: FarmerRecord[], isEdit: boolean): Errors {
   return e;
 }
 
-const FarmerForm: React.FC<FormProps> = ({ farmers, editing, onSubmit, onCancel, centreOptions }) => {
+const FarmerForm: React.FC<FormProps> = ({ farmers, editing, onSubmit, onCancel, centreOptions, centres }) => {
   const [values, setValues] = useState<Values>(() => (editing ? fromRecord(editing) : blank(farmers, centreOptions[0]?.value ?? '')));
   const [errors, setErrors] = useState<Errors>({});
   const codeTouched = useRef(false);
+
+  // Plant/MCC Name: plants and their centres come from the API; "All" shows every centre. When editing, the plant of the farmer's centre is shown.
+  const [plantPick, setPlantPick] = useState<string>(ALL);
+  const editingPlant = editing ? centres.find((c) => c.id === editing.vlcId)?.mccId : undefined;
+  const scope = useReportScope(centres, editingPlant ?? plantPick, values.vlcId, true);
+  const plantCentreOptions = useMemo(
+    () => (centres.length ? centres.filter((c) => scope.plant === ALL || c.mccId === scope.plant).map((c) => ({ value: c.id, label: c.label })) : centreOptions),
+    [centres, scope.plant, centreOptions],
+  );
 
 
   useEffect(() => {
@@ -178,6 +189,13 @@ const FarmerForm: React.FC<FormProps> = ({ farmers, editing, onSubmit, onCancel,
     codeTouched.current = false;
     setValues((v) => ({ ...v, vlcId, farmerId: String(nextFarmerCode(farmers, vlcId)) }));
     setErrors({});
+  };
+
+  const changePlant = (plant: string) => {
+    setPlantPick(plant);
+    const list = centres.filter((c) => plant === ALL || c.mccId === plant);
+    // the picked centre is not under the new plant: move to the first centre of that plant
+    if (list.length && !list.some((c) => c.id === values.vlcId)) changeCentre(list[0].id);
   };
 
   const submit = (e: React.FormEvent) => {
@@ -218,7 +236,8 @@ const FarmerForm: React.FC<FormProps> = ({ farmers, editing, onSubmit, onCancel,
 
       <form onSubmit={submit} noValidate className="space-y-6 p-4 sm:p-5">
         <FormSection step={1} title="Farmer" description="Centre, code and name" bodyClassName="grid gap-4 sm:grid-cols-6">
-          <SelectField wrapperClassName="sm:col-span-6" label="Center Name" value={values.vlcId} onChange={changeCentre} options={centreOptions} disabled={Boolean(editing)} />
+          <SelectField wrapperClassName="sm:col-span-6" label="Plant/MCC Name" value={scope.plant} onChange={changePlant} options={scope.plantOptions} disabled={Boolean(editing)} />
+          <SelectField wrapperClassName="sm:col-span-6" label="Center Name" value={values.vlcId} onChange={changeCentre} options={plantCentreOptions} disabled={Boolean(editing)} />
           <TextField wrapperClassName="sm:col-span-2" label="Farmer Code" type="number" inputMode="numeric" min={1} value={values.farmerId} onChange={(e) => set('farmerId', e.target.value)} error={errors.farmerId} disabled={Boolean(editing)} />
           <TextField wrapperClassName="sm:col-span-4" label="Farmer Name" value={values.name} onChange={(e) => set('name', e.target.value)} error={errors.name} autoComplete="off" />
         </FormSection>
@@ -658,7 +677,7 @@ const FarmerMaster: React.FC = () => {
       <PageHeader title="Farmer Master" subtitle={`Register farmers, bank details and bulk import${centre !== 'all' ? ` for ${centreOptions.find((c) => c.value === centre)?.label ?? centre}` : ''}.`} />
 
       <div className="grid items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <FarmerForm key={formKey} farmers={farmers} editing={editing} onSubmit={save} onCancel={resetForm} centreOptions={centreOptions} />
+        <FarmerForm key={formKey} farmers={farmers} editing={editing} onSubmit={save} onCancel={resetForm} centreOptions={centreOptions} centres={centers} />
         <div className="space-y-4 sm:space-y-5 xl:sticky xl:top-20">
           <FarmerSummary rows={centreRows} />
           <FarmerImport onImport={importRecords} validCentreIds={[...ids, ...Object.keys(codeToId)]} />

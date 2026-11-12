@@ -14,22 +14,23 @@ const NOT_FIELD = new Set([
 const isField = (el: HTMLElement): boolean => {
   if (el instanceof HTMLInputElement) {
     if (NOT_FIELD.has(el.type) || el.readOnly) return false;
-  } else if (!(el instanceof HTMLSelectElement)) {
+  } else if (!(el instanceof HTMLSelectElement) && !(el instanceof HTMLButtonElement && el.hasAttribute("data-dd"))) {
+    // a dropdown (the shared Dropdown button) counts as a field, just like the old <select>
     return false;
   }
-  const f = el as HTMLInputElement | HTMLSelectElement;
+  const f = el as HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
   if (f.disabled || f.tabIndex < 0) return false;
   return f.offsetParent !== null; // hidden (display:none) fields are skipped
 };
 
 export const editableFields = (
   root: HTMLElement,
-): Array<HTMLInputElement | HTMLSelectElement> =>
-  Array.from(root.querySelectorAll<HTMLElement>("input, select")).filter(
+): Array<HTMLInputElement | HTMLSelectElement | HTMLButtonElement> =>
+  Array.from(root.querySelectorAll<HTMLElement>("input, select, button[data-dd]")).filter(
     isField,
-  ) as Array<HTMLInputElement | HTMLSelectElement>;
+  ) as Array<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>;
 
-const focusField = (el: HTMLInputElement | HTMLSelectElement) => {
+const focusField = (el: HTMLInputElement | HTMLSelectElement | HTMLButtonElement) => {
   el.focus();
   if (
     el instanceof HTMLInputElement &&

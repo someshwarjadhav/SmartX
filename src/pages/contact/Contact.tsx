@@ -159,7 +159,7 @@ const Contact: React.FC = () => {
                   </div>
                   <div>
                     <label htmlFor="ct-topic" className="mb-1.5 block text-sm font-semibold">Topic</label>
-                    <Select label="Topic" value={topic} onChange={setTopic} options={TOPICS} className="[&_select]:h-12" />
+                    <Select label="Topic" value={topic} onChange={setTopic} options={TOPICS} className="[&_button]:h-12" />
                   </div>
                   <Field label="Message" htmlFor="ct-message">
                     <Textarea id="ct-message" value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Tell us what you need" />

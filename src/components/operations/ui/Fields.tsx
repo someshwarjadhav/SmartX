@@ -1,7 +1,8 @@
 import type * as React from 'react';
+import { Children, Fragment, isValidElement } from 'react';
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
-import { ChevronDown } from 'lucide-react';
 import { cn } from '../../../lib/portal/cn';
+import { Dropdown, type DropdownOption } from '../../ui/Dropdown';
 
 const base =
   'h-11 w-full rounded-xl border border-line bg-panel px-3.5 text-base text-ink outline-none placeholder:text-mute/70 transition hover:border-brand/50 focus:border-brand focus:ring-4 focus:ring-brand/15 disabled:cursor-not-allowed disabled:bg-soft/60 disabled:opacity-70 sm:text-sm';
@@ -26,13 +27,51 @@ export const Input: React.FC<InputHTMLAttributes<HTMLInputElement> & { icon?: Re
   );
 };
 
-export const Select: React.FC<SelectHTMLAttributes<HTMLSelectElement>> = ({ className, children, ...rest }) => {
+const textOf = (n: ReactNode): string =>
+  Children.toArray(n)
+    .map((c) => (typeof c === 'string' || typeof c === 'number' ? String(c) : isValidElement(c) ? textOf((c.props as { children?: ReactNode }).children) : ''))
+    .join('');
+
+/** the <option> children of a <Select> (also inside fragments / optgroups / .map()) as a list for the Dropdown */
+function optionsOf(children: ReactNode, out: DropdownOption[] = []): DropdownOption[] {
+  Children.forEach(children, (c) => {
+    if (!isValidElement(c)) return;
+    const props = c.props as { value?: unknown; disabled?: boolean; children?: ReactNode };
+    if (c.type === 'option') {
+      const label = textOf(props.children);
+      out.push({ value: props.value !== undefined && props.value !== null ? String(props.value) : label, label, disabled: props.disabled });
+    } else if (c.type === Fragment || c.type === 'optgroup') {
+      optionsOf(props.children, out);
+    }
+  });
+  return out;
+}
+
+/**
+ * Written exactly like the old native select (<Select value onChange={(e) => ... e.target.value}><option .../></Select>),
+ * so no page had to change - it is drawn with the shared Dropdown (rounded list, tick, scroll bar, search for long lists).
+ */
+export const Select: React.FC<SelectHTMLAttributes<HTMLSelectElement>> = ({ className, children, value, onChange, disabled, id, name, required, autoFocus, onBlur, onFocus, ...rest }) => {
+  const v = value === undefined || value === null ? '' : String(Array.isArray(value) ? (value[0] ?? '') : value);
   return (
     <div className="relative">
-      <select {...rest} className={cn(base, 'appearance-none pr-9', className)}>
-        {children}
-      </select>
-      <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-mute" />
+      <Dropdown
+        id={id}
+        name={name}
+        value={v}
+        options={optionsOf(children)}
+        disabled={disabled}
+        required={required}
+        autoFocus={autoFocus}
+        aria-label={rest['aria-label']}
+        onBlur={onBlur as never}
+        onFocus={onFocus as never}
+        invalid={rest['aria-invalid'] === true || rest['aria-invalid'] === 'true'}
+        onChange={(next) =>
+          onChange?.({ target: { value: next, name: name ?? '' }, currentTarget: { value: next, name: name ?? '' } } as unknown as React.ChangeEvent<HTMLSelectElement>)
+        }
+        className={cn(base, 'pr-9', className)}
+      />
     </div>
   );
 };

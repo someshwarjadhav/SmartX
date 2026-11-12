@@ -105,9 +105,9 @@ export default function EkoDataReport({ title, subtitle, icon: Icon, fields, loa
           left={
             <label className="flex items-center gap-2 text-sm text-mute">
               <span className="whitespace-nowrap font-semibold">Result per page:</span>
-              <select className="h-9 rounded-lg border border-line bg-panel px-3 text-ink" value={size} onChange={(e) => { setSize(Number(e.target.value)); setPage(1); }}>
+              <span className="w-24"><Select className="h-9" value={String(size)} onChange={(e) => { setSize(Number(e.target.value)); setPage(1); }}>
                 {SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              </Select></span>
             </label>
           }
         />
