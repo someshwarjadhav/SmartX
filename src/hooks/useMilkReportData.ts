@@ -182,6 +182,13 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
   const plantOf = useMemo(() => new Map(centers.map((c) => [c.id, plantKeyOf(c)])), [centers]);
   const rows = useMemo(() => {
     const used = new Map<string, number>();
+    // the same farmer / centre names repeat on every day and shift: format each distinct name only once
+    const titled = new Map<string, string>();
+    const title = (v: string): string => {
+      let t = titled.get(v);
+      if (t === undefined) { t = titleCase(v); titled.set(v, t); }
+      return t;
+    };
     const list = mapFarmers(q.rows).map((r): CollectionEntry => {
       const date = toISO(r.date);
       const shift = smartShift(r.shift);
@@ -198,9 +205,9 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
         time: r.time || '',
         shift,
         farmerId: r.farmerId,
-        farmer: titleCase(r.farmerName),
+        farmer: title(r.farmerName),
         farmerRaw: r.rawName,
-        centre: titleCase(names.get(r.vlccid) || r.village || r.vlccid),
+        centre: title(names.get(r.vlccid) || r.village || r.vlccid),
         kind,
         litres: r.liter,
         fat: r.fat,
@@ -407,4 +414,4 @@ export function useFarmerMasterOptions(vlccIds: string[], names: Record<string, 
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
   }, [list, names, vlccIds.length]);
   return { options, loading };
-}
+}

@@ -51,13 +51,35 @@ export function trdateOf(v: string): string {
   return v;
 }
 
-function toRawFarmer(r: RawLoose, vlccid: string, milk: string, shift: string): RawFarmerRow {
-  const keys = Object.keys(r);
-  const out: Record<string, unknown> = { ...r };
+/**
+ * Which reply key answers which raw field. The key names of a reply are the same for every row, so the lookup is worked out ONCE
+ * per distinct set of keys (not once per row x field x alias, which made big reports very slow).
+ */
+const aliasPlanCache = new Map<string, Array<[string, string[]]>>();
+function aliasPlanFor(keys: string[]): Array<[string, string[]]> {
+  const sig = keys.join('\u0001');
+  const hit = aliasPlanCache.get(sig);
+  if (hit) return hit;
+  const normal = keys.map((k) => nk(k));
+  const plan: Array<[string, string[]]> = [];
   for (const [field, names] of Object.entries(ALIASES)) {
+    const found: string[] = [];
     for (const want of names) {
-      const k = keys.find((x) => nk(x) === want);
-      const v = k === undefined ? undefined : r[k];
+      const i = normal.indexOf(want);
+      if (i >= 0) found.push(keys[i]!);
+    }
+    if (found.length) plan.push([field, found]);
+  }
+  if (aliasPlanCache.size > 50) aliasPlanCache.clear();
+  aliasPlanCache.set(sig, plan);
+  return plan;
+}
+
+function toRawFarmer(r: RawLoose, vlccid: string, milk: string, shift: string): RawFarmerRow {
+  const out: Record<string, unknown> = { ...r };
+  for (const [field, found] of aliasPlanFor(Object.keys(r))) {
+    for (const key of found) {
+      const v = r[key];
       if (v !== undefined && v !== null && v !== '') {
         out[field] = typeof v === 'number' ? String(v) : v;
         break;

@@ -64,7 +64,8 @@ const later = (fn: () => void) => {
   else window.setTimeout(fn, 200);
 };
 function writeCache<R>(key: string, rows: R[], note?: string) {
-  if (rows.length > 40000) return;
+  // localStorage holds about 5 MB: a bigger report never fits, and stringifying it would only freeze the page
+  if (rows.length > 5000) return;
   later(() => {
     try {
       const payload = JSON.stringify({ at: Date.now(), rows, note });
