@@ -352,7 +352,8 @@ export function usePlantOptions(centres: CentreOpt[]): { value: string; label: s
 }
 
 
-export function useReportScope(centres: CentreOpt[], plant: string, centre: string, withAll = false) {
+/** withAll = an "All" row in the plant list (and in the centre list too, unless withAllCentre is false: then the first centre of the plant is the default) */
+export function useReportScope(centres: CentreOpt[], plant: string, centre: string, withAll = false, withAllCentre = withAll) {
   const realPlants = usePlantOptions(centres);
   const plantOptions = useMemo(
     () => (withAll && realPlants.length ? [{ value: ALL, label: 'All' }, ...realPlants] : realPlants),
@@ -364,10 +365,10 @@ export function useReportScope(centres: CentreOpt[], plant: string, centre: stri
     [centres, plantValue],
   );
   const centreOptions = useMemo(
-    () => (withAll && realCentres.length ? [{ value: ALL, label: 'All' }, ...realCentres] : realCentres),
-    [withAll, realCentres],
+    () => (withAllCentre && realCentres.length ? [{ value: ALL, label: 'All' }, ...realCentres] : realCentres),
+    [withAllCentre, realCentres],
   );
-  const centreValue = centreOptions.some((o) => o.value === centre) ? centre : withAll && realCentres.length ? ALL : realCentres[0]?.value ?? '';
+  const centreValue = centreOptions.some((o) => o.value === centre) ? centre : withAllCentre && realCentres.length ? ALL : realCentres[0]?.value ?? '';
   return { plantOptions, centreOptions, plant: plantValue, centre: centreValue };
 }
 

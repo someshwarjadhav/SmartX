@@ -188,7 +188,8 @@ const FarmerwiseCollection: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const toast = useToast();
-  const scope = useReportScope(centres, draft.plant, draft.vlcId, true);
+  
+  const scope = useReportScope(centres, draft.plant, draft.vlcId, true, false);
   const allVlc = applied.vlcId === 'all';
   const askIds = useMemo(() => centreIdsFor(centres, applied.plant, applied.vlcId), [centres, applied.plant, applied.vlcId]);
   const plantOptions = scope.plantOptions;
