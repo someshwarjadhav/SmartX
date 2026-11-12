@@ -146,7 +146,7 @@ const VlcStatus: React.FC = () => {
   const live = useMilkVlccEntries({ from: applied.fromDate, to: applied.toDate, shift: applied.shift, milk: 'both', vlccIds: plantIds }, submitted && plantIds.length > 0);
   
   const loading = live.fetching;
-  const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.code || '', route:c.mccId, name:titleCase(c.name || c.id), active:list.length>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
+  const tiles = useMemo(() => centres.filter((c) => applied.plant === 'all' || c.mccId === applied.plant).map((c) => { const list = live.rows.filter((r) => r.vlccid === c.id && (applied.shift === 'both' || r.shift === applied.shift)); const lit = list.reduce((a,r)=>a+r.liter,0); return { id:c.code || c.id, route:c.mccId, name:titleCase(c.name || c.id), active:lit>0, lit, fat:lit?list.reduce((a,r)=>a+r.fat*r.liter,0)/lit:0, snf:lit?list.reduce((a,r)=>a+r.snf*r.liter,0)/lit:0 }; }), [centres, live.rows, applied]);
 
   const allPlants = applied.plant === 'all';
   const groups = useMemo(() => {
@@ -160,10 +160,10 @@ const VlcStatus: React.FC = () => {
     return order.filter((k) => byRoute.has(k)).map((k) => ({ route: k, name: names.get(k) ?? k, tiles: byRoute.get(k)! }));
   }, [tiles, plantOptions]);
  
-  const shownGroups = allPlants ? groups.filter((g) => g.tiles.some((t) => t.active)) : groups;
+  // every plant and every VLC stays on screen: a VLC with no milk in the chosen dates is shown as Inactive, never hidden
+  const shownGroups = groups;
   const shownTiles = shownGroups.flatMap((g) => g.tiles);
   const active = shownTiles.filter((t) => t.active).length;
-  const hiddenRoutes = groups.length - shownGroups.length;
 
   const submit = () => {
     const rangeError = validateDateRange(draft.fromDate, draft.toDate) ?? validatePastLimit(draft.fromDate);
@@ -207,8 +207,6 @@ const VlcStatus: React.FC = () => {
           <ReportLoader label="Loading VLC status…" done={live.done} total={live.total} />
         ) : tiles.length === 0 ? (
           <EmptyState icon={WifiOff} title="No VLC found" text="This plant has no VLC yet." />
-        ) : shownTiles.length === 0 ? (
-          <EmptyState icon={WifiOff} title="No data found" text="No centre sent milk in the chosen dates and shift." />
         ) : (
           <div className="space-y-6">
             {shownGroups.map((g) => {
@@ -235,9 +233,6 @@ const VlcStatus: React.FC = () => {
                 </section>
               );
             })}
-            {allPlants && hiddenRoutes > 0 && (
-              <p className="text-xs text-mute">{hiddenRoutes} route{hiddenRoutes === 1 ? '' : 's'} with no data in these dates {hiddenRoutes === 1 ? 'is' : 'are'} not shown.</p>
-            )}
           </div>
         )}
       </Panel>

@@ -433,7 +433,7 @@ const CdaReport: React.FC = () => {
 
   /**
    * Excel Export = the client's "VLC Difference Report" sheet: header on row 1, ONE row for every VLC and milk type
-   * (VLC ID "1. 500381", VLC Name, Type, From Date, To Date, Composite x7, Dispatch x7, Actual x7, then the three differences x5 = 41 columns)
+   * (VLC ID = custom station id, VLC Name, Type, From Date, To Date, Composite x7, Dispatch x7, Actual x7, then the three differences x5 = 41 columns)
    * and a bold Total row at the end ("Total" / "All selected VLCs") with real Excel formulas.
    */
   const buildExcelTable = (): ExportTable => {
@@ -468,7 +468,7 @@ const CdaReport: React.FC = () => {
     const m = (x: Metrics) => SET.map(([k]) => x[k]);
     const d = (x: Diff) => DIFF_SET.map(([k]) => x[k]);
     const tableRows = rows.map((r) => [
-      `${r.serial}. ${r.vlccId}`, r.vlcc, r.type, applied.fromDate, applied.toDate,
+      r.customId, r.vlcc, r.type, applied.fromDate, applied.toDate,
       ...m(r.composite), ...m(r.dispatch), ...m(r.actual),
       ...d(compositeActual(r)), ...d(dispatchActual(r)), ...d(compositeDispatch(r)),
     ]);

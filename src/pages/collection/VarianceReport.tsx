@@ -42,6 +42,8 @@ interface Filters {
 interface VarianceRow {
   id: string;
   vlccId: string;
+  /** custom station id shown in the grid / exports (vlccId stays the real id used for grouping) */
+  stationCode: string;
   village: string;
   date: string;
   shift: Shift;
@@ -139,7 +141,7 @@ const num = (pick: (r: VarianceRow) => number, d = 2) => (r: VarianceRow) => <sp
 const diff = (pick: (r: VarianceRow) => number, d = 2, bold = false) => (r: VarianceRow) => <span className={cn('tnum', bold && 'font-semibold', diffTone(pick(r)))}>{nf(pick(r), d)}</span>;
 
 const COLUMNS: GroupColumn<VarianceRow>[] = [
-  { key: 'vlccId', header: 'VLCC Id', group: vlccKey, cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.vlccId}</span> },
+  { key: 'vlccId', header: 'VLCC Id', group: vlccKey, cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationCode}</span> },
   { key: 'village', header: 'Village Name', group: vlccKey, cell: (r) => r.village },
   { key: 'date', header: 'Date', group: dateKey, cell: (r) => <span className="tnum">{fmtDateLong(r.date)}</span> },
   { key: 'shift', header: 'Shift', cell: (r) => r.shift },
@@ -248,6 +250,7 @@ const VarianceReport: React.FC = () => {
   const farmer = useMilkFarmerEntries({ from: applied.fromDate, to: applied.toDate, shift: 'both', milk: 'both', vlccId: applied.vlcId || 'all', vlccIds: askIds }, on);
   const fetching = vendor.fetching || farmer.fetching;
 
+  const codeOf = useMemo(() => new Map(centres.map((c) => [c.id, c.code?.trim() || ''])), [centres]);
   const rows = useMemo(() => {
     const farmerItems: Src[] = farmer.rows.map((r) => ({ vlccid: r.stationId, village: r.centre, date: r.date, shift: r.shift, milk: r.kind, liter: r.litres, fat: r.fat, snf: r.snf, amount: r.amount }));
     const v = aggregate(vendor.rows);
@@ -263,7 +266,7 @@ const VarianceReport: React.FC = () => {
       const vAmt = vr?.amount ?? 0;
       const fAmt = fr?.amount ?? 0;
       out.push({
-        id: key, vlccId: base.vlccId, village: base.village, date: base.date, shift: base.shift, milkType: base.milkType,
+        id: key, vlccId: base.vlccId, stationCode: codeOf.get(base.vlccId) || base.vlccId, village: base.village, date: base.date, shift: base.shift, milkType: base.milkType,
         vendorQty: r2(vQty), vendorFat: r2(vr?.fat ?? 0), vendorSnf: r2(vr?.snf ?? 0), vendorRate: vQty ? r2(vAmt / vQty) : 0, vendorAmount: r2(vAmt),
         farmerQty: r2(fQty), farmerFat: r2(fr?.fat ?? 0), farmerSnf: r2(fr?.snf ?? 0), farmerRate: fQty ? r2(fAmt / fQty) : 0, farmerAmount: r2(fAmt),
         qtyDiff: r2(vQty - fQty), fatDiff: r2((vr?.fat ?? 0) - (fr?.fat ?? 0)), snfDiff: r2((vr?.snf ?? 0) - (fr?.snf ?? 0)), amountDiff: r2(vAmt - fAmt),
@@ -274,7 +277,7 @@ const VarianceReport: React.FC = () => {
       a.vlccId.localeCompare(b.vlccId) || a.date.localeCompare(b.date) ||
       (KIND_ORDER[a.milkType] ?? 9) - (KIND_ORDER[b.milkType] ?? 9) ||
       (a.shift === b.shift ? 0 : a.shift === 'Morning' ? -1 : 1));
-  }, [vendor.rows, farmer.rows]);
+  }, [vendor.rows, farmer.rows, codeOf]);
   const pager = usePagination(rows);
   const loading = fetching && rows.length === 0;
 
@@ -315,7 +318,7 @@ const VarianceReport: React.FC = () => {
       { header: 'Farmer Qty', type: 'dec2', total: 'sum' }, { header: 'Farmer Fat', type: 'dec2', total: { wavg: 10 } }, { header: 'Farmer SNF', type: 'dec2', total: { wavg: 10 } }, { header: 'Farmer Rate', type: 'dec2', total: { ratio: [14, 10] } }, { header: 'Farmer Amount', type: 'dec2', total: 'sum' },
       { header: 'Qty Diff', type: 'dec2', total: 'sum' }, { header: 'Fat Diff', type: 'dec2', total: { diff: [6, 11] } }, { header: 'SNF Diff', type: 'dec2', total: { diff: [7, 12] } }, { header: 'Amount Diff', type: 'dec2', total: 'sum' },
     ],
-    rows: rows.map((r) => [r.vlccId, r.village, fmtDateLong(r.date), r.shift, KIND_TEXT[r.milkType] ?? r.milkType, r.vendorQty, r.vendorFat, r.vendorSnf, r.vendorRate, r.vendorAmount, r.farmerQty, r.farmerFat, r.farmerSnf, r.farmerRate, r.farmerAmount, r.qtyDiff, r.fatDiff, r.snfDiff, r.amountDiff]),
+    rows: rows.map((r) => [r.stationCode, r.village, fmtDateLong(r.date), r.shift, KIND_TEXT[r.milkType] ?? r.milkType, r.vendorQty, r.vendorFat, r.vendorSnf, r.vendorRate, r.vendorAmount, r.farmerQty, r.farmerFat, r.farmerSnf, r.farmerRate, r.farmerAmount, r.qtyDiff, r.fatDiff, r.snfDiff, r.amountDiff]),
     totals: ['Total', ...new Array<string>(18).fill('')],
     merge: [
       { col: 0, by: [0] },

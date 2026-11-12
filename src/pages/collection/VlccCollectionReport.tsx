@@ -52,6 +52,8 @@ interface Filters {
 interface VlccRow {
   id: string;
   stationId: string;
+  /** custom station id shown in the grid / exports (stationId stays the real id used for grouping) */
+  stationCode: string;
   village: string;
   date: string;
   shift: Shift;
@@ -144,7 +146,7 @@ const stationKey = (r: VlccRow): string => r.stationId;
 const dateKey = (r: VlccRow): string => `${r.stationId}|${r.date}`;
 
 const COLUMNS: GroupColumn<VlccRow>[] = [
-  { key: 'station', header: 'Station Id', group: stationKey, cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationId}</span> },
+  { key: 'station', header: 'Station Id', group: stationKey, cell: (r) => <span className="tnum rounded-md bg-soft px-2 py-0.5 text-xs font-semibold">{r.stationCode}</span> },
   { key: 'village', header: 'Village', group: stationKey, cell: (r) => <span className="font-semibold">{r.village}</span> },
   { key: 'date', header: 'Date', group: dateKey, cell: (r) => <span className="tnum whitespace-nowrap">{fmtDateLong(r.date)}</span> },
   {
@@ -179,11 +181,12 @@ const VlccCollectionReport: React.FC = () => {
   useWarmCentres({ ready: submitted && !!applied.vlcId && !allVlc && !live.fetching && !live.error && live.failed === 0, ids: centres.filter((c) => c.mccId === applied.plant && c.id !== applied.vlcId).map((c) => c.id), kind: 'vlcc', from: applied.fromDate, to: applied.toDate, shift: apiShift(applied.shift), milk: apiMilk(applied.milkType) });
   const fetching = live.fetching;
   const loading = live.loading;
+  const codeOf = useMemo(() => new Map(centres.map((c) => [c.id, c.code?.trim() || ''])), [centres]);
   const rows = useMemo(() => {
     const groups = new Map<string, typeof live.rows>();
     for (const r of live.rows) { const key = `${r.vlccid}|${r.date}|${r.shift}`; groups.set(key, [...(groups.get(key) ?? []), r]); }
-    return [...groups].map(([id, list]) => { const first = list[0]; const litres = list.reduce((a, r) => a + r.liter, 0); const amount = list.reduce((a, r) => a + r.amount, 0); return { id, stationId: first?.vlccid ?? '', village: first?.village ?? '', date: first?.date ?? '', shift: first?.shift ?? 'Morning', totalLiter: litres, avgFat: litres ? list.reduce((a, r) => a + r.fat*r.liter, 0)/litres : 0, avgSnf: litres ? list.reduce((a, r) => a + r.snf*r.liter, 0)/litres : 0, avgRate: litres ? amount/litres : 0, totalAmount: amount }; }).sort((a,b)=>a.stationId.localeCompare(b.stationId)||a.date.localeCompare(b.date)||(a.shift === b.shift ? 0 : a.shift === 'Morning' ? -1 : 1));
-  }, [live.rows]);
+    return [...groups].map(([id, list]) => { const first = list[0]; const litres = list.reduce((a, r) => a + r.liter, 0); const amount = list.reduce((a, r) => a + r.amount, 0); return { id, stationId: first?.vlccid ?? '', stationCode: codeOf.get(first?.vlccid ?? '') || first?.vlccid || '', village: first?.village ?? '', date: first?.date ?? '', shift: first?.shift ?? 'Morning', totalLiter: litres, avgFat: litres ? list.reduce((a, r) => a + r.fat*r.liter, 0)/litres : 0, avgSnf: litres ? list.reduce((a, r) => a + r.snf*r.liter, 0)/litres : 0, avgRate: litres ? amount/litres : 0, totalAmount: amount }; }).sort((a,b)=>a.stationId.localeCompare(b.stationId)||a.date.localeCompare(b.date)||(a.shift === b.shift ? 0 : a.shift === 'Morning' ? -1 : 1));
+  }, [live.rows, codeOf]);
   const pager = usePagination(rows);
 
   const totals = useMemo(() => {
@@ -237,7 +240,7 @@ const VlccCollectionReport: React.FC = () => {
         { header: 'Station Id' }, { header: 'Village' }, { header: 'Date' }, { header: 'Shift' }, { header: 'Total Liter', type: 'dec2' },
         { header: 'Avg Fat', type: 'dec2' }, { header: 'Avg SNF', type: 'dec2' }, { header: 'Avg Rate', type: 'dec2' }, { header: 'Total Amount', type: 'dec2' },
       ] as ExportTable['columns']),
-      rows: rows.map((r) => tbl.pick<string | number>([r.stationId, r.village, fmtDateLong(r.date), r.shift, r.totalLiter, r.avgFat, r.avgSnf, r.avgRate, r.totalAmount])),
+      rows: rows.map((r) => tbl.pick<string | number>([r.stationCode, r.village, fmtDateLong(r.date), r.shift, r.totalLiter, r.avgFat, r.avgSnf, r.avgRate, r.totalAmount])),
       totals: tbl.pickTotals(['Total', `${rows.length} rows`, '', '', 0, 0, 0, 0, 0]),
       merge,
     });
