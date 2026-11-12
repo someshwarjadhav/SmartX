@@ -161,7 +161,8 @@ async function billOnce(from: string, to: string, stationId: string, timeoutMs?:
   const qs = billQuery(from, to, stationId);
   clearRequestMemo();
   try {
-    return checkReply(await dpuGet(`${FARMER_BILL_PATH}?${qs}`, 0, timeoutMs));
+    // fresh = true: every Show Record really calls the API again (the browser must not answer from its own cache)
+    return checkReply(await dpuGet(`${FARMER_BILL_PATH}?${qs}`, 0, timeoutMs, true));
   } catch (e) {
     if (e instanceof EmptyReplyError) return {};
     // The DPU host answers a VLC that has no bill for the period with this file-permission text: shown as "No record found"
@@ -320,6 +321,9 @@ export async function getPrintTableData(
   onProgress?: (p: BillProgress) => void,
   cancelled?: () => boolean,
 ): Promise<unknown> {
+  // Every Show Record is a fresh load: windows kept from an earlier Show are dropped, so the API is called again each time
+  // (the cache below is then only used inside this one load, e.g. when a slow window is cut in two and retried).
+  winCache.clear();
   // DPU API only: GET https://dpu.shivinfotech.co.in/api/Login/MilkBillProcessma?id=0&fromdate=&todate=&stationid=
   // A long period goes straight to small windows: asking it in one piece only makes the server time out after 90 seconds.
   if (dayCount(from, to) > WINDOW_DAYS) return billInWindows(from, to, stationId, onProgress, cancelled);

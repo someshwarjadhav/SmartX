@@ -200,6 +200,13 @@ const nameCache = new Map<string, Map<string, string>>();
 
 type Status = "idle" | "loading" | "ready" | "error";
 
+/** The loader stays at least this long on every Show Record, so a quick answer never makes it look like nothing happened. */
+const MIN_LOADER_MS = 600;
+const holdLoader = (startedAt: number): Promise<void> => {
+  const wait = MIN_LOADER_MS - (Date.now() - startedAt);
+  return wait > 0 ? new Promise((resolve) => setTimeout(resolve, wait)) : Promise.resolve();
+};
+
 const FarmerBill: React.FC = () => {
   const toast = useToast();
   const today = todayISO();
@@ -245,6 +252,8 @@ const FarmerBill: React.FC = () => {
       return;
     }
     const mine = ++ticket.current;
+    const startedAt = Date.now();
+    // old result is cleared first, so the loader (not the previous bills) is what the person sees on every Show Record
     setStatus("loading");
     setError("");
     setPage(1);
@@ -280,6 +289,7 @@ const FarmerBill: React.FC = () => {
       );
       if (mine !== ticket.current) return;
       await namesReady;
+      await holdLoader(startedAt);
       if (mine !== ticket.current) return;
       const list = named(parseFarmerBills(raw, extended));
       if (!list.length && hasBillData(raw)) console.warn("[farmer bill] the server replied with data that could not be read as a bill:", replyKeys(raw), raw);
@@ -289,6 +299,8 @@ const FarmerBill: React.FC = () => {
       setProgress(null);
       setStatus("ready");
     } catch (e) {
+      if (mine !== ticket.current) return;
+      await holdLoader(startedAt);
       if (mine !== ticket.current) return;
       setBills([]);
       setProgress(null);

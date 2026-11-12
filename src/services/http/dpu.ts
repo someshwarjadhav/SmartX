@@ -234,7 +234,15 @@ export const dpuGet = (
   priority: Priority = 1,
   /** shorter timeout than the default (a slow request then frees its slot early) */
   timeoutMs?: number,
-): Promise<unknown> => dpuSend(path, { method: "GET" }, priority, timeoutMs);
+  /** true = always go to the network (browser HTTP cache is bypassed), so the same URL is really called again */
+  fresh = false,
+): Promise<unknown> =>
+  dpuSend(
+    path,
+    fresh ? { method: "GET", cache: "no-store" } : { method: "GET" },
+    priority,
+    timeoutMs,
+  );
 
 export const dpuPostJson = (
   path: string,
