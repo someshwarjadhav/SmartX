@@ -409,9 +409,9 @@ export function useFarmerMasterOptions(vlccIds: string[], names: Record<string, 
     const multi = vlccIds.length > 1;
     const seen = new Set<string>();
     return list
-      .map((f) => ({ value: farmerKey(f.vlccid, f.farmerId), label: `${f.farmerId} | ${f.name || 'No name'}${multi ? ` (${names[f.vlccid] || f.vlccid})` : ''}` }))
+      .map((f) => ({ value: farmerKey(f.vlccid, f.farmerId), label: `${String(f.farmerId).padStart(4, '0')} | ${f.name || 'No name'}${multi ? ` (${names[f.vlccid] || f.vlccid})` : ''}` }))
       .filter((o) => (seen.has(o.value) ? false : (seen.add(o.value), true)))
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
   }, [list, names, vlccIds.length]);
   return { options, loading };
-}
+}

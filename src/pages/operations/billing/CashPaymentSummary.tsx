@@ -3,9 +3,12 @@ import { useMemo, useState } from "react";
 import { Banknote, Search } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
-import { Field, Input, Select } from "../../../components/operations/ui/Fields";
+import { Field, Input } from "../../../components/operations/ui/Fields"; //Select
 import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
-import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
+import {
+  DataTable,
+  type Column,
+} from "../../../components/operations/ui/DataTable";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
   CardTitle,
@@ -16,6 +19,8 @@ import {
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { useCentreOptions } from "../../../hooks/useCentres";
+import { usePlantScope } from "../../../hooks/usePlantScope";
+import { PlantSelectField } from "../../../components/operations/ReportFilters";
 import {
   exportCSV,
   exportExcel,
@@ -23,7 +28,10 @@ import {
   type ExportCol,
 } from "../../../assets/excel/portalExport";
 import { DEFAULT_PAGE_SIZE } from "../../../lib/portal/global";
-import { exportBansiPaymentExcel, isBansiUser } from "../../../assets/excel/bansiPaymentExcel";
+import {
+  exportBansiPaymentExcel,
+  isBansiUser,
+} from "../../../assets/excel/bansiPaymentExcel";
 import { todayISO } from "../../../lib/portal/format";
 import {
   getCashSummary,
@@ -115,10 +123,14 @@ const payableOf = (r: Row): number | null => {
 };
 
 const CashPaymentSummary: React.FC = () => {
-  const options = useCentreOptions();
+  const allOptions = useCentreOptions();
+  // Plant/MCC Name: the VLC list shows only the centres of the picked plant ("All" = every centre).
+  // `allOptions` stays the full list, so names in an already shown result keep their labels.
+  const { plantOptions, plant, setPlant, belongs } = usePlantScope();
+  const options = allOptions.filter((o) => belongs(o.id));
   const today = todayISO();
 
-  const [type, setType] = useState<SummaryType>("farmer");
+  const [type, ] = useState<SummaryType>("farmer"); //setType
   const [picked, setPicked] = useState<string[]>([]);
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
@@ -143,7 +155,14 @@ const CashPaymentSummary: React.FC = () => {
   const toggleOne = (id: string) =>
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
-  const labelOf = (id: string) => options.find((o) => o.id === id)?.label ?? id;
+  const labelOf = (id: string) =>
+    allOptions.find((o) => o.id === id)?.label ?? id;
+
+  const changePlant = (p: string) => {
+    setPlant(p);
+    // centres of another plant are no longer on screen, so they must not stay ticked
+    setPicked((s) => s.filter((id) => belongs(id, p)));
+  };
 
   const submit = async () => {
     if (loading || picked.length === 0) return;
@@ -317,7 +336,7 @@ const CashPaymentSummary: React.FC = () => {
       { key: "sign", header: "Signature", value: () => "" },
     );
     return list;
-  }, [multi, isVlcType, options]);
+  }, [multi, isVlcType, allOptions]);
 
   const visible = useMemo(() => {
     const s = needle.trim().toLowerCase();
@@ -381,27 +400,105 @@ const CashPaymentSummary: React.FC = () => {
           rows: visible,
           from: applied.from,
           to: applied.to,
-          fileLabel: vlcType ? "Cash Payment Summary VLC" : "Cash Payment Summary",
+          fileLabel: vlcType
+            ? "Cash Payment Summary VLC"
+            : "Cash Payment Summary",
           centreOf: (r) => r.station,
           idOf: (r) => get(r, FIELDS.id),
           nameOf: (r) => get(r, FIELDS.name),
-          centreLabel: (id: string) => options.find((o) => o.id === id)?.plainLabel ?? labelOf(id), // Bansi sheet: unchanged (real centre id)
+          centreLabel: (id: string) =>
+            allOptions.find((o) => o.id === id)?.plainLabel ?? labelOf(id), // Bansi sheet: unchanged (real centre id)
           cols: [
-            { header: "Cow Qty", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.cowQty) },
-            { header: "Buff Qty", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.buffQty) },
-            { header: "Total Qty", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.qty) },
-            { header: "Kg Fat", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.kgFat) },
-            { header: "Avg Fat", agg: "wavg", dec: 1, value: (r) => n(r, FIELDS.fat) },
-            { header: "Kg SNF", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.kgSnf) },
-            { header: "Avg SNF", agg: "wavg", dec: 1, value: (r) => n(r, FIELDS.snf) },
-            { header: "Avg Rate", agg: "wavg", dec: 2, value: (r) => n(r, FIELDS.rate) },
-            { header: "Total Amount", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.amount) },
-            { header: "Incentive", agg: "sum", dec: 2, value: (r) => partsOf(r, FIELDS.incentive) ?? 0 },
-            { header: "Transport", agg: "sum", dec: 2, value: (r) => partsOf(r, FIELDS.transport) ?? 0 },
-            { header: "Milk Deposit", agg: "sum", dec: 2, value: (r) => partsOf(r, FIELDS.deposit) ?? 0 },
-            { header: "Cattle Feed", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.cattleFeed) },
-            { header: "Advance", agg: "sum", dec: 2, value: (r) => n(r, FIELDS.advance) },
-            { header: "Payable Amount", agg: "sum", dec: 2, value: (r) => payableOf(r) ?? 0 },
+            {
+              header: "Cow Qty",
+              agg: "sum",
+              dec: 2,
+              value: (r) => n(r, FIELDS.cowQty),
+            },
+            {
+              header: "Buff Qty",
+              agg: "sum",
+              dec: 2,
+              value: (r) => n(r, FIELDS.buffQty),
+            },
+            {
+              header: "Total Qty",
+              agg: "sum",
+              dec: 2,
+              value: (r) => n(r, FIELDS.qty),
+            },
+            {
+              header: "Kg Fat",
+              agg: "sum",
+              dec: 2,
+              value: (r) => n(r, FIELDS.kgFat),
+            },
+            {
+              header: "Avg Fat",
+              agg: "wavg",
+              dec: 1,
+              value: (r) => n(r, FIELDS.fat),
+            },
+            {
+              header: "Kg SNF",
+              agg: "sum",
+              dec: 2,
+              value: (r) => n(r, FIELDS.kgSnf),
+            },
+            {
+              header: "Avg SNF",
+              agg: "wavg",
+              dec: 1,
+              value: (r) => n(r, FIELDS.snf),
+            },
+            {
+              header: "Avg Rate",
+              agg: "wavg",
+              dec: 2,
+              value: (r) => n(r, FIELDS.rate),
+            },
+            {
+              header: "Total Amount",
+              agg: "sum",
+              dec: 2,
+              value: (r) => n(r, FIELDS.amount),
+            },
+            {
+              header: "Incentive",
+              agg: "sum",
+              dec: 2,
+              value: (r) => partsOf(r, FIELDS.incentive) ?? 0,
+            },
+            {
+              header: "Transport",
+              agg: "sum",
+              dec: 2,
+              value: (r) => partsOf(r, FIELDS.transport) ?? 0,
+            },
+            {
+              header: "Milk Deposit",
+              agg: "sum",
+              dec: 2,
+              value: (r) => partsOf(r, FIELDS.deposit) ?? 0,
+            },
+            {
+              header: "Cattle Feed",
+              agg: "sum",
+              dec: 2,
+              value: (r) => n(r, FIELDS.cattleFeed),
+            },
+            {
+              header: "Advance",
+              agg: "sum",
+              dec: 2,
+              value: (r) => n(r, FIELDS.advance),
+            },
+            {
+              header: "Payable Amount",
+              agg: "sum",
+              dec: 2,
+              value: (r) => payableOf(r) ?? 0,
+            },
           ],
           weightIndex: 2,
         }).catch(() => toast("The Excel file could not be created", "error"));
@@ -439,7 +536,7 @@ const CashPaymentSummary: React.FC = () => {
             title={<CardTitle icon={Banknote}>Cash Payment Summary</CardTitle>}
           />
           <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-4">
-            <Field label="Type">
+            {/* <Field label="Type">
               <Select
                 value={type}
                 onChange={(e) => setType(e.target.value as SummaryType)}
@@ -450,7 +547,13 @@ const CashPaymentSummary: React.FC = () => {
                   </option>
                 ))}
               </Select>
-            </Field>
+            </Field> */}
+
+            <PlantSelectField
+              value={plant}
+              onChange={changePlant}
+              options={plantOptions}
+            />
 
             <div className="min-w-0 sm:row-span-2 xl:row-span-1">
               <span className="mb-1.5 block text-sm font-semibold">
@@ -516,7 +619,7 @@ const CashPaymentSummary: React.FC = () => {
               />
             </Field>
 
-            <div className="sm:col-span-2 xl:col-span-4">
+            <div className="sm:col-span-2 xl:col-span-5">
               <Button
                 className="w-full"
                 icon={<Search size={16} />}

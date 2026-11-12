@@ -26,6 +26,8 @@ import {
 } from "../../../components/operations/ReportKit";
 import { useToast } from "../../../context/ToastContext";
 import { useCentreOptions } from "../../../hooks/useCentres";
+import { usePlantScope } from "../../../hooks/usePlantScope";
+import { PlantSelectField } from "../../../components/operations/ReportFilters";
 import { ApiError } from "../../../services/http/errors";
 import { todayISO } from "../../../lib/portal/format";
 import {
@@ -85,7 +87,13 @@ const UploadCard: React.FC<{
   onSaved: (centreIds: string[]) => void;
 }> = ({ chart, setChart, onSaved }) => {
   const toast = useToast();
-  const centres = useCentreOptions();
+  const allCentres = useCentreOptions();
+  // Plant/MCC Name: the VLC list below shows only the centres of the picked plant ("All" = every centre)
+  const { plantOptions, plant, setPlant, belongs } = usePlantScope();
+  const centres = useMemo(
+    () => allCentres.filter((c) => belongs(c.id)),
+    [allCentres, belongs],
+  );
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<RateFile | null>(null);
@@ -125,6 +133,12 @@ const UploadCard: React.FC<{
       else n.delete(id);
       return n;
     });
+
+  const changePlant = (p: string) => {
+    setPlant(p);
+    // centres of another plant are no longer on screen, so they must not stay ticked for Save All
+    setPicked((s) => new Set([...s].filter((id) => belongs(id, p))));
+  };
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
@@ -265,6 +279,12 @@ const UploadCard: React.FC<{
         </div>
 
         <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+          <div className="min-w-0 space-y-4">
+          <PlantSelectField
+            value={plant}
+            onChange={changePlant}
+            options={plantOptions}
+          />
           <div className="max-h-64 min-w-0 overflow-y-auto rounded-xl border border-line bg-panel [scrollbar-color:rgb(var(--mute))_transparent] [scrollbar-width:thin]">
             <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-soft px-3 py-2">
               <input
@@ -305,6 +325,7 @@ const UploadCard: React.FC<{
                 </li>
               )}
             </ul>
+          </div>
           </div>
 
           <div className="min-w-0 space-y-5">

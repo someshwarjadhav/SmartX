@@ -21,6 +21,24 @@ export const PlantMccField: React.FC<{ className?: string }> = ({ className }) =
   );
 };
 
+/**
+ * "Plant/MCC Name" dropdown driven by usePlantScope (plants from the API). Same look as the other filters of the operations pages.
+ */
+export const PlantSelectField: React.FC<{
+  value: string;
+  onChange: (plant: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+}> = ({ value, onChange, options, className }) => (
+  <Field label={GLOBALLABELS.plantMcc} className={className}>
+    <Select value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </Select>
+  </Field>
+);
+
 export const CentreField: React.FC<{
   value: string;
   onChange: (id: string) => void;

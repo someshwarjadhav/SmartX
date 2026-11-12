@@ -40,9 +40,10 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
         </button>
 
         <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 text-sm md:flex">
-          <span className="text-mute">{current?.group.title ?? 'SmartX'}</span>
-          <ChevronRight size={14} className="text-mute/60" aria-hidden />
-          <span className="truncate font-semibold">{current?.item.label ?? 'Not found'}</span>
+          {/* title = the full name as a tooltip on hover, also when the text is cut with "..." on a narrow screen */}
+          <span className="min-w-0 max-w-[45%] shrink-0 truncate text-mute" title={current?.group.title ?? 'SmartX'}>{current?.group.title ?? 'SmartX'}</span>
+          <ChevronRight size={14} className="shrink-0 text-mute/60" aria-hidden />
+          <span className="min-w-0 truncate font-semibold" title={current?.item.label ?? 'Not found'}>{current?.item.label ?? 'Not found'}</span>
         </nav>
 
         <button

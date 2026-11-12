@@ -18,6 +18,8 @@ import { useToast } from "../../../context/ToastContext";
 import { fmtDate, nf, todayISO } from "../../../lib/portal/format";
 import { DEFAULT_PAGE_SIZE, GLOBALSSHIFT } from "../../../lib/portal/global";
 import { useCenters } from "../../../hooks/useSessionData";
+import { usePlantScope } from "../../../hooks/usePlantScope";
+import { PlantSelectField } from "../../../components/operations/ReportFilters";
 import { getSession } from "../../../services/session";
 import { vlccOption, vlccTitle } from "../../../services/vlcc/names";
 import {
@@ -142,7 +144,10 @@ const VlcMilkEntry: React.FC = () => {
   const toast = useToast();
   const centers = useCenters();
   const sessionIds = getSession()?.vlccIds ?? [];
-  const ids = centers.length ? centers.map((c) => c.id) : sessionIds;
+  const allIds = centers.length ? centers.map((c) => c.id) : sessionIds;
+  // Plant/MCC Name: the VLC dropdown shows only the centres of the picked plant ("All" = every centre)
+  const { plantOptions, plant, setPlant, belongs } = usePlantScope();
+  const ids = allIds.filter((id) => belongs(id));
 
   const [vlc, setVlc] = useState("");
   const [shift, setShift] = useState("M");
@@ -172,6 +177,13 @@ const VlcMilkEntry: React.FC = () => {
   useEffect(() => {
     if (!vlc && ids.length) setVlc(ids[0]);
   }, [vlc, ids]);
+
+  const changePlant = (p: string) => {
+    setPlant(p);
+    const list = allIds.filter((id) => belongs(id, p));
+    // the picked VLC is not under the new plant: move to the first VLC of that plant
+    if (list.length && !list.includes(vlc)) setVlc(list[0]);
+  };
 
   const load = useCallback(
     async (silent = false) => {
@@ -386,6 +398,11 @@ const VlcMilkEntry: React.FC = () => {
               })
             }
           >
+            <PlantSelectField
+              value={plant}
+              onChange={changePlant}
+              options={plantOptions}
+            />
             <Field label="VLC">
               <Select value={vlc} onChange={(e) => setVlc(e.target.value)}>
                 {ids.map((id) => (
