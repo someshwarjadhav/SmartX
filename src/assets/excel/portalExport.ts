@@ -1,4 +1,4 @@
-import { toSylk } from '../../lib/sylk';
+import { toCsv } from '../../lib/csv';
 import { excelFileName } from './fileName';
 
 export interface ExportCol<T = unknown> {
@@ -28,8 +28,8 @@ function download(name: string, mime: string, content: string) {
 }
 
 export function exportCSV<T>(name: string, cols: ExportCol<T>[], rows: T[]) {
-  // .csv file name, but written so Excel opens it with every column as wide as its longest value (see lib/sylk.ts)
-  download(`${name}.csv`, 'text/csv;charset=utf-8', toSylk(cols.map((c) => c.header), rows.map((r) => cols.map((c) => cellValue(c.value(r))))));
+  // a real CSV (see lib/csv.ts): Excel opens it without the "file format and extension don't match" warning
+  download(`${name}.csv`, 'text/csv;charset=utf-8', toCsv(cols.map((c) => c.header), rows.map((r) => cols.map((c) => cellValue(c.value(r))))));
 }
 
 const cellValue = (v: string | number): string | number => {

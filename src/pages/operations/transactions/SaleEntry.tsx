@@ -20,7 +20,7 @@ import { useToast } from "../../../context/ToastContext";
 import { exportExcel, type ExportCol } from "../../../assets/excel/portalExport";
 import { todayISO } from "../../../lib/portal/format";
 import { DEFAULT_PAGE_SIZE } from "../../../lib/portal/global";
-import { vlccName } from "../../../services/vlcc/names";
+import { vlccCode, vlccName } from "../../../services/vlcc/names";
 import { ApiError } from "../../../services/http/errors";
 import { getFarmers } from "../../../services/transaction/farmerMilk.api";
 import {
@@ -275,7 +275,7 @@ const SaleEntry: React.FC = () => {
     const s = needle.trim().toLowerCase();
     return s
       ? rows.filter((r) =>
-          [r.id, r.date, r.stationId, r.farmerId, r.farmerName, r.item, r.qty, r.rate, r.amount, flagName(r.flag)]
+          [r.id, r.date, vlccCode(r.stationId), r.farmerId, r.farmerName, r.item, r.qty, r.rate, r.amount, flagName(r.flag)]
             .join(" ")
             .toLowerCase()
             .includes(s),
@@ -288,7 +288,7 @@ const SaleEntry: React.FC = () => {
     return [
       { key: "id", header: "Id", sort: (r) => sortVal(r.id), cell: (r) => r.id || "—" },
       { key: "date", header: "Date", sort: (r) => r.date, cell: (r) => r.date || "—" },
-      { key: "station", header: "Station Id", sort: (r) => sortVal(r.stationId), cell: (r) => r.stationId || "—" },
+      { key: "station", header: "Station Id", sort: (r) => sortVal(vlccCode(r.stationId)), cell: (r) => vlccCode(r.stationId) || "—" },
       {
         key: "vlc",
         header: "VLC Name",
@@ -324,7 +324,7 @@ const SaleEntry: React.FC = () => {
     () => [
       { header: "Id", value: (r) => r.id },
       { header: "Date", value: (r) => r.date },
-      { header: "Station Id", value: (r) => r.stationId },
+      { header: "Station Id", value: (r) => vlccCode(r.stationId) },
       { header: "VLC Name", value: (r) => vlccName(r.stationId) || stationNames.get(r.stationId) || "" },
       { header: "Farmer Id", value: (r) => r.farmerId },
       { header: "Farmer", value: (r) => r.farmerName },

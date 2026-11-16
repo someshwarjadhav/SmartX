@@ -1,4 +1,4 @@
-import { toSylk } from '../../lib/sylk';
+import { toCsv } from '../../lib/csv';
 import { excelFileName, exactExcelFileName } from './fileName';
 
 /** 'id' = a whole number written as it is (farmer id, branch id ...): a real number, no thousands comma */
@@ -225,11 +225,11 @@ function csvDate(v: string): string | null {
 }
 
 export function exportCSV(t: ExportTable): void {
-  // .csv file name, but written so Excel opens it with every column as wide as its longest value (see lib/sylk.ts)
+  // a real CSV (see lib/csv.ts): Excel opens it without the "file format and extension don't match" warning
   const tot = totalsOf(t);
   const plain = (r: Array<string | number>) => r.map((v) => (typeof v === 'number' ? v : csvDate(v) ?? v));
   const rows = [...t.rows, ...(tot && t.rows.length > 0 ? [tot] : [])].map(plain);
-  save(new Blob([toSylk(t.columns.map((c) => c.header), rows)], { type: 'text/csv;charset=utf-8' }), `${t.filename}.csv`);
+  save(new Blob([toCsv(t.columns.map((c) => c.header), rows)], { type: 'text/csv;charset=utf-8' }), `${t.filename}.csv`);
 }
 
 /* ------------------------------------------------------------------ */
