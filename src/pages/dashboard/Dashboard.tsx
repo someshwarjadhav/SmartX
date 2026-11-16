@@ -72,11 +72,11 @@ import { Pagination } from "../../components/ui/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 import { hasRoute, useNav } from "../../components/layout/operations/nav";
 import { SHIFT_WINDOW } from "../../lib/shift";
-
+import type { TodayCentre } from "../../hooks/useDashboardData";
+import { VlccStatusModal } from "./VlccStatusModal";
 
 const litreTick = (v: number) =>
   v >= 1000 ? `${+(v / 1000).toFixed(1)}k` : String(Math.round(v));
-
 
 const RANGE_OPTIONS = [
   { value: 1, label: "Today" },
@@ -84,9 +84,10 @@ const RANGE_OPTIONS = [
   { value: 20, label: "20 days" },
   { value: 30, label: "30 days" },
 ];
-const periodText = (days: number) => (days === 1 ? "today" : `last ${days} days`);
-const previousText = (days: number) => (days === 1 ? "yesterday" : `previous ${days} days`);
-
+const periodText = (days: number) =>
+  days === 1 ? "today" : `last ${days} days`;
+const previousText = (days: number) =>
+  days === 1 ? "yesterday" : `previous ${days} days`;
 
 const useFirstAllowedRoute = (candidates: string[]): string | null => {
   const sections = useNav();
@@ -146,7 +147,11 @@ const IntakeHero: React.FC<{
     shiftState: string;
     farmersPoured: number;
   };
-}> = ({ today }) => {
+  todayCentres?: TodayCentre[];
+  todayDate?: string;
+  loading?: boolean;
+}> = ({ today, todayCentres = [], todayDate = "", loading }) => {
+  const [statusOpen, setStatusOpen] = useState(false);
   return (
     <section
       aria-label="Today's intake"
@@ -175,11 +180,18 @@ const IntakeHero: React.FC<{
                   : "bg-indigo-300/20 text-indigo-100 ring-1 ring-indigo-300/40"
               }`}
             >
-              {today.shift === "Morning" ? <Sunrise size={13} aria-hidden /> : <Sunset size={13} aria-hidden />}
+              {today.shift === "Morning" ? (
+                <Sunrise size={13} aria-hidden />
+              ) : (
+                <Sunset size={13} aria-hidden />
+              )}
               {today.shift} shift
             </span>
             <span className="inline-flex items-center gap-1.5 text-xs text-white/70">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" aria-hidden />
+              <span
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400"
+                aria-hidden
+              />
               {today.shiftState}
             </span>
           </div>
@@ -187,10 +199,18 @@ const IntakeHero: React.FC<{
             Milk received today
           </p>
           <p className="tnum mt-1 font-display text-4xl font-extrabold leading-none sm:text-5xl">
-            {nf(today.litres)}
-            <span className="ml-1.5 text-xl font-semibold text-white/60">
-              L
-            </span>
+            <button
+              type="button"
+              onClick={() => setStatusOpen(true)}
+              aria-haspopup="dialog"
+              title="View VLCC collection status"
+              className="cursor-pointer rounded-lg text-left underline decoration-white/35 decoration-dotted decoration-2 underline-offset-[10px] transition hover:decoration-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/70"
+            >
+              {nf(today.litres)}
+              <span className="ml-1.5 text-xl font-semibold text-white/60">
+                L
+              </span>
+            </button>
           </p>
           <p className="mt-2 text-sm text-white/70">
             {today.target
@@ -248,6 +268,14 @@ const IntakeHero: React.FC<{
           />
         </div>
       </div>
+      <VlccStatusModal
+        open={statusOpen}
+        onClose={() => setStatusOpen(false)}
+        collected={todayCentres}
+        date={todayDate}
+        shift={today.shift}
+        loading={loading}
+      />
     </section>
   );
 };
@@ -1118,7 +1146,12 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:gap-5 xl:grid-cols-12">
         <div className="xl:col-span-5">
-          <IntakeHero today={data.today} />
+          <IntakeHero
+            today={data.today}
+            todayCentres={data.todayCentres}
+            todayDate={data.todayDate}
+            loading={data.loading}
+          />
         </div>
         <div className="xl:col-span-7">
           <KpiMosaic
