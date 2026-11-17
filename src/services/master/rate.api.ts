@@ -1,12 +1,10 @@
-import { clearRequestMemo, directGet, gatewayGet } from "../http/client";
+import { clearRequestMemo } from "../http/client";
 import {
   dpuGet,
   dpuSaveAttempts,
   encryptedShapes,
-  openDpuReply,
   type SaveAttempt,
 } from "../http/dpu";
-import { BASE_URL } from "../config";
 import { DPU } from "../http/dpuEndpoints";
 import { ApiError } from "../http/errors";
 import { encryptXorPayload } from "../../lib/portal/crypto";
@@ -190,39 +188,11 @@ export function gridFromRecords(records: Obj[]): RateGrid {
   return { snfs, rows };
 }
 
-export const RATE_SHOW_PATH = "/dairy/dairy/ShowRateWeb";
+// DPU: GET https://dpu.shivinfotech.co.in/api/Login/ShowRateWeb (the old /dairy/dairy/ShowRateWeb is not used any more)
+export const RATE_SHOW_PATH = DPU.showRateWeb;
 
 async function showRateJson(query: string): Promise<unknown> {
-  const path = `${RATE_SHOW_PATH}${query}`;
-  try {
-    return openDpuReply(await gatewayGet(path, 0), 0, true);
-  } catch (first) {
-    if (first instanceof ApiError && first.kind === "auth") throw first;
-    console.warn(
-      "[RateMaster] STIPL ShowRateWeb (direct) failed, trying the gateway:",
-      first,
-    );
-    try {
-      const root = BASE_URL || "https://smartx.shivinfotech.co.in";
-      const base = /^https?:/i.test(root)
-        ? root
-        : `${window.location.origin}${root}`;
-      return openDpuReply(
-        await directGet(
-          `${base}/gateway/Interceptor?path=${encodeURIComponent(path)}`,
-          0,
-        ),
-        0,
-        true,
-      );
-    } catch (second) {
-      console.warn(
-        "[RateMaster] STIPL ShowRateWeb (gateway) failed, using the DPU host instead:",
-        second,
-      );
-      return dpuGet(`${DPU.showRateWeb}${query}`, 0);
-    }
-  }
+  return dpuGet(`${RATE_SHOW_PATH}${query}`, 0);
 }
 
 export async function showRate(

@@ -1,6 +1,7 @@
 import { FARMER_MILK_CODES, ALL_MILK_CODE } from '../config';
 import { gatewayText, parseGatewayText } from '../http/client';
 import { dpuUrl, openDpuReply } from '../http/dpu';
+import { DPU } from '../http/dpuEndpoints';
 import { ApiError } from '../http/errors';
 import { fanOut, needSession, type CollectionParams, type Emit, type QueryData } from '../http/fanout';
 import { isoOfTrdate, nk, rowsOfReply, trdateOf, windowsOf } from '../farmer/farmer.api';
@@ -9,9 +10,9 @@ import type { RawLoose, RawVlccRow } from '../types/raw';
 import { apiDate, eachDay } from '../utils/date';
 
 
-export const DPU_VLCC_COLLECTION_PATH = '/Login/VlccCollection';
+export const DPU_VLCC_COLLECTION_PATH = DPU.vlccCollection;
 
-/** Raw field -> names the DPU reply may use for it (compared ignoring case / symbols). */
+
 const ALIASES: Record<keyof RawVlccRow, string[]> = {
   villagename: ['villagename', 'vlccname', 'vlcname', 'dcsname', 'centername', 'centrename', 'name'],
   vlccid: ['vlccid', 'vlcid', 'villageid', 'stationid', 'dcscode', 'centerid', 'centreid'],
@@ -72,7 +73,7 @@ export async function fetchVlccCollection(p: CollectionParams, emit?: Emit<RawVl
   });
   const readRange = async (id: string, code: string, fallbackId: string, from: string, to: string): Promise<RawVlccRow[]> =>
     rowsOfReply(await dpuGetCall(query(id, code, from, to), p.priority ?? 1)).map((r) => toRawVlcc(r, fallbackId, code, p.shift));
-  // retry once; a long date range that fails is asked day by day so no centre silently drops out of the totals
+ 
   const read = async (id: string, code: string, fallbackId: string, rangeFrom: string, rangeTo: string): Promise<RawVlccRow[]> => {
     const once = async (from: string, to: string): Promise<RawVlccRow[]> => {
       try {
@@ -90,7 +91,7 @@ export async function fetchVlccCollection(p: CollectionParams, emit?: Emit<RawVl
     }
   };
 
-  // days that were already loaded (this visit or earlier) come from the browser; only the missing days go to the server
+ 
   const codes = milkCodes(p.milk);
   const days = eachDay(p.from, p.to);
   const idsKey = p.vlccIds.join(',');
@@ -115,7 +116,7 @@ export async function fetchVlccCollection(p: CollectionParams, emit?: Emit<RawVl
     let incomplete = false;
     const rows = await (async (): Promise<RawVlccRow[]> => {
       if (p.vlccIds.length <= 1) return read(p.vlccIds[0] ?? '', code, p.vlccIds[0] ?? '', from, to);
-      // one call for every centre; if the API only answers one centre per call, ask centre by centre
+     
       try {
         const joined = await read(idsKey, code, '', from, to);
         const centres = new Set(joined.map((r) => String(r.vlccid)).filter(Boolean));
@@ -134,7 +135,7 @@ export async function fetchVlccCollection(p: CollectionParams, emit?: Emit<RawVl
       if (bucket) bucket.push(r);
       else placeable = false;
     }
-    // a centre that did not answer was turned into an empty list above: an incomplete answer is never remembered
+    
     if (placeable && !incomplete) dayCacheSet([...byDay].map(([d, list]) => [keyOf(code, d), list] as [string, unknown[]]));
     return rows;
   });
