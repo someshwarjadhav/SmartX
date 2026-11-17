@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import {
+  fmtDateLong,
   greeting,
   initials,
   longDate,
@@ -27,13 +28,9 @@ import {
   pct,
   rupees,
 } from "../../lib/format";
-import { Segmented } from "../../components/ui/Segmented";
-import {
-  type CentreRow,
-  type MilkKind,
-  type RangeKey,
-  type SupplierRow,
-} from "../../types";
+import { PastDateInput } from "../../components/operations/ui/PastDateInput";
+import { earliestPastDate, todayISO } from "../../lib/dateRange";
+import { type CentreRow, type MilkKind, type SupplierRow } from "../../types";
 import type { CollectionEntry } from "../../data/farmerCollection";
 import type { Summary } from "../../data/dairy";
 import { Tanker } from "../../components/brand/Tanker";
@@ -61,33 +58,27 @@ import { ChartTip } from "../../components/charts/ChartTip";
 import { KIND_BG, KIND_LABEL, KindChip } from "../../components/ui/KindChip";
 import { Badge, type Tone } from "../../components/ui/Badge";
 import { useDashboardData } from "../../hooks/useDashboardData";
-import {
-  ALL_CENTRES,
-  useTrendData,
-  type TrendDays,
-} from "../../hooks/useTrendData";
+import { ALL_CENTRES, useTrendData } from "../../hooks/useTrendData";
 import { useCentreOptions } from "../../hooks/useCentres";
 import { Select } from "../../components/ui/Select";
 import { Pagination } from "../../components/ui/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 import { hasRoute, useNav } from "../../components/layout/operations/nav";
-import { SHIFT_WINDOW } from "../../lib/shift";
+import { SHIFT_WINDOW, currentShift, type ShiftName } from "../../lib/shift";
 import type { TodayCentre } from "../../hooks/useDashboardData";
 import { VlccStatusModal } from "./VlccStatusModal";
 
 const litreTick = (v: number) =>
   v >= 1000 ? `${+(v / 1000).toFixed(1)}k` : String(Math.round(v));
 
-const RANGE_OPTIONS = [
-  { value: 1, label: "Today" },
-  { value: 10, label: "10 days" },
-  { value: 20, label: "20 days" },
-  { value: 30, label: "30 days" },
+const SHIFT_OPTIONS = [
+  { value: "Morning", label: "Morning" },
+  { value: "Evening", label: "Evening" },
 ];
-const periodText = (days: number) =>
-  days === 1 ? "today" : `last ${days} days`;
-const previousText = (days: number) =>
-  days === 1 ? "yesterday" : `previous ${days} days`;
+
+const periodText = (date: string, shift: string) =>
+  `${date === todayISO() ? "today" : fmtDateLong(date)}, ${shift} shift`;
+const previousText = () => "previous day";
 
 const useFirstAllowedRoute = (candidates: string[]): string | null => {
   const sections = useNav();
@@ -105,14 +96,48 @@ const ViewAll: React.FC<{ to: string | null }> = ({ to }) =>
     </Link>
   ) : null;
 
-/* ---------- DashboardHeader ---------- */
+const DatePick: React.FC<{
+  value: string;
+  onChange: (date: string) => void;
+  label: string;
+  className?: string;
+}> = ({ value, onChange, label, className }) => {
+  const newest = todayISO();
+  const oldest = earliestPastDate();
+  return (
+    <div className={cn("relative", className)}>
+      <CalendarDays
+        size={15}
+        aria-hidden
+        className="pointer-events-none absolute left-3 top-1/2 z-[1] -translate-y-1/2 text-mute"
+      />
+      <PastDateInput
+        value={value}
+        max={newest}
+        aria-label={label}
+        className="h-10 pl-9 pr-2 text-sm font-semibold"
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v && v >= oldest && v <= newest) onChange(v);
+        }}
+      />
+    </div>
+  );
+};
 
 interface HeaderProps {
-  range: RangeKey;
-  onRange: (r: RangeKey) => void;
+  date: string;
+  shift: ShiftName;
+  onDate: (date: string) => void;
+  onShift: (shift: ShiftName) => void;
 }
 
-const DashboardHeader: React.FC<HeaderProps> = ({ range, onRange }) => {
+const DashboardHeader: React.FC<HeaderProps> = ({
+  date,
+  shift,
+  onDate,
+  onShift,
+}) => {
   const { user } = useAuth();
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 sm:mb-6">
@@ -125,17 +150,40 @@ const DashboardHeader: React.FC<HeaderProps> = ({ range, onRange }) => {
           {greeting()}, {user?.name.split(" ")[0] ?? "there"}
         </h1>
       </div>
-      <Segmented
-        label="Report period"
-        value={range}
-        onChange={(v) => onRange(v as RangeKey)}
-        options={RANGE_OPTIONS}
-      />
+      <div
+        role="group"
+        aria-label="Report date and shift"
+        className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-end sm:gap-3"
+      >
+        <div className="min-w-0 sm:w-48">
+          <span className="mb-1 block text-xs font-semibold text-mute">
+            Date
+          </span>
+
+          <DatePick value={date} onChange={onDate} label="Report date" />
+        </div>
+        <div className="min-w-0 sm:w-40">
+          <span className="mb-1 block text-xs font-semibold text-mute">
+            Shift
+          </span>
+          <Select
+            value={shift}
+            onChange={(v) => onShift(v as ShiftName)}
+            options={SHIFT_OPTIONS}
+            label="Shift"
+            icon={
+              shift === "Morning" ? (
+                <Sunrise size={15} aria-hidden />
+              ) : (
+                <Sunset size={15} aria-hidden />
+              )
+            }
+          />
+        </div>
+      </div>
     </div>
   );
 };
-
-/* ---------- IntakeHero ---------- */
 
 const IntakeHero: React.FC<{
   today: {
@@ -152,9 +200,10 @@ const IntakeHero: React.FC<{
   loading?: boolean;
 }> = ({ today, todayCentres = [], todayDate = "", loading }) => {
   const [statusOpen, setStatusOpen] = useState(false);
+  const isToday = todayDate === todayISO();
   return (
     <section
-      aria-label="Today's intake"
+      aria-label="Milk intake"
       className="relative min-w-0 overflow-hidden rounded-2xl border border-line text-white shadow-card"
       style={{
         background:
@@ -196,7 +245,9 @@ const IntakeHero: React.FC<{
             </span>
           </div>
           <p className="text-sm font-medium text-white/70">
-            Milk received today
+            {isToday
+              ? "Milk received today"
+              : `Milk received on ${fmtDateLong(todayDate)}`}
           </p>
           <p className="tnum mt-1 font-display text-4xl font-extrabold leading-none sm:text-5xl">
             <button
@@ -280,12 +331,10 @@ const IntakeHero: React.FC<{
   );
 };
 
-/* ---------- KpiMosaic ---------- */
-
 interface KpiProps {
   summary: Summary;
   centres: CentreRow[];
-  range: number;
+  period: string;
 }
 
 interface Tile {
@@ -316,7 +365,7 @@ const Delta: React.FC<{ value: number }> = ({ value }) => {
   );
 };
 
-const KpiMosaic: React.FC<KpiProps> = ({ summary, centres, range }) => {
+const KpiMosaic: React.FC<KpiProps> = ({ summary, centres, period }) => {
   const cc = useChartColors();
   const active = centres.filter((c) => c.status === "active").length;
 
@@ -398,7 +447,7 @@ const KpiMosaic: React.FC<KpiProps> = ({ summary, centres, range }) => {
 
   return (
     <section
-      aria-label={`Key numbers, ${periodText(range)}`}
+      aria-label={`Key numbers, ${period}`}
       className="h-full min-w-0 overflow-hidden rounded-2xl border border-line bg-line shadow-card"
     >
       <div className="grid h-full auto-rows-fr grid-cols-2 gap-px 2xl:grid-cols-3">
@@ -426,7 +475,7 @@ const KpiMosaic: React.FC<KpiProps> = ({ summary, centres, range }) => {
               {t.delta !== undefined && (
                 <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-mute">
                   <Delta value={t.delta} />
-                  <span>vs {previousText(range)}</span>
+                  <span>vs {previousText()}</span>
                 </p>
               )}
               {t.spark && (
@@ -445,14 +494,13 @@ const KpiMosaic: React.FC<KpiProps> = ({ summary, centres, range }) => {
   );
 };
 
-/* ---------- TrendChart ---------- */
-
 const TrendChart: React.FC = () => {
   const cc = useChartColors();
   const centres = useCentreOptions();
   const [centre, setCentre] = useState<string>(ALL_CENTRES);
-  const [days, setDays] = useState<TrendDays>(1);
-  const { data, loading } = useTrendData(days, centre);
+
+  const [date, setDate] = useState<string>(() => todayISO());
+  const { data, loading } = useTrendData(date, centre);
   const centreLabel =
     centre === ALL_CENTRES
       ? "All centres"
@@ -461,7 +509,7 @@ const TrendChart: React.FC = () => {
   return (
     <Panel
       title="Milk collection"
-      subtitle={`${days === 1 ? "Litres today by shift" : "Litres per day"}, split by milk type · ${centreLabel}`}
+      subtitle={`Litres ${date === todayISO() ? "today" : `on ${fmtDateLong(date)}`} by shift, split by milk type · ${centreLabel}`}
       className="h-full"
       action={
         <div className="flex flex-wrap items-center justify-end gap-3">
@@ -475,11 +523,11 @@ const TrendChart: React.FC = () => {
               ...centres.map((c) => ({ value: c.id, label: c.label })),
             ]}
           />
-          <Segmented
-            label="Chart period"
-            value={days}
-            onChange={(v) => setDays(v as TrendDays)}
-            options={RANGE_OPTIONS}
+          <DatePick
+            value={date}
+            onChange={setDate}
+            label="Chart date"
+            className="w-full min-w-[150px] sm:w-44"
           />
         </div>
       }
@@ -490,7 +538,7 @@ const TrendChart: React.FC = () => {
           loading && "opacity-60",
         )}
         role="img"
-        aria-label="Stacked area chart of daily litres by milk type"
+        aria-label="Stacked area chart of litres by shift and milk type"
       >
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
@@ -545,7 +593,7 @@ const TrendChart: React.FC = () => {
               stackId="s"
               stroke={cc.buffalo}
               strokeWidth={2}
-              dot={days === 1 ? { r: 3 } : false}
+              dot={{ r: 3 }}
               fill="url(#tr-buf)"
             />
             <Area
@@ -555,7 +603,7 @@ const TrendChart: React.FC = () => {
               stackId="s"
               stroke={cc.cow}
               strokeWidth={2}
-              dot={days === 1 ? { r: 3 } : false}
+              dot={{ r: 3 }}
               fill="url(#tr-cow)"
             />
             <Area
@@ -565,7 +613,7 @@ const TrendChart: React.FC = () => {
               stackId="s"
               stroke={cc.mix}
               strokeWidth={2}
-              dot={days === 1 ? { r: 3 } : false}
+              dot={{ r: 3 }}
               fill="url(#tr-mix)"
             />
           </AreaChart>
@@ -593,11 +641,9 @@ const TrendChart: React.FC = () => {
   );
 };
 
-/* ---------- MilkMix ---------- */
-
-const MilkMix: React.FC<{ mix: Record<MilkKind, number>; range: number }> = ({
+const MilkMix: React.FC<{ mix: Record<MilkKind, number>; period: string }> = ({
   mix,
-  range,
+  period,
 }) => {
   const cc = useChartColors();
   const kinds: MilkKind[] = ["buffalo", "cow", "mix"];
@@ -616,7 +662,7 @@ const MilkMix: React.FC<{ mix: Record<MilkKind, number>; range: number }> = ({
   return (
     <Panel
       title="Milk mix"
-      subtitle={`Share of litres, ${periodText(range)}`}
+      subtitle={`Share of litres, ${period}`}
       className="h-full"
     >
       <div
@@ -674,23 +720,21 @@ const MilkMix: React.FC<{ mix: Record<MilkKind, number>; range: number }> = ({
   );
 };
 
-/* ---------- QualityChart ---------- */
-
 interface QualityRow {
   label: string;
   Fat: number;
   SNF: number;
 }
 
-const QualityChart: React.FC<{ data: QualityRow[]; range: number }> = ({
+const QualityChart: React.FC<{ data: QualityRow[]; period: string }> = ({
   data,
-  range,
+  period,
 }) => {
   const cc = useChartColors();
   return (
     <Panel
       title="Fat and SNF"
-      subtitle={`${range === 1 ? "Weighted average" : "Daily weighted average"}, ${periodText(range)}`}
+      subtitle={`Weighted average, ${period}`}
       className="h-full"
     >
       <div
@@ -781,23 +825,21 @@ const QualityChart: React.FC<{ data: QualityRow[]; range: number }> = ({
   );
 };
 
-/* ---------- ShiftChart ---------- */
-
 interface ShiftRow {
   label: string;
   Morning: number;
   Evening: number;
 }
 
-const ShiftChart: React.FC<{ data: ShiftRow[]; range: number }> = ({
+const ShiftChart: React.FC<{ data: ShiftRow[]; period: string }> = ({
   data,
-  range,
+  period,
 }) => {
   const cc = useChartColors();
   return (
     <Panel
       title="Morning and evening"
-      subtitle={`Litres per shift, ${periodText(range)}`}
+      subtitle={`Litres per shift, ${period.split(",")[0]}`}
       className="h-full"
     >
       <div
@@ -869,9 +911,6 @@ const ShiftChart: React.FC<{ data: ShiftRow[]; range: number }> = ({
   );
 };
 
-/* ---------- LiveFeed ---------- */
-
-// fixed height, no scrolling: only the newest few rows are shown, "View all" opens the full list
 const LIST_HEIGHT = "lg:h-[470px]";
 const LATEST_ROWS = 6;
 const TOP_ROWS = 5;
@@ -888,7 +927,7 @@ const LiveFeed: React.FC<{ rows: CollectionEntry[]; loading: boolean }> = ({
   return (
     <Panel
       title="Latest collection records"
-      subtitle="Newest samples received from the centres"
+      subtitle="Newest samples of the selected date and shift"
       className="h-full"
       bodyClassName="!px-0 !pb-0"
       action={
@@ -948,8 +987,6 @@ const LiveFeed: React.FC<{ rows: CollectionEntry[]; loading: boolean }> = ({
   );
 };
 
-/* ---------- CentreTable ---------- */
-
 const CENTRE_STATUS: Record<
   CentreRow["status"],
   { label: string; tone: Tone }
@@ -961,17 +998,17 @@ const CENTRE_STATUS: Record<
 
 const CENTRE_PAGE_SIZE = 10;
 
-const CentreTable: React.FC<{ rows: CentreRow[]; range: number }> = ({
+const CentreTable: React.FC<{ rows: CentreRow[]; period: string }> = ({
   rows,
-  range,
+  period,
 }) => {
   const max = Math.max(...rows.map((r) => r.litres), 1);
-  // same pager as the farmer milk collection report; 10 centres per page
+
   const pager = usePagination(rows, CENTRE_PAGE_SIZE);
   return (
     <Panel
       title="Centres"
-      subtitle={`Litres received per centre, ${periodText(range)}`}
+      subtitle={`Litres received per centre, ${period}`}
       className="h-full"
       bodyClassName="!px-0 !pb-1"
     >
@@ -1055,11 +1092,9 @@ const CentreTable: React.FC<{ rows: CentreRow[]; range: number }> = ({
   );
 };
 
-/* ---------- TopSuppliers ---------- */
-
-const TopSuppliers: React.FC<{ rows: SupplierRow[]; range: number }> = ({
+const TopSuppliers: React.FC<{ rows: SupplierRow[]; period: string }> = ({
   rows,
-  range,
+  period,
 }) => {
   const max = Math.max(...rows.map((r) => r.litres), 1);
   const to = useFirstAllowedRoute([
@@ -1070,7 +1105,7 @@ const TopSuppliers: React.FC<{ rows: SupplierRow[]; range: number }> = ({
   return (
     <Panel
       title="Top farmers"
-      subtitle={`Most litres poured, ${periodText(range)}`}
+      subtitle={`Most litres poured, ${period}`}
       className="h-full"
       bodyClassName="!px-0 !pb-0"
       action={<ViewAll to={to} />}
@@ -1126,15 +1161,20 @@ const TopSuppliers: React.FC<{ rows: SupplierRow[]; range: number }> = ({
   );
 };
 
-/* ---------- Page ---------- */
-
 const Dashboard: React.FC = () => {
-  const [range, setRange] = useState<RangeKey>(1);
-  const data = useDashboardData(range);
+  const [date, setDate] = useState<string>(() => todayISO());
+  const [shift, setShift] = useState<ShiftName>(() => currentShift());
+  const data = useDashboardData(date, shift);
+  const period = periodText(date, shift);
 
   return (
     <div>
-      <DashboardHeader range={range} onRange={setRange} />
+      <DashboardHeader
+        date={date}
+        shift={shift}
+        onDate={setDate}
+        onShift={setShift}
+      />
       {data.error && (
         <div
           role="alert"
@@ -1157,7 +1197,7 @@ const Dashboard: React.FC = () => {
           <KpiMosaic
             summary={data.summary}
             centres={data.centres}
-            range={range}
+            period={period}
           />
         </div>
 
@@ -1165,25 +1205,25 @@ const Dashboard: React.FC = () => {
           <TrendChart />
         </div>
         <div className="xl:col-span-4">
-          <MilkMix mix={data.summary.mixByKind} range={range} />
+          <MilkMix mix={data.summary.mixByKind} period={period} />
         </div>
 
         <div className="xl:col-span-7">
-          <QualityChart data={data.trend} range={range} />
+          <QualityChart data={data.trend} period={period} />
         </div>
         <div className="xl:col-span-5">
-          <ShiftChart data={data.shifts} range={range} />
+          <ShiftChart data={data.shifts} period={period} />
         </div>
 
         <div className="xl:col-span-7">
           <LiveFeed rows={data.recentRows} loading={data.loading} />
         </div>
         <div className="xl:col-span-5">
-          <TopSuppliers rows={data.suppliers} range={range} />
+          <TopSuppliers rows={data.suppliers} period={period} />
         </div>
 
         <div className="xl:col-span-12">
-          <CentreTable rows={data.centres} range={range} />
+          <CentreTable rows={data.centres} period={period} />
         </div>
       </div>
     </div>
