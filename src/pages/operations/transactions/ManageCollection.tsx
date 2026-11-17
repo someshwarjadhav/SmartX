@@ -6,7 +6,10 @@ import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
 import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
 import { Modal } from "../../../components/operations/ui/Modal";
-import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
+import {
+  DataTable,
+  type Column,
+} from "../../../components/operations/ui/DataTable";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
   CardTitle,
@@ -15,7 +18,10 @@ import {
   Reveal,
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
-import { exportExcel, type ExportCol } from "../../../assets/excel/portalExport";
+import {
+  exportExcel,
+  type ExportCol,
+} from "../../../assets/excel/portalExport";
 import { useToast } from "../../../context/ToastContext";
 import { todayISO } from "../../../lib/portal/format";
 import { DEFAULT_PAGE_SIZE, GLOBALSSHIFT } from "../../../lib/portal/global";
@@ -590,61 +596,65 @@ const ManageCollection: React.FC = () => {
         </Card>
       </Reveal>
 
-      {applied && (
-        <Reveal delay={0.1}>
-          <Card>
-            <ReportBar
-              count={visible.length}
-              hideCount={loading || !!error}
-              disabled={loading || !!error || visible.length === 0}
-              kinds={["xls"]}
-              onExport={() =>
-                exportExcel(
-                  `manage-collection-${applied.vlc}-${applied.from}-${applied.to}-${applied.shift}-${applied.milk}`,
-                  exportCols,
-                  visible,
-                )
+      <Reveal delay={0.1}>
+        <Card>
+          <ReportBar
+            count={visible.length}
+            hideCount={loading || !!error}
+            disabled={loading || !!error || visible.length === 0}
+            kinds={["xls"]}
+            onExport={() =>
+              applied &&
+              exportExcel(
+                `manage-collection-${applied.vlc}-${applied.from}-${applied.to}-${applied.shift}-${applied.milk}`,
+                exportCols,
+                visible,
+              )
+            }
+            left={
+              <div className="w-56 max-w-full">
+                <Input
+                  placeholder="Search any column"
+                  value={needle}
+                  onChange={(e) => setNeedle(e.target.value)}
+                />
+              </div>
+            }
+          />
+          {note && !loading && (
+            <p className="border-b border-line px-4 py-2 text-xs text-mute sm:px-6">
+              {note}
+            </p>
+          )}
+          {loading ? (
+            <MilkLoader label="Loading entries…" />
+          ) : error ? (
+            <ErrorBlock message={error} onRetry={() => void show()} />
+          ) : (
+            <DataTable
+              columns={columns}
+              rows={visible}
+              rowKey={(r) => idOf(r) || JSON.stringify(r)}
+              minWidth={1180}
+              rowClassName={(r) =>
+                editId && editId === idOf(r) ? "bg-brand/[0.07]" : undefined
               }
-              left={
-                <div className="w-56 max-w-full">
-                  <Input
-                    placeholder="Search any column"
-                    value={needle}
-                    onChange={(e) => setNeedle(e.target.value)}
-                  />
-                </div>
+              pageSize={DEFAULT_PAGE_SIZE}
+              pageSizes={[10, 25, 50, 100, 250]}
+              sizeLabel="Result per page"
+              empty={
+                <p className="px-6 py-10 text-center text-sm text-mute">
+                  {!applied
+                    ? "No data. Click Show to load entries."
+                    : rows.length === 0
+                      ? "No entry for these filters."
+                      : "Nothing matches your search."}
+                </p>
               }
             />
-            {note && !loading && (
-              <p className="border-b border-line px-4 py-2 text-xs text-mute sm:px-6">
-                {note}
-              </p>
-            )}
-            {loading ? (
-              <MilkLoader label="Loading entries…" />
-            ) : error ? (
-              <ErrorBlock message={error} onRetry={() => void show()} />
-            ) : visible.length === 0 ? (
-              <p className="px-6 py-10 text-center text-sm text-mute">
-                {rows.length === 0
-                  ? "No entry for these filters."
-                  : "Nothing matches your search."}
-              </p>
-            ) : (
-              <DataTable
-                columns={columns}
-                rows={visible}
-                rowKey={(r) => idOf(r) || JSON.stringify(r)}
-                minWidth={1180}
-                rowClassName={(r) => (editId && editId === idOf(r) ? "bg-brand/[0.07]" : undefined)}
-                pageSize={DEFAULT_PAGE_SIZE}
-                pageSizes={[10, 25, 50, 100, 250]}
-                sizeLabel="Result per page"
-              />
-            )}
-          </Card>
-        </Reveal>
-      )}
+          )}
+        </Card>
+      </Reveal>
 
       <Modal
         open={!!toDelete}

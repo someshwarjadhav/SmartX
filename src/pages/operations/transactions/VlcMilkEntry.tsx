@@ -4,7 +4,10 @@ import { Eye, RotateCcw, Save, Milk } from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
-import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
+import {
+  DataTable,
+  type Column,
+} from "../../../components/operations/ui/DataTable";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
   CardTitle,
@@ -13,7 +16,10 @@ import {
   Reveal,
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
-import { exportExcel, type ExportCol } from "../../../assets/excel/portalExport";
+import {
+  exportExcel,
+  type ExportCol,
+} from "../../../assets/excel/portalExport";
 import { useToast } from "../../../context/ToastContext";
 import { fmtDate, nf, todayISO } from "../../../lib/portal/format";
 import { DEFAULT_PAGE_SIZE, GLOBALSSHIFT } from "../../../lib/portal/global";
@@ -152,7 +158,7 @@ const VlcMilkEntry: React.FC = () => {
   const { plantOptions, plant, setPlant, belongs } = usePlantScope();
   const ids = allIds.filter((id) => belongs(id));
 
-  const [vlc, setVlc] = useState("");
+  const [vlc, setVlc] = useState(ALL);
   const [shift, setShift] = useState("M");
   const [milk, setMilk] = useState("C");
   const [date, setDate] = useState(todayISO());
@@ -165,11 +171,14 @@ const VlcMilkEntry: React.FC = () => {
     vlc: string;
     shift: string;
     date: string;
+    targets: string[];
   } | null>(null);
 
-  const [rows, setRows] = useState<VlcMilkRow[]>([]);
+ 
+  const [byVlc, setByVlc] = useState<Record<string, VlcMilkRow[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [needle, setNeedle] = useState("");
   const stamp = useRef(0);
@@ -177,31 +186,58 @@ const VlcMilkEntry: React.FC = () => {
   const pendingRef = useRef<Pending[]>([]);
   pendingRef.current = pending;
 
-  useEffect(() => {
-    if (!vlc && ids.length) setVlc(ids[0]);
-  }, [vlc, ids]);
+  const rows = useMemo(
+    () => (applied ? applied.targets.flatMap((id) => byVlc[id] ?? []) : []),
+    [applied, byVlc],
+  );
+  const covers = (a: { vlc: string; targets: string[] }, id: string) =>
+    a.vlc === ALL ? a.targets.includes(id) : a.vlc === id;
 
   const changePlant = (p: string) => {
     setPlant(p);
     const list = allIds.filter((id) => belongs(id, p));
-    // the picked VLC is not under the new plant: move to the first VLC of that plant
-    if (list.length && !list.includes(vlc)) setVlc(list[0]);
+  
+    if (vlc !== ALL && list.length && !list.includes(vlc)) setVlc(list[0]);
   };
 
   const load = useCallback(
-    async (silent = false) => {
+    async (silent = false, only?: string) => {
       if (!applied) return;
-      const { vlc: aVlc, shift: aShift, date: aDate } = applied;
+      const { vlc: aVlc, shift: aShift, date: aDate, targets } = applied;
       if (!aVlc || !aDate) return;
+      const list = only ? [only] : targets;
+      if (!list.length) return;
       const me = ++stamp.current;
       if (!silent) setLoading(true);
       setError(null);
+      if (!only) setNote(null);
       try {
-        const got = await getVlcMilk(aVlc, aShift, aDate);
-        if (me === stamp.current) setRows(got);
+        const results = await Promise.allSettled(
+          list.map((id) => getVlcMilk(id, aShift, aDate)),
+        );
+        if (me !== stamp.current) return;
+        const failed = results.filter((r) => r.status === "rejected").length;
+        if (failed === results.length) {
+          const first = results.find(
+            (r) => r.status === "rejected",
+          ) as PromiseRejectedResult;
+          throw first.reason;
+        }
+        const next: Record<string, VlcMilkRow[]> = {};
+        list.forEach((id, i) => {
+          const r = results[i];
+          
+          if (r.status === "fulfilled")
+            next[id] = r.value.map((row) => ({ vlccid: id, ...row }));
+        });
+        setByVlc((prev) => (only ? { ...prev, ...next } : next));
+        if (!only && failed > 0)
+          setNote(`${failed} of ${list.length} centres could not be loaded.`);
       } catch (e) {
         if (me !== stamp.current) return;
-        setRows([]);
+      
+        if (only) return;
+        setByVlc({});
         setError(
           e instanceof ApiError
             ? e.message
@@ -243,6 +279,7 @@ const VlcMilkEntry: React.FC = () => {
 
   const valid =
     !!vlc &&
+    vlc !== ALL &&
     !!date &&
     [qty, fat, snf, clr].every((x) => num(x) !== null) &&
     (num(qty) ?? 0) > 0;
@@ -270,7 +307,7 @@ const VlcMilkEntry: React.FC = () => {
     };
     const tableIsOnThese =
       !!applied &&
-      applied.vlc === vlc &&
+      covers(applied, vlc) &&
       applied.shift === shift &&
       applied.date === date;
     const milkName = MILKS.find((m) => m.Id === milk)?.Name ?? milk;
@@ -307,11 +344,11 @@ const VlcMilkEntry: React.FC = () => {
       };
       setPending((x) => [...x, p]);
       clearForm();
-      await load(true);
+      await load(true, vlc);
 
       for (let i = 0; i < 5 && pendingRef.current.includes(p); i++) {
         await sleep(1500);
-        await load(true);
+        await load(true, vlc);
       }
       if (pendingRef.current.includes(p)) {
         setPending((x) => x.filter((y) => y !== p));
@@ -325,7 +362,7 @@ const VlcMilkEntry: React.FC = () => {
         e instanceof ApiError ? e.message : "The entry could not be saved",
         "warn",
       );
-      if (tableIsOnThese) await load(true);
+      if (tableIsOnThese) await load(true, vlc);
     } finally {
       setSaving(false);
     }
@@ -338,7 +375,7 @@ const VlcMilkEntry: React.FC = () => {
         .filter(
           (p) =>
             !!applied &&
-            p.vlc === applied.vlc &&
+            covers(applied, p.vlc) &&
             p.shift === applied.shift &&
             p.date === applied.date &&
             !rows.some((r) => matches(p, r)),
@@ -396,7 +433,8 @@ const VlcMilkEntry: React.FC = () => {
           <div
             onKeyDown={(e) =>
               handleEnterNext(e, {
-                onLast: (root) => (valid ? void submit() : focusFirstEmpty(root)),
+                onLast: (root) =>
+                  valid ? void submit() : focusFirstEmpty(root),
               })
             }
           >
@@ -408,6 +446,7 @@ const VlcMilkEntry: React.FC = () => {
             />
             <Field label="VLC">
               <Select value={vlc} onChange={(e) => setVlc(e.target.value)}>
+                <option value={ALL}>All</option>
                 {ids.map((id) => (
                   <option key={id} value={id}>
                     {vlccOption(id)}
@@ -501,65 +540,86 @@ const VlcMilkEntry: React.FC = () => {
                 variant="outline"
                 icon={<Eye size={16} />}
                 loading={loading}
-                disabled={!vlc || !date}
-                onClick={() => setApplied({ vlc, shift, date })}
+                disabled={!vlc || !date || (vlc === ALL && ids.length === 0)}
+                onClick={() =>
+                  setApplied({
+                    vlc,
+                    shift,
+                    date,
+                    targets: vlc === ALL ? [...ids] : [vlc],
+                  })
+                }
               >
                 Show
               </Button>
+              {vlc === ALL && (
+                <p className="text-xs text-mute sm:self-center">
+                  Select a VLC to enter milk. All is for viewing only.
+                </p>
+              )}
             </div>
           </div>
           </div>
         </Card>
       </Reveal>
 
-      {applied && (
-        <Reveal delay={0.1}>
-          <Card>
-            <ReportBar
-              count={visible.length}
-              hideCount={loading || !!error}
-              disabled={loading || !!error || visible.length === 0}
-              kinds={["xls"]}
-              onExport={() =>
-                exportExcel(
-                  `vlc-milk-entry-${applied.vlc}-${applied.date}-${applied.shift}`,
-                  exportCols,
-                  visible,
-                )
-              }
-              left={
-                <div className="w-56 max-w-full">
-                  <Input
-                    placeholder="Search any column"
-                    value={needle}
-                    onChange={(e) => setNeedle(e.target.value)}
-                  />
-                </div>
+      <Reveal delay={0.1}>
+        <Card>
+          <ReportBar
+            count={visible.length}
+            hideCount={loading || !!error}
+            disabled={loading || !!error || visible.length === 0}
+            kinds={["xls"]}
+            onExport={() =>
+              applied &&
+              exportExcel(
+                `vlc-milk-entry-${applied.vlc}-${applied.date}-${applied.shift}`,
+                exportCols,
+                visible,
+              )
+            }
+            left={
+              <div className="w-56 max-w-full">
+                <Input
+                  placeholder="Search any column"
+                  value={needle}
+                  onChange={(e) => setNeedle(e.target.value)}
+                />
+              </div>
+            }
+          />
+          {note && !loading && (
+            <p className="border-b border-line px-4 py-2 text-xs text-mute sm:px-6">
+              {note}
+            </p>
+          )}
+          {loading ? (
+            <MilkLoader label="Loading entries…" />
+          ) : error ? (
+            <ErrorBlock message={error} onRetry={() => void load()} />
+          ) : (
+            <DataTable
+              columns={columns}
+              rows={visible}
+              rowKey={(r) => JSON.stringify(r)}
+              pageSize={DEFAULT_PAGE_SIZE}
+              pageSizes={[10, 25, 50, 100, 250]}
+              sizeLabel="Result per page"
+              empty={
+                <p className="px-6 py-10 text-center text-sm text-mute">
+                  {!applied
+                    ? "No data. Click Show to load entries."
+                    : shown.length === 0
+                      ? applied.vlc === ALL
+                        ? `No entry for any VLC on ${fmtDate(applied.date)}.`
+                        : `No entry for ${vlccTitle(applied.vlc)} on ${fmtDate(applied.date)}.`
+                      : "Nothing matches your search."}
+                </p>
               }
             />
-            {loading ? (
-              <MilkLoader label="Loading entries…" />
-            ) : error ? (
-              <ErrorBlock message={error} onRetry={() => void load()} />
-            ) : visible.length === 0 ? (
-              <p className="px-6 py-10 text-center text-sm text-mute">
-                {shown.length === 0
-                  ? `No entry for ${vlccTitle(applied.vlc)} on ${fmtDate(applied.date)}.`
-                  : "Nothing matches your search."}
-              </p>
-            ) : (
-              <DataTable
-                columns={columns}
-                rows={visible}
-                rowKey={(r) => JSON.stringify(r)}
-                pageSize={DEFAULT_PAGE_SIZE}
-                pageSizes={[10, 25, 50, 100, 250]}
-                sizeLabel="Result per page"
-              />
-            )}
-          </Card>
-        </Reveal>
-      )}
+          )}
+        </Card>
+      </Reveal>
       <span className="sr-only">{nf(shown.length)} entries</span>
     </ReportPage>
   );

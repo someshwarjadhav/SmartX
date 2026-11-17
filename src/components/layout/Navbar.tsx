@@ -1,15 +1,23 @@
-import type * as React from 'react';
-import { useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { ChevronRight, CircleUserRound, LifeBuoy, LogOut, Menu, Search } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { useAuth } from '../../context/AuthContext';
-import { findNavIn, useNavGroups } from '../../config/nav';
-import { initials } from '../../lib/format';
-import { useOutside } from '../../hooks/useOutside';
-import { cn } from '../../lib/cn';
-import { ModeToggle } from './ModeToggle';
-import { ShiftBadge } from './ShiftBadge';
+import type * as React from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import {
+  CalendarDays,
+  ChevronRight,
+  CircleUserRound,
+  LifeBuoy,
+  LogOut,
+  Menu,
+  Search,
+} from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useAuth } from "../../context/AuthContext";
+import { findNavIn, useNavGroups } from "../../config/nav";
+import { initials } from "../../lib/format";
+import { useOutside } from "../../hooks/useOutside";
+import { cn } from "../../lib/cn";
+import { ModeToggle } from "./ModeToggle";
+import { ShiftBadge } from "./ShiftBadge";
 
 interface Props {
   onMenu: () => void;
@@ -17,7 +25,63 @@ interface Props {
 }
 
 const popover =
-  'fixed inset-x-3 top-[4.25rem] z-50 overflow-hidden rounded-2xl border border-line bg-panel shadow-pop sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-80';
+  "fixed inset-x-3 top-[4.25rem] z-50 overflow-hidden rounded-2xl border border-line bg-panel shadow-pop sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-80";
+
+const DateTimeChip: React.FC = () => {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const weekday = now.toLocaleDateString("en-GB", { weekday: "short" });
+  const fullDate = now.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+  const shortDate = now.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+  });
+  const time = now.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const timeSec = now.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+
+  const dateOn = "hidden sm:inline md:hidden lg:inline xl:hidden";
+  return (
+    <time
+      dateTime={now.toISOString()}
+      title={`${weekday}, ${fullDate}, ${timeSec}`}
+      className="tnum hidden h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line bg-panel px-2 text-[11px] font-semibold min-[360px]:inline-flex sm:h-9 sm:px-2.5 sm:text-xs"
+    >
+      <CalendarDays
+        size={14}
+        aria-hidden
+        className="hidden shrink-0 text-mute sm:block md:hidden lg:block"
+      />
+      <span className="hidden xl:inline">
+        {weekday}, {fullDate}
+      </span>
+      <span className={dateOn}>{shortDate}</span>
+      <span
+        aria-hidden
+        className="hidden text-mute/60 sm:inline md:hidden lg:inline"
+      >
+        ·
+      </span>
+      <span className="xl:hidden">{time}</span>
+      <span className="hidden xl:inline">{timeSec}</span>
+    </time>
+  );
+};
 
 export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
   const { user, logout } = useAuth();
@@ -39,11 +103,28 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
           <Menu size={18} />
         </button>
 
-        <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1.5 text-sm md:flex">
-          {/* title = the full name as a tooltip on hover, also when the text is cut with "..." on a narrow screen */}
-          <span className="min-w-0 max-w-[45%] shrink-0 truncate text-mute" title={current?.group.title ?? 'SmartX'}>{current?.group.title ?? 'SmartX'}</span>
-          <ChevronRight size={14} className="shrink-0 text-mute/60" aria-hidden />
-          <span className="min-w-0 truncate font-semibold" title={current?.item.label ?? 'Not found'}>{current?.item.label ?? 'Not found'}</span>
+        <nav
+          aria-label="Breadcrumb"
+          className="hidden min-w-0 items-center gap-1.5 text-sm md:flex"
+        >
+       
+          <span
+            className="min-w-0 max-w-[45%] shrink-0 truncate text-mute"
+            title={current?.group.title ?? "SmartX"}
+          >
+            {current?.group.title ?? "SmartX"}
+          </span>
+          <ChevronRight
+            size={14}
+            className="shrink-0 text-mute/60"
+            aria-hidden
+          />
+          <span
+            className="min-w-0 truncate font-semibold"
+            title={current?.item.label ?? "Not found"}
+          >
+            {current?.item.label ?? "Not found"}
+          </span>
         </nav>
 
         <button
@@ -52,10 +133,13 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
         >
           <Search size={16} className="shrink-0" />
           <span className="truncate">Search pages</span>
-          <kbd className="ml-auto hidden rounded-md bg-soft px-1.5 py-0.5 text-[11px] font-semibold lg:block">Ctrl K</kbd>
+          <kbd className="ml-auto hidden rounded-md bg-soft px-1.5 py-0.5 text-[11px] font-semibold lg:block">
+            Ctrl K
+          </kbd>
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
+          <DateTimeChip />
           <ShiftBadge />
           <ModeToggle />
 
@@ -66,26 +150,49 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
               aria-expanded={menu}
               className="flex h-10 items-center gap-2 rounded-xl border border-line bg-panel pl-1 pr-1 transition hover:border-brand/60 sm:pr-3"
             >
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-xs font-bold text-brand-ink">{initials(user?.name ?? 'U')}</span>
-              <span className="hidden text-sm font-semibold sm:block">{user?.name.split(' ')[0]}</span>
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-xs font-bold text-brand-ink">
+                {initials(user?.name ?? "U")}
+              </span>
+              <span className="hidden text-sm font-semibold sm:block">
+                {user?.name.split(" ")[0]}
+              </span>
             </button>
             <AnimatePresence>
               {menu && (
-                <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }} className={cn(popover, 'p-2 sm:w-64')}>
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.15 }}
+                  className={cn(popover, "p-2 sm:w-64")}
+                >
                   <div className="px-3 py-2">
                     <p className="font-bold">{user?.name}</p>
                     <p className="truncate text-xs text-mute">{user?.email}</p>
-                    <p className="mt-1 text-xs font-semibold text-brand">{user?.role}</p>
+                    <p className="mt-1 text-xs font-semibold text-brand">
+                      {user?.role}
+                    </p>
                   </div>
-                  <Link to="/settings" onClick={() => setMenu(false)} className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-soft">
+                  <Link
+                    to="/settings"
+                    onClick={() => setMenu(false)}
+                    className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-soft"
+                  >
                     <CircleUserRound size={16} />
                     Profile settings
                   </Link>
-                  <Link to="/contact" onClick={() => setMenu(false)} className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-soft">
+                  <Link
+                    to="/contact"
+                    onClick={() => setMenu(false)}
+                    className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-soft"
+                  >
                     <LifeBuoy size={16} />
                     Contact us
                   </Link>
-                  <button onClick={logout} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-danger hover:bg-danger/10">
+                  <button
+                    onClick={logout}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-danger hover:bg-danger/10"
+                  >
                     <LogOut size={16} />
                     Sign out
                   </button>
