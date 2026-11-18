@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { currentShift } from "../lib/shift";
-import type { CentreRow, RangeKey, SupplierRow } from "../types";
+import type { ShiftName } from "../lib/shift";
+import type { CentreRow, SupplierRow } from "../types";
 import type { Summary } from "../data/dairy";
 import { useMilkFarmerEntries } from "./useMilkReportData";
 import { shortDate, toISO } from "../lib/format";
@@ -84,20 +84,18 @@ const series = (
   }
   return days;
 };
-export function useDashboardData(range: RangeKey) {
-  const today = toISO(new Date());
-  const from = plusDays(today, -(range - 1));
-  const prevTo = plusDays(from, -1);
-  const prevFrom = plusDays(prevTo, -(range - 1));
+
+export function useDashboardData(date: string, shift: ShiftName) {
+  const prevDate = plusDays(date, -1);
   const current = useMilkFarmerEntries({
-    from,
-    to: today,
+    from: date,
+    to: date,
     shift: "both",
     milk: "both",
   });
   const previous = useMilkFarmerEntries({
-    from: prevFrom,
-    to: prevTo,
+    from: prevDate,
+    to: prevDate,
     shift: "both",
     milk: "both",
   });
@@ -117,10 +115,12 @@ export function useDashboardData(range: RangeKey) {
         centre: r.centre,
         rate: r.rate,
       }));
-    const c = normalize(current.rows),
-      p = normalize(previous.rows),
-      daily = series(c, from, today),
-      prior = series(p, prevFrom, prevTo);
+    const allShifts = normalize(current.rows);
+    const c = allShifts.filter((r) => r.shift === shift),
+      p = normalize(previous.rows).filter((r) => r.shift === shift),
+      daily = series(c, date, date),
+      prior = series(p, prevDate, prevDate),
+      bothShifts = series(allShifts, date, date);
     const total = (xs: typeof daily, key: "litres" | "amount") =>
       xs.reduce((a, r) => a + r[key], 0);
     const avgFarmers = (xs: typeof daily) =>
@@ -183,9 +183,9 @@ export function useDashboardData(range: RangeKey) {
         const litres = rs.reduce((a, r) => a + r.litres, 0);
         const last = rs.reduce((a, r) => (r.date > a ? r.date : a), "");
         const status: CentreRow["status"] =
-          last === today
+          last === date
             ? "active"
-            : last >= plusDays(today, -2)
+            : last >= plusDays(date, -2)
               ? "slow"
               : "offline";
         return {
@@ -225,12 +225,13 @@ export function useDashboardData(range: RangeKey) {
       })
       .sort((a, b) => b.litres - a.litres)
       .slice(0, 10);
-    const recentRows = [...current.rows]
+    const shiftRows = current.rows.filter((r) => r.shift === shift);
+    const recentRows = [...shiftRows]
       .sort((a, b) =>
         `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`),
       )
       .slice(0, 25);
-    const todayRows = current.rows.filter((r) => r.date === today);
+    const todayRows = shiftRows;
     const todayLitres = todayRows.reduce((a, r) => a + r.litres, 0);
     const todayFarmers = new Set(
       todayRows.map((r) => `${r.stationId}:${r.farmerId}`),
@@ -257,7 +258,7 @@ export function useDashboardData(range: RangeKey) {
     return {
       summary,
       todayCentres,
-      todayDate: today,
+      todayDate: date,
       trend: daily.map((r) => ({
         label: shortDate(r.date),
         Cow: r.Cow,
@@ -266,7 +267,8 @@ export function useDashboardData(range: RangeKey) {
         Fat: r.Fat,
         SNF: r.SNF,
       })),
-      shifts: daily.map((r) => ({
+
+      shifts: bothShifts.map((r) => ({
         label: shortDate(r.date),
         Morning: r.Morning,
         Evening: r.Evening,
@@ -279,11 +281,11 @@ export function useDashboardData(range: RangeKey) {
         target: 0,
         percent: 0,
         remaining: 0,
-        shift: currentShift(),
+        shift,
         shiftState: dataReady
           ? todayRows.length
             ? "Actual portal data loaded"
-            : "No records returned today"
+            : "No records returned for this shift"
           : "Loading portal data",
         farmersPoured: todayFarmers,
       },
@@ -297,9 +299,8 @@ export function useDashboardData(range: RangeKey) {
     previous.rows,
     previous.loading,
     previous.error,
-    from,
-    today,
-    prevFrom,
-    prevTo,
+    date,
+    shift,
+    prevDate,
   ]);
 }

@@ -27,6 +27,31 @@ interface Props {
 const popover =
   "fixed inset-x-3 top-[4.25rem] z-50 overflow-hidden rounded-2xl border border-line bg-panel shadow-pop sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-80";
 
+const FixedTime: React.FC<{ value: string }> = ({ value }) => {
+  const [clock = "", ap = ""] = value.split(" ");
+  return (
+    <span className="inline-flex items-baseline whitespace-nowrap">
+      <span className="sr-only">{value}</span>
+      <span aria-hidden className="inline-flex items-baseline">
+        {[...clock].map((ch, i) => (
+          <span
+            key={i}
+            className={cn(
+              "inline-block text-center",
+              /\d/.test(ch) ? "w-[0.64em]" : "w-[0.3em]",
+            )}
+          >
+            {ch}
+          </span>
+        ))}
+        {ap && (
+          <span className="ml-1 inline-block w-[1.75em] text-left">{ap}</span>
+        )}
+      </span>
+    </span>
+  );
+};
+
 const DateTimeChip: React.FC = () => {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -77,8 +102,12 @@ const DateTimeChip: React.FC = () => {
       >
         ·
       </span>
-      <span className="xl:hidden">{time}</span>
-      <span className="hidden xl:inline">{timeSec}</span>
+      <span className="xl:hidden">
+        <FixedTime value={time} />
+      </span>
+      <span className="hidden xl:inline">
+        <FixedTime value={timeSec} />
+      </span>
     </time>
   );
 };
@@ -107,7 +136,6 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
           aria-label="Breadcrumb"
           className="hidden min-w-0 items-center gap-1.5 text-sm md:flex"
         >
-       
           <span
             className="min-w-0 max-w-[45%] shrink-0 truncate text-mute"
             title={current?.group.title ?? "SmartX"}
