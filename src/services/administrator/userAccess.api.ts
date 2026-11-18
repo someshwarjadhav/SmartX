@@ -2,7 +2,8 @@ import { BASE_URL } from "../config";
 import { getSession } from "../session";
 import { ApiError } from "../http/errors";
 import { gatewayText, parseGatewayText } from "../http/client";
-import { dpuUrl } from "../http/dpu";
+import { dpuSaveAttempts } from "../http/dpu";
+import { encryptXorPayload } from "../../lib/portal/crypto";
 import { DPU } from "../http/dpuEndpoints";
 import { getMenu } from "../menu/menu.api.ts";
 import { asFlag } from "../report/report.api.ts";
@@ -161,12 +162,12 @@ export function buildAccessFormData(
     m.forms
       .filter((f) => f.checked)
       .map((f) => ({
-        UserID: userId,
+        UserID: asNum(userId),
         ModuleID: asNum(m.moduleId),
         FormID: asNum(f.formId),
-        IsActive: 1,
+        IsActive: true,
         CreatedDateTime: stamp,
-        CreatedBy: userId,
+        CreatedBy: asNum(userId),
       })),
   );
   const fd = new FormData();
@@ -208,27 +209,52 @@ function assertSaved(text: string) {
   }
 }
 
+// POST https://dpu.shivinfotech.co.in/api/Login/addUserAccess
+// The server's model has two fields, UserId and Data (it answered "The Data field is required" / "The UserId field is
+// required"). Data is TEXT - the rows, exactly like the old form field "data". The layouts below are tried one after the
+// other (plain JSON text first, then XOR text; UserId as a number, then as text); the one the server accepts is remembered.
 export async function postData(formData: FormData): Promise<void> {
-  console.info(
-    "[UserAccess] addUserAccess -> POST",
-    ADD_USER_ACCESS_PATH,
-    "rows:",
-    (() => {
-      try {
-        return (JSON.parse(String(formData.get("data"))) as unknown[]).length;
-      } catch {
-        return "?";
-      }
-    })(),
+  let rows: unknown[] = [];
+  try {
+    rows = JSON.parse(String(formData.get("data"))) as unknown[];
+  } catch {
+    rows = [];
+  }
+  const userid = String(formData.get("userid") ?? "");
+  const idNum = asNum(userid);
+  // the server reads every row into a model whose UserID / CreatedBy are Int32 ("could not be converted to System.Int32.
+  // Path: $[0].UserID" came back inside a 200 answer), so they are sent as numbers, never as text
+  rows = rows.map((r) =>
+    isObj(r)
+      ? {
+          ...r,
+          UserID: asNum(String(r.UserID ?? userid)),
+          CreatedBy: asNum(String(r.CreatedBy ?? userid)),
+          // IsActive is a Boolean on the server ("could not be converted to System.Boolean. Path: $[0].IsActive")
+          IsActive: r.IsActive === 1 || r.IsActive === "1" || r.IsActive === true || r.IsActive === undefined,
+        }
+      : r,
   );
-  const text = await gatewayText(
-    dpuUrl(ADD_USER_ACCESS_PATH),
-    {
-      method: "POST",
-      body: formData,
-    },
-    0,
-    true,
+  const json = JSON.stringify(rows);
+  const xor = encryptXorPayload(rows);
+  const path = ADD_USER_ACCESS_PATH;
+  console.info("[UserAccess] addUserAccess -> POST", path, "rows:", rows.length);
+  // the exact body of the first layout: paste it into Postman to compare with a body that works
+  console.info("[UserAccess] body:", JSON.stringify({ UserId: userid, Data: json }));
+  const badIds = rows.filter((r) => isObj(r) && (typeof r.ModuleID !== "number" || typeof r.FormID !== "number")).length;
+  if (badIds) console.warn(`[UserAccess] ${badIds} row(s) have a ModuleID / FormID that is not a number - the server needs numbers there.`);
+  const text = await dpuSaveAttempts(
+    "addUserAccess",
+    [
+      // top-level UserId is TEXT ("could not be converted to System.String" for a number); the rows inside Data keep numbers
+      { label: "json-text-userid-text", path, body: { UserId: userid, Data: json } },
+      { label: "json-text", path, body: { UserId: idNum, Data: json } },
+      { label: "xor-text", path, body: { UserId: idNum, Data: xor } },
+      { label: "xor-text-userid-text", path, body: { UserId: userid, Data: xor } },
+      { label: "xor-payload", path, body: { payload: xor, UserId: idNum, Data: xor } },
+    ],
+    "POST",
+    /decrypt|invalid|base-?64|could not be (parsed|read)/i,
   );
   console.info("[UserAccess] addUserAccess reply <-", text.slice(0, 200));
   assertSaved(text);
