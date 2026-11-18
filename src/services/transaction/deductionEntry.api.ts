@@ -8,13 +8,9 @@ import { isObj, norm, pickLike, type Obj } from "../utils/loose";
 import { getSession } from "../session";
 import { GLOBALS } from "../../lib/portal/global";
 
-
-
 export const HEAD_PATH = DPU.getBillHead;
 export const LIST_PATH = DPU.billDeductionDetailsMA;
 export const SAVE_PATH = DPU.addBillDeduction;
-
-const log = (m: string) => console.log(`[DeductionEntry] ${m}`);
 
 export interface DeductionType {
   /** RefCode - sent as `reftype` when loading and as `DeductionType` when saving */
@@ -56,11 +52,6 @@ export interface RowCalc {
   error: string | null;
 }
 
-/**
- *  payable   = BillAmount  - Deduction
- *  remaining = OrgDedAmt   - Deduction      (OrgDedAmt = Remaining + Deduction, as loaded from the server)
- *  The typed Deduction is allowed only when  0 <= Deduction <= OrgDedAmt  and  Deduction <= BillAmount.
- */
 export function calcRow(row: DeductionRow, deduction: number): RowCalc {
   const d = money(deduction);
   if (!(d >= 0))
@@ -177,16 +168,11 @@ async function readWith(path: string, queries: string[]): Promise<unknown> {
   let last: unknown;
   for (let i = 0; i < queries.length; i++) {
     try {
-      log(`GET ${path}?${queries[i]}`);
       return await dpuGet(`${path}?${queries[i]}`, 0);
     } catch (e) {
       last = e;
       const refused =
         e instanceof ApiError && /error (400|404|415|422)\b/i.test(e.message);
-      console.warn(
-        `[DeductionEntry] query layout ${i + 1}/${queries.length} refused:`,
-        e instanceof Error ? e.message : e,
-      );
       if (!refused) throw e;
     }
   }
@@ -197,7 +183,7 @@ async function readWith(path: string, queries: string[]): Promise<unknown> {
 
 // The old portal's Deduction Entry asks getbillhead with the fixed station 7010101 (see the rar), not with the VLC:
 // the bill heads (Advance, Cattle Feed ...) are kept per union / plant station, so the VLC id alone can answer "nothing".
-// Last resort only - the id that worked is printed in the console.
+// Last resort only.
 const FALLBACK_HEAD_STATION = "7010101";
 
 function parseTypes(reply: unknown): DeductionType[] {
@@ -260,24 +246,11 @@ export async function getDeductionTypes(
       if (bad) throw new ApiError(bad, "server");
       const out = parseTypes(reply);
       if (out.length) {
-        log(
-          `${out.length} deduction type(s) found with stationid=${id}: ${out.map((o) => `${o.code}=${o.name}`).join(", ")}`,
-        );
         return out;
       }
-      console.warn(
-        `[DeductionEntry] getBillHead stationid=${id} answered but no type could be read` +
-          (isObj(reply)
-            ? ` (reply keys: ${Object.keys(reply).join(", ") || "none"})`
-            : ` (reply is ${Array.isArray(reply) ? "a list" : typeof reply})`),
-      );
     } catch (e) {
       if (e instanceof ApiError && e.kind === "auth") throw e;
       last = e;
-      console.warn(
-        `[DeductionEntry] getBillHead stationid=${id} failed:`,
-        e instanceof Error ? e.message : e,
-      );
     }
   }
   if (!answered && last) throw last; // every try failed: show the real reason
@@ -325,7 +298,6 @@ export async function getDeductions(q: ListQuery): Promise<DeductionRow[]> {
   }
   // old portal: farmers whose bill amount is 0 are not listed
   const shown = rows.filter((r) => r.billAmount > 0);
-  log(`${rows.length} row(s) in the reply, ${shown.length} with a bill amount`);
   return shown;
 }
 
@@ -389,9 +361,6 @@ export async function saveDeductions(s: SaveInput): Promise<string> {
       "config",
     );
   if (!s.rows.length) throw new ApiError("There is nothing to save.", "config");
-  log(
-    `SAVE -> POST ${SAVE_PATH}  station=${s.vlcid} type=${s.reftype} ${s.from}..${s.to} rows=${s.rows.length}`,
-  );
   const message = await dpuSaveAttempts(
     "deductionEntry",
     saveLayouts(s),

@@ -5,7 +5,10 @@ import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
 import { Modal } from "../../../components/operations/ui/Modal";
-import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
+import {
+  DataTable,
+  type Column,
+} from "../../../components/operations/ui/DataTable";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
   CardTitle,
@@ -17,7 +20,10 @@ import { ErrorBlock } from "../../../components/operations/Widget";
 import { useSmoothLoading } from "../../../hooks/useSmoothLoading";
 import { useCentreOptions } from "../../../hooks/useCentres";
 import { useToast } from "../../../context/ToastContext";
-import { exportExcel, type ExportCol } from "../../../assets/excel/portalExport";
+import {
+  exportExcel,
+  type ExportCol,
+} from "../../../assets/excel/portalExport";
 import { todayISO } from "../../../lib/portal/format";
 import { DEFAULT_PAGE_SIZE } from "../../../lib/portal/global";
 import { vlccCode, vlccName } from "../../../services/vlcc/names";
@@ -95,7 +101,7 @@ const SaleEntry: React.FC = () => {
   const vlcId = vlc || centres[0]?.id || "";
   const types = typesFor(category);
   const partyLabel = category === "S" ? "Farmer" : "Vendor";
-  
+
   const useFarmers = type === "F";
   const stationNames = useMemo(() => {
     const m = new Map<string, string>();
@@ -104,7 +110,6 @@ const SaleEntry: React.FC = () => {
   }, [centres]);
   const amount = n(qty) * n(rate);
 
-  
   useEffect(() => {
     let alive = true;
     getItems(plantId)
@@ -118,7 +123,6 @@ const SaleEntry: React.FC = () => {
         }
       })
       .catch((e) => {
-        console.error("[SaleEntry] items failed:", e);
         if (alive) setSetupError(msg(e, "The item list could not be loaded."));
       });
     return () => {
@@ -126,21 +130,19 @@ const SaleEntry: React.FC = () => {
     };
   }, [plantId]);
 
-  
   useEffect(() => {
     if (!vlcId) return;
     let alive = true;
     setParties([]);
     setParty("");
-    const load: Promise<Option[]> =
-      useFarmers
-        ? getFarmers(vlcId).then((list) =>
-            list.map((f) => ({
-              id: f.farmerId,
-              label: `${f.farmerId.padStart(4, "0")} | ${f.name}`,
-            })),
-          )
-        : getVendors(vlcId);
+    const load: Promise<Option[]> = useFarmers
+      ? getFarmers(vlcId).then((list) =>
+          list.map((f) => ({
+            id: f.farmerId,
+            label: `${f.farmerId.padStart(4, "0")} | ${f.name}`,
+          })),
+        )
+      : getVendors(vlcId);
     load
       .then((list) => {
         if (!alive) return;
@@ -149,17 +151,22 @@ const SaleEntry: React.FC = () => {
         setSetupError(null);
       })
       .catch((e) => {
-        console.error("[SaleEntry] farmers/vendors failed:", e);
-        if (alive) setSetupError(msg(e, `The ${partyLabel.toLowerCase()} list could not be loaded.`));
+        if (alive)
+          setSetupError(
+            msg(e, `The ${partyLabel.toLowerCase()} list could not be loaded.`),
+          );
       });
     return () => {
       alive = false;
     };
   }, [vlcId, useFarmers, partyLabel]);
 
-  
   useEffect(() => {
-    setType((cur) => (typesFor(category).some((t) => t.value === cur) ? cur : typesFor(category)[0]!.value));
+    setType((cur) =>
+      typesFor(category).some((t) => t.value === cur)
+        ? cur
+        : typesFor(category)[0]!.value,
+    );
   }, [category]);
 
   // stock of the chosen item
@@ -171,8 +178,7 @@ const SaleEntry: React.FC = () => {
     let alive = true;
     getStock(plantId, itemId, date, date)
       .then((s) => alive && setStock(s))
-      .catch((e) => {
-        console.error("[SaleEntry] stock failed:", e);
+      .catch(() => {
         if (alive) setStock("");
       });
     return () => {
@@ -214,14 +220,16 @@ const SaleEntry: React.FC = () => {
     if (n(qty) <= 0) return "Enter a quantity greater than 0";
     if (n(rate) < 0 || rate.trim() === "") return "Enter the rate";
     if (n(paid) < 0) return "Paid amount cannot be negative";
-    if (n(paid) > amount + 0.004) return "Paid amount cannot be more than the amount";
+    if (n(paid) > amount + 0.004)
+      return "Paid amount cannot be more than the amount";
     const have = parseFloat(stock);
     if (category === "S" && Number.isFinite(have) && n(qty) > have)
       return `Quantity is more than the stock (${stock})`;
     return null;
   };
 
-  const canSave = !!vlcId && !!party && !!itemId && n(qty) > 0 && rate.trim() !== "";
+  const canSave =
+    !!vlcId && !!party && !!itemId && n(qty) > 0 && rate.trim() !== "";
 
   const submit = async () => {
     if (saving) return;
@@ -243,10 +251,11 @@ const SaleEntry: React.FC = () => {
       toast(reply || "Record saved");
       setQty("");
       setPaid("0");
-      void getStock(plantId, itemId, date, date).then(setStock).catch(() => undefined);
+      void getStock(plantId, itemId, date, date)
+        .then(setStock)
+        .catch(() => undefined);
       void show();
     } catch (e) {
-      console.error("[SaleEntry] SAVE FAILED:", e);
       toast(msg(e, "The entry could not be saved."), "warn");
     } finally {
       setSaving(false);
@@ -262,9 +271,10 @@ const SaleEntry: React.FC = () => {
       setRows((all) => all.filter((r) => r.key !== row.key));
       toast("Entry deleted");
       setToDelete(null);
-      void getStock(plantId, itemId, date, date).then(setStock).catch(() => undefined);
+      void getStock(plantId, itemId, date, date)
+        .then(setStock)
+        .catch(() => undefined);
     } catch (e) {
-      console.error("[SaleEntry] DELETE FAILED:", e);
       toast(msg(e, "The entry could not be deleted."), "warn");
     } finally {
       setDeleting(false);
@@ -275,7 +285,18 @@ const SaleEntry: React.FC = () => {
     const s = needle.trim().toLowerCase();
     return s
       ? rows.filter((r) =>
-          [r.id, r.date, vlccCode(r.stationId), r.farmerId, r.farmerName, r.item, r.qty, r.rate, r.amount, flagName(r.flag)]
+          [
+            r.id,
+            r.date,
+            vlccCode(r.stationId),
+            r.farmerId,
+            r.farmerName,
+            r.item,
+            r.qty,
+            r.rate,
+            r.amount,
+            flagName(r.flag),
+          ]
             .join(" ")
             .toLowerCase()
             .includes(s),
@@ -284,24 +305,80 @@ const SaleEntry: React.FC = () => {
   }, [rows, needle]);
 
   const columns: Column<SaleRow>[] = useMemo(() => {
-    const sortVal = (v: string) => (v !== "" && Number.isFinite(Number(v)) ? Number(v) : v);
+    const sortVal = (v: string) =>
+      v !== "" && Number.isFinite(Number(v)) ? Number(v) : v;
     return [
-      { key: "id", header: "Id", sort: (r) => sortVal(r.id), cell: (r) => r.id || "—" },
-      { key: "date", header: "Date", sort: (r) => r.date, cell: (r) => r.date || "—" },
-      { key: "station", header: "Station Id", sort: (r) => sortVal(vlccCode(r.stationId)), cell: (r) => vlccCode(r.stationId) || "—" },
+      {
+        key: "id",
+        header: "Id",
+        sort: (r) => sortVal(r.id),
+        cell: (r) => r.id || "—",
+      },
+      {
+        key: "date",
+        header: "Date",
+        sort: (r) => r.date,
+        cell: (r) => r.date || "—",
+      },
+      {
+        key: "station",
+        header: "Station Id",
+        sort: (r) => sortVal(vlccCode(r.stationId)),
+        cell: (r) => vlccCode(r.stationId) || "—",
+      },
       {
         key: "vlc",
         header: "VLC Name",
-        sort: (r) => vlccName(r.stationId) || stationNames.get(r.stationId) || "",
-        cell: (r) => vlccName(r.stationId) || stationNames.get(r.stationId) || "—",
+        sort: (r) =>
+          vlccName(r.stationId) || stationNames.get(r.stationId) || "",
+        cell: (r) =>
+          vlccName(r.stationId) || stationNames.get(r.stationId) || "—",
       },
-      { key: "fid", header: "Farmer Id", sort: (r) => sortVal(r.farmerId), cell: (r) => r.farmerId || "—" },
-      { key: "fname", header: "Farmer", sort: (r) => r.farmerName, cell: (r) => r.farmerName || "—" },
-      { key: "item", header: "Item", sort: (r) => r.item, cell: (r) => r.item || "—" },
-      { key: "qty", header: "Qty", align: "right", sort: (r) => n(r.qty), cell: (r) => r.qty || "—" },
-      { key: "rate", header: "Rate", align: "right", sort: (r) => n(r.rate), cell: (r) => r.rate || "—" },
-      { key: "amount", header: "Amount", align: "right", sort: (r) => n(r.amount), cell: (r) => r.amount || "—" },
-      { key: "flag", header: "Flag", sort: (r) => r.flag, cell: (r) => flagName(r.flag) || "—" },
+      {
+        key: "fid",
+        header: "Farmer Id",
+        sort: (r) => sortVal(r.farmerId),
+        cell: (r) => r.farmerId || "—",
+      },
+      {
+        key: "fname",
+        header: "Farmer",
+        sort: (r) => r.farmerName,
+        cell: (r) => r.farmerName || "—",
+      },
+      {
+        key: "item",
+        header: "Item",
+        sort: (r) => r.item,
+        cell: (r) => r.item || "—",
+      },
+      {
+        key: "qty",
+        header: "Qty",
+        align: "right",
+        sort: (r) => n(r.qty),
+        cell: (r) => r.qty || "—",
+      },
+      {
+        key: "rate",
+        header: "Rate",
+        align: "right",
+        sort: (r) => n(r.rate),
+        cell: (r) => r.rate || "—",
+      },
+      {
+        key: "amount",
+        header: "Amount",
+        align: "right",
+        sort: (r) => n(r.amount),
+        cell: (r) => r.amount || "—",
+      },
+      {
+        key: "flag",
+        header: "Flag",
+        sort: (r) => r.flag,
+        cell: (r) => flagName(r.flag) || "—",
+      },
       {
         key: "action",
         header: "Action",
@@ -325,7 +402,11 @@ const SaleEntry: React.FC = () => {
       { header: "Id", value: (r) => r.id },
       { header: "Date", value: (r) => r.date },
       { header: "Station Id", value: (r) => vlccCode(r.stationId) },
-      { header: "VLC Name", value: (r) => vlccName(r.stationId) || stationNames.get(r.stationId) || "" },
+      {
+        header: "VLC Name",
+        value: (r) =>
+          vlccName(r.stationId) || stationNames.get(r.stationId) || "",
+      },
       { header: "Farmer Id", value: (r) => r.farmerId },
       { header: "Farmer", value: (r) => r.farmerName },
       { header: "Item", value: (r) => r.item },
@@ -342,7 +423,11 @@ const SaleEntry: React.FC = () => {
       <Reveal delay={0.05}>
         <Card>
           <CardHeader
-            title={<CardTitle icon={ShoppingCart}>Cattle Feed Sale/Purchase</CardTitle>}
+            title={
+              <CardTitle icon={ShoppingCart}>
+                Cattle Feed Sale/Purchase
+              </CardTitle>
+            }
           />
           <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-4">
             <Field label="Category">
@@ -387,7 +472,11 @@ const SaleEntry: React.FC = () => {
             </Field>
 
             <Field label="Sale Date">
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
             </Field>
             <Field label="Item">
               <Select value={itemId} onChange={(e) => pickItem(e.target.value)}>
@@ -400,7 +489,13 @@ const SaleEntry: React.FC = () => {
               </Select>
             </Field>
             <Field label="Stock">
-              <Input readOnly tabIndex={-1} value={stock} placeholder="—" className={readOnlyInput} />
+              <Input
+                readOnly
+                tabIndex={-1}
+                value={stock}
+                placeholder="—"
+                className={readOnlyInput}
+              />
             </Field>
             <Field label="Qty">
               <Input
@@ -426,7 +521,12 @@ const SaleEntry: React.FC = () => {
               />
             </Field>
             <Field label="Amount">
-              <Input readOnly tabIndex={-1} value={amount > 0 ? two(amount) : ""} className={readOnlyInput} />
+              <Input
+                readOnly
+                tabIndex={-1}
+                value={amount > 0 ? two(amount) : ""}
+                className={readOnlyInput}
+              />
             </Field>
             <Field label="Paid Amount" className="sm:col-span-2 lg:col-span-1">
               <Input
@@ -466,7 +566,11 @@ const SaleEntry: React.FC = () => {
       </Reveal>
 
       {setupError && (
-        <ErrorBlock message={setupError} onRetry={() => window.location.reload()} compact />
+        <ErrorBlock
+          message={setupError}
+          onRetry={() => window.location.reload()}
+          compact
+        />
       )}
 
       {applied && (
@@ -501,7 +605,9 @@ const SaleEntry: React.FC = () => {
             ) : visible.length === 0 ? (
               <p className="flex items-center justify-center gap-2 px-6 py-10 text-center text-sm text-mute">
                 <PackageCheck size={16} />
-                {rows.length === 0 ? "No entry for these filters." : "Nothing matches your search."}
+                {rows.length === 0
+                  ? "No entry for these filters."
+                  : "Nothing matches your search."}
               </p>
             ) : (
               <DataTable
@@ -526,7 +632,11 @@ const SaleEntry: React.FC = () => {
         width="max-w-md"
         footer={
           <>
-            <Button variant="ghost" disabled={deleting} onClick={() => setToDelete(null)}>
+            <Button
+              variant="ghost"
+              disabled={deleting}
+              onClick={() => setToDelete(null)}
+            >
               Cancel
             </Button>
             <Button
@@ -547,7 +657,9 @@ const SaleEntry: React.FC = () => {
             <dt className="text-mute">{partyLabel} Id</dt>
             <dd className="font-semibold">{toDelete.farmerId || "—"}</dd>
             <dt className="text-mute">Item</dt>
-            <dd className="font-semibold break-words">{toDelete.item || "—"}</dd>
+            <dd className="font-semibold break-words">
+              {toDelete.item || "—"}
+            </dd>
             <dt className="text-mute">Qty / Rate</dt>
             <dd className="font-semibold">
               {toDelete.qty || "—"} / {toDelete.rate || "—"}

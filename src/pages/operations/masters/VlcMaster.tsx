@@ -143,8 +143,7 @@ const VlcMaster: React.FC = () => {
         assertConfigured(mccid, plantid);
         const [r, s] = await Promise.all([
           getMccRoute(mccid, plantid),
-          getMaxVlcc(mccid, plantid).catch((e) => {
-            console.warn("[vlc] getMaxVlcc failed:", e);
+          getMaxVlcc(mccid, plantid).catch(() => {
             return null;
           }),
         ]);

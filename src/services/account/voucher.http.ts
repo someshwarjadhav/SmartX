@@ -121,7 +121,6 @@ export async function readVoucherList(
       if (e instanceof ApiError && /empty reply/i.test(e.message)) return [];
       if (e instanceof ApiError && e.kind === "auth") lastAuth = e;
       failed.push(`${t.name}: ${errText(e)}`);
-      console.warn(`[${key}] list layout "${t.name}" failed:`, e);
     }
   }
   if (lastAuth) throw lastAuth;
@@ -141,9 +140,6 @@ export async function saveVoucherPayload(
   count: () => Promise<number>,
   label: string,
 ): Promise<string> {
-  console.info(
-    `[${label}] SAVE -> POST ${path}  payload=${JSON.stringify(fields)}`,
-  );
   let before = -1;
   try {
     before = await count();
@@ -199,7 +195,6 @@ export async function saveVoucherPayload(
       // "Please check data." (HTTP 200, Success:false) = this layout is not what the server wants: try the next one.
       /please\s*check\s*data/i,
     );
-    console.info(`[${label}] SAVE <- ${message.slice(0, 200)}`);
     return message || "Record Saved.";
   } catch (e) {
     if (e instanceof ApiError && e.kind !== "auth" && before >= 0) {
@@ -278,15 +273,12 @@ export async function deleteVoucherById(opts: {
         }
       }
       remember(`delete.${key}`, t.name);
-      console.info(`[${key}] deleted using: ${t.name}`);
       return message || "Deleted";
     } catch (e) {
       if (e instanceof ApiError && e.kind === "auth") throw e;
       failed.push(`${t.name}: ${errText(e)}`);
-      console.warn(`[${key}] delete layout "${t.name}" failed:`, e);
     }
   }
-  console.table(failed.map((x) => ({ attempt: x })));
   throw new ApiError(
     `The server did not delete voucher ${id}. ${failed.slice(0, 4).join(" | ")}`,
     "server",
@@ -480,11 +472,8 @@ export async function saveVoucherForm(
   path: string,
   fields: VoucherFields,
   count: () => Promise<number>,
-  label: string,
+  _label: string,
 ): Promise<string> {
-  console.info(
-    `[${label}] SAVE -> POST ${path}  payload=${JSON.stringify(fields)}`,
-  );
   const data = encryptPayload(fields);
 
   let before = -1;
@@ -499,11 +488,9 @@ export async function saveVoucherForm(
     try {
       const text = await sendPath(path, () => build(data));
       assertNotError(text);
-      console.info(`[${label}] SAVE <- ${text.slice(0, 200)}`);
       return text;
     } catch (e) {
       lastError = e;
-      console.warn(`[${label}] save attempt failed:`, e);
       if (!retryable(e)) throw e;
       if (before >= 0) {
         try {

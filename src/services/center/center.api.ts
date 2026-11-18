@@ -1,27 +1,86 @@
-import { dpuGet } from '../http/dpu';
-import { DPU } from '../http/dpuEndpoints';
-import { pick, pickLike, rowsFrom } from '../utils/loose';
-import type { Center } from '../mappers/center.mapper.ts';
+import { dpuGet } from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
+import { pick, pickLike, rowsFrom } from "../utils/loose";
+import type { Center } from "../mappers/center.mapper.ts";
 
+const ID_KEYS = [
+  "vlccid",
+  "vlcid",
+  "vlccode",
+  "centerid",
+  "centreid",
+  "villageid",
+  "dcsid",
+  "dcscode",
+  "id",
+  "code",
+];
+const NAME_KEYS = [
+  "villagename",
+  "vlccname",
+  "vlcname",
+  "centername",
+  "centrename",
+  "dcsname",
+  "name",
+  "village",
+];
 
-const ID_KEYS = ['vlccid', 'vlcid', 'vlccode', 'centerid', 'centreid', 'villageid', 'dcsid', 'dcscode', 'id', 'code'];
-const NAME_KEYS = ['villagename', 'vlccname', 'vlcname', 'centername', 'centrename', 'dcsname', 'name', 'village'];
+export const cleanCentreName = (n: string): string =>
+  n
+    .replace(/\s*\|\s*[\w-]*\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
-
-export const cleanCentreName = (n: string): string => n.replace(/\s*\|\s*[\w-]*\s*$/, '').replace(/\s+/g, ' ').trim();
-
-const ROUTE_ID_KEYS = ['routeid', 'routecode', 'routeno', 'route', 'routesupervisorid', 'mccid', 'plantid'];
-const ROUTE_NAME_KEYS = ['routename', 'routetitle', 'routedesc', 'mccname', 'plantname'];
-const NAME_NOT = ['route', 'mcc', 'plant', 'agent', 'farmer', 'user', 'union', 'society', 'bank', 'branch', 'dairy', 'file', 'login', 'contact'];
-const STATION_KEYS = ['customstationid', 'stationid', 'stationcode', 'stationno', 'station'];
+const ROUTE_ID_KEYS = [
+  "routeid",
+  "routecode",
+  "routeno",
+  "route",
+  "routesupervisorid",
+  "mccid",
+  "plantid",
+];
+const ROUTE_NAME_KEYS = [
+  "routename",
+  "routetitle",
+  "routedesc",
+  "mccname",
+  "plantname",
+];
+const NAME_NOT = [
+  "route",
+  "mcc",
+  "plant",
+  "agent",
+  "farmer",
+  "user",
+  "union",
+  "society",
+  "bank",
+  "branch",
+  "dairy",
+  "file",
+  "login",
+  "contact",
+];
+const STATION_KEYS = [
+  "customstationid",
+  "stationid",
+  "stationcode",
+  "stationno",
+  "station",
+];
 
 export function parseCenters(json: unknown): Center[] {
   const out: Center[] = [];
   for (const row of rowsFrom(json)) {
     const id = pick(row, ID_KEYS);
     if (!id || out.some((c) => c.id === id)) continue;
-    
-    const name = cleanCentreName(pick(row, NAME_KEYS) || pickLike(row, ['name'], NAME_NOT));
+
+    const name = cleanCentreName(
+      pick(row, NAME_KEYS) || pickLike(row, ["name"], NAME_NOT),
+    );
     out.push({
       id,
       name,
@@ -32,15 +91,13 @@ export function parseCenters(json: unknown): Center[] {
       raw: row,
     });
   }
-  if (out.length) {
-    const routes = new Set(out.map((c) => c.routeId || c.routeName || '(no route in reply)'));
-    console.info(`[centres] ${out.length} centres, ${routes.size} route(s):`, [...routes], 'first row keys:', Object.keys(out[0]!.raw ?? {}));
-  }
   return out;
 }
 
-
-export const getDpuCenter = (id: string, param: 'id' | 'stationid' | 'userid' | 'mccid' = 'id'): Promise<unknown> =>
+export const getDpuCenter = (
+  id: string,
+  param: "id" | "stationid" | "userid" | "mccid" = "id",
+): Promise<unknown> =>
   dpuGet(`${DPU.farmerCollectionDpu}?${param}=${encodeURIComponent(id)}`, 0);
 
 /** Centres of one station id (used when the person signs in). */

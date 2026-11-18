@@ -64,9 +64,6 @@ const StandardDeduction: React.FC = () => {
   };
 
   const show = async () => {
-    console.log(
-      `[StdDeduction] "Show Farmers" clicked: vlcId=${vlcId || "(empty)"} category=${category.label} flag=${category.flag} from=${from}`,
-    );
     if (!vlcId || !from || loading) return;
     clearRequestMemo();
     setLoading(true);
@@ -79,7 +76,6 @@ const StandardDeduction: React.FC = () => {
       setRight(d.saved);
       setLoaded(true);
     } catch (e) {
-      console.error("[StdDeduction] load FAILED:", e);
       if (mine !== ticket.current) return;
       setError(msg(e, "The farmers could not be loaded."));
     } finally {
@@ -88,9 +84,6 @@ const StandardDeduction: React.FC = () => {
   };
 
   const submit = async () => {
-    console.log(
-      `[StdDeduction] "Submit" clicked: vlcId=${vlcId || "(empty)"} flag=${category.flag} date=${from} rows on right=${right.length}`,
-    );
     if (saving) return;
     const bad = right.find((r) => !noNegative(r));
     if (bad)
@@ -110,7 +103,6 @@ const StandardDeduction: React.FC = () => {
       reset();
       setGen((g) => g + 1);
     } catch (e) {
-      console.error("[StdDeduction] SAVE FAILED:", e);
       toast(msg(e, "The standard deduction could not be saved."), "warn");
     } finally {
       setSaving(false);

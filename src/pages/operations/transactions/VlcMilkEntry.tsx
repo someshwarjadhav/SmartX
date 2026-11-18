@@ -37,7 +37,7 @@ import { ApiError } from "../../../services/http/errors";
 import { norm } from "../../../services/utils/loose";
 import { focusFirstEmpty, handleEnterNext } from "../../../hooks/useEnterNext";
 
-
+const ALL = "ALL";
 const BIG = "!h-20 !text-center !text-2xl !font-semibold sm:!text-3xl";
 
 const SHIFTS = GLOBALSSHIFT.shiftOptions.filter(
@@ -154,7 +154,7 @@ const VlcMilkEntry: React.FC = () => {
   const centers = useCenters();
   const sessionIds = getSession()?.vlccIds ?? [];
   const allIds = centers.length ? centers.map((c) => c.id) : sessionIds;
-  
+
   const { plantOptions, plant, setPlant, belongs } = usePlantScope();
   const ids = allIds.filter((id) => belongs(id));
 
@@ -174,7 +174,6 @@ const VlcMilkEntry: React.FC = () => {
     targets: string[];
   } | null>(null);
 
- 
   const [byVlc, setByVlc] = useState<Record<string, VlcMilkRow[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -196,7 +195,7 @@ const VlcMilkEntry: React.FC = () => {
   const changePlant = (p: string) => {
     setPlant(p);
     const list = allIds.filter((id) => belongs(id, p));
-  
+
     if (vlc !== ALL && list.length && !list.includes(vlc)) setVlc(list[0]);
   };
 
@@ -226,7 +225,7 @@ const VlcMilkEntry: React.FC = () => {
         const next: Record<string, VlcMilkRow[]> = {};
         list.forEach((id, i) => {
           const r = results[i];
-          
+
           if (r.status === "fulfilled")
             next[id] = r.value.map((row) => ({ vlccid: id, ...row }));
         });
@@ -235,7 +234,7 @@ const VlcMilkEntry: React.FC = () => {
           setNote(`${failed} of ${list.length} centres could not be loaded.`);
       } catch (e) {
         if (me !== stamp.current) return;
-      
+
         if (only) return;
         setByVlc({});
         setError(
@@ -438,127 +437,130 @@ const VlcMilkEntry: React.FC = () => {
               })
             }
           >
-          <div className="grid gap-4 px-5 pt-5 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 xl:grid-cols-5">
-            <PlantSelectField
-              value={plant}
-              onChange={changePlant}
-              options={plantOptions}
-            />
-            <Field label="VLC">
-              <Select value={vlc} onChange={(e) => setVlc(e.target.value)}>
-                <option value={ALL}>All</option>
-                {ids.map((id) => (
-                  <option key={id} value={id}>
-                    {vlccOption(id)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Shift">
-              <Select value={shift} onChange={(e) => setShift(e.target.value)}>
-                {SHIFTS.map((s) => (
-                  <option key={s.Id} value={s.Id}>
-                    {s.Name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Milk Type">
-              <Select value={milk} onChange={(e) => setMilk(e.target.value)}>
-                {MILKS.map((m) => (
-                  <option key={m.Id} value={m.Id}>
-                    {m.Name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Date">
-              <Input
-                type="date"
-                value={date}
-                max={todayISO()}
-                onChange={(e) => setDate(e.target.value)}
+            <div className="grid gap-4 px-5 pt-5 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 xl:grid-cols-5">
+              <PlantSelectField
+                value={plant}
+                onChange={changePlant}
+                options={plantOptions}
               />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4 sm:p-6">
-            <Field label="Weight Ltr">
-              <Input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="any"
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                className={BIG}
-              />
-            </Field>
-            <Field label="Fat">
-              <Input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="any"
-                value={fat}
-                onChange={(e) => onFat(e.target.value)}
-                className={BIG}
-              />
-            </Field>
-            <Field label="SNF">
-              <Input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="any"
-                value={snf}
-                onChange={(e) => onSnf(e.target.value)}
-                className={BIG}
-              />
-            </Field>
-            <Field label="CLR">
-              <Input
-                readOnly
-                tabIndex={-1}
-                value={clr}
-                className={`bg-soft/60 ${BIG}`}
-              />
-            </Field>
-
-            <div className="col-span-2 flex flex-col gap-3 sm:col-span-4 sm:flex-row sm:flex-wrap sm:items-end">
-              <Button
-                className="w-full sm:w-auto sm:min-w-48"
-                icon={<Save size={16} />}
-                loading={saving}
-                disabled={!valid}
-                onClick={submit}
-              >
-                Submit
-              </Button>
-              <Button
-                className="w-full sm:w-auto sm:min-w-40"
-                variant="outline"
-                icon={<Eye size={16} />}
-                loading={loading}
-                disabled={!vlc || !date || (vlc === ALL && ids.length === 0)}
-                onClick={() =>
-                  setApplied({
-                    vlc,
-                    shift,
-                    date,
-                    targets: vlc === ALL ? [...ids] : [vlc],
-                  })
-                }
-              >
-                Show
-              </Button>
-              {vlc === ALL && (
-                <p className="text-xs text-mute sm:self-center">
-                  Select a VLC to enter milk. All is for viewing only.
-                </p>
-              )}
+              <Field label="VLC">
+                <Select value={vlc} onChange={(e) => setVlc(e.target.value)}>
+                  <option value={ALL}>All</option>
+                  {ids.map((id) => (
+                    <option key={id} value={id}>
+                      {vlccOption(id)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Shift">
+                <Select
+                  value={shift}
+                  onChange={(e) => setShift(e.target.value)}
+                >
+                  {SHIFTS.map((s) => (
+                    <option key={s.Id} value={s.Id}>
+                      {s.Name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Milk Type">
+                <Select value={milk} onChange={(e) => setMilk(e.target.value)}>
+                  {MILKS.map((m) => (
+                    <option key={m.Id} value={m.Id}>
+                      {m.Name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Date">
+                <Input
+                  type="date"
+                  value={date}
+                  max={todayISO()}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </Field>
             </div>
-          </div>
+
+            <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4 sm:p-6">
+              <Field label="Weight Ltr">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  className={BIG}
+                />
+              </Field>
+              <Field label="Fat">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  value={fat}
+                  onChange={(e) => onFat(e.target.value)}
+                  className={BIG}
+                />
+              </Field>
+              <Field label="SNF">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  value={snf}
+                  onChange={(e) => onSnf(e.target.value)}
+                  className={BIG}
+                />
+              </Field>
+              <Field label="CLR">
+                <Input
+                  readOnly
+                  tabIndex={-1}
+                  value={clr}
+                  className={`bg-soft/60 ${BIG}`}
+                />
+              </Field>
+
+              <div className="col-span-2 flex flex-col gap-3 sm:col-span-4 sm:flex-row sm:flex-wrap sm:items-end">
+                <Button
+                  className="w-full sm:w-auto sm:min-w-48"
+                  icon={<Save size={16} />}
+                  loading={saving}
+                  disabled={!valid}
+                  onClick={submit}
+                >
+                  Submit
+                </Button>
+                <Button
+                  className="w-full sm:w-auto sm:min-w-40"
+                  variant="outline"
+                  icon={<Eye size={16} />}
+                  loading={loading}
+                  disabled={!vlc || !date || (vlc === ALL && ids.length === 0)}
+                  onClick={() =>
+                    setApplied({
+                      vlc,
+                      shift,
+                      date,
+                      targets: vlc === ALL ? [...ids] : [vlc],
+                    })
+                  }
+                >
+                  Show
+                </Button>
+                {vlc === ALL && (
+                  <p className="text-xs text-mute sm:self-center">
+                    Select a VLC to enter milk. All is for viewing only.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </Card>
       </Reveal>

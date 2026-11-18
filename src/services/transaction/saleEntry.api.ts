@@ -59,16 +59,6 @@ export interface SaleRow {
 }
 
 const q = encodeURIComponent;
-const log = (...a: unknown[]) => console.log("[SaleEntry]", ...a);
-const cut = (v: unknown, n = 600) => {
-  let t: string;
-  try {
-    t = typeof v === "string" ? v : JSON.stringify(v);
-  } catch {
-    t = String(v);
-  }
-  return t.length > n ? `${t.slice(0, n)}... (${t.length} chars)` : t;
-};
 
 export const plantIdOf = (): string => String(GLOBALS.plantid || "1").trim();
 
@@ -132,9 +122,7 @@ function assertOk(reply: unknown, what: string) {
 }
 
 async function read(what: string, path: string): Promise<unknown> {
-  log(`${what} -> GET ${path}`);
   const reply = await readPath(path);
-  log(`${what} <- reply:`, cut(reply));
   assertOk(reply, what);
   return reply;
 }
@@ -161,9 +149,6 @@ export async function getItems(plantId: string): Promise<ItemOption[]> {
       };
     })
     .filter((o) => o.id);
-  log(`items parsed: ${out.length}`);
-  if (rows.length && !out.length)
-    log("items: no id column found in", cut(rows[0]));
   return out;
 }
 
@@ -183,7 +168,6 @@ export async function getVendors(vlcid: string): Promise<Option[]> {
       return { id, label: name ? `${id} | ${name}` : id };
     })
     .filter((o) => o.id);
-  log(`vendors parsed: ${out.length}`);
   return out;
 }
 
@@ -205,7 +189,6 @@ export async function getStock(
       ? rows[0]
       : undefined);
   if (!mine) {
-    log(`stock: no row for item ${itemId} in ${rows.length} row(s)`);
     return "";
   }
   const stock = pick(mine, [
@@ -218,9 +201,6 @@ export async function getStock(
     "availablestock",
     "qty",
   ]);
-  log(
-    `stock of item ${itemId}: ${stock || "(no stock column found in " + cut(mine, 200) + ")"}`,
-  );
   return stock;
 }
 
@@ -270,9 +250,6 @@ export async function getSales(p: SaleQuery): Promise<SaleRow[]> {
   const json = listJson(p);
   const reply = await read("list", `${SALES_PATH}?json=${q(json)}&id=2`);
   const rows = rowsOf(reply).map(toRow);
-  log(`list parsed: ${rows.length} row(s)`);
-  if (rows.length)
-    console.table(rows.slice(0, 15).map(({ raw: _raw, ...rest }) => rest));
   return rows;
 }
 
@@ -331,7 +308,6 @@ export async function saveSale(s: SaleInput): Promise<string> {
     PlantId: s.plantId,
   };
   const json = JSON.stringify([fields]);
-  log(`SAVE -> POST ${SALES_PATH}  json=${json}  id=${SAVE_ID}`);
 
   const query: SaleQuery = {
     vlcid: s.vlcid,
@@ -374,7 +350,6 @@ export async function saveSale(s: SaleInput): Promise<string> {
   }
   if (lastError) throw lastError;
 
-  log(`SAVE <- reply: ${cut(text)}`);
   clearRequestMemo();
   return (
     checkReply(text, "The entry could not be saved.", true) || "Record saved"
@@ -388,11 +363,9 @@ export async function deleteSale(row: SaleRow, p: SaleQuery): Promise<string> {
     StationId: stationOf(p.vlcid),
     SalesFlag: wireFlag(p.flag),
   });
-  log(`DELETE -> ${SALES_PATH}?json=${cut(json, 300)}&id=3`);
   const text = await sendPath(`${SALES_PATH}?json=${q(json)}&id=3`, () => ({
     method: "DELETE",
   }));
-  log(`DELETE <- reply: ${cut(text)}`);
   clearRequestMemo();
   return checkReply(text, "The entry could not be deleted.", true) || "Deleted";
 }

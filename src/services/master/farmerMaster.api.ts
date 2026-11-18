@@ -1,4 +1,9 @@
-import { clearRequestMemo, gatewayText, listOf, parseGatewayText } from "../http/client";
+import {
+  clearRequestMemo,
+  gatewayText,
+  listOf,
+  parseGatewayText,
+} from "../http/client";
 import {
   dpuGet,
   dpuUrl,
@@ -28,7 +33,6 @@ const cap = (k: string) => k.charAt(0).toUpperCase() + k.slice(1);
 const pascal = <T extends Record<string, unknown>>(o: T) =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [cap(k), v]));
 
-
 export function unwrapReply(reply: unknown): unknown {
   if (!isObj(reply)) return reply;
   for (const k of ["Message", "message", "Data", "data"]) {
@@ -48,9 +52,9 @@ export function unwrapReply(reply: unknown): unknown {
 
 export interface MasterRecord extends FarmerInput {
   key: string;
-  /** Verify flag sent by the server (true / false). null = the server did not send one. */
+
   verified: boolean | null;
-  /** farmercow column of the farmer master (cow / buff) */
+
   cow?: string;
 }
 
@@ -70,7 +74,7 @@ function mobileOf(r: RawLoose): string {
   return PHONE.test(loose) ? loose : "";
 }
 
-// The names a verify flag can come under in the farmer list. farmerstatus / status are NOT here: they mean Active / Inactive.
+
 const VERIFY_KEYS = [
   "farmerflag",
   "verifyflag",
@@ -88,8 +92,9 @@ const VERIFY_KEYS = [
 const flagValue = (v: unknown): boolean | null => {
   if (v === null || v === undefined || String(v).trim() === "") return null;
   const t = String(v).trim().toLowerCase();
-  if ([ "1", "true", "yes", "y", "verified" ].includes(t)) return true;
-  if ([ "0", "false", "no", "n", "unverified", "not verified" ].includes(t)) return false;
+  if (["1", "true", "yes", "y", "verified"].includes(t)) return true;
+  if (["0", "false", "no", "n", "unverified", "not verified"].includes(t))
+    return false;
   return null;
 };
 
@@ -102,7 +107,7 @@ function verifiedOf(r: RawLoose): boolean | null {
     const found = flagValue(r[k]);
     if (found !== null) return found;
   }
-  // any other column that is named like a flag / verify field (never the Active / Inactive status)
+ 
   for (const k of keys) {
     const c = clean(k);
     if (!/(flag|verif)/.test(c) || /status|active/.test(c)) continue;
@@ -170,9 +175,6 @@ export async function getData(
   const known = new Set(ids);
   const resolve = (v: string) => (known.has(v) ? v : (customToReal[v] ?? v));
 
-  // The server answers 400 "The VillageIds field is required" to { payload: ... }, so this endpoint reads VillageIds
-  // straight from the JSON body (plain, not encrypted). The old portal sent { VillageIds: "id1,id2" }. The wrapped
-  // layouts stay as the last fallbacks. The layout the server accepts is remembered for the next calls.
   const one = async (list: string[]): Promise<RawLoose[]> => {
     const csv = list.join(",");
     const path = FARMER_LIST_PATH;
@@ -183,7 +185,9 @@ export async function getData(
       { label: "xor-VillageIds", path, body: xor({ VillageIds: csv }) },
       { label: "xor-array-VillageIds", path, body: xor([{ VillageIds: csv }]) },
     ];
-    return dpuReadAttempts("FarmerMaster", attempts, (r) => listOf<RawLoose>(r));
+    return dpuReadAttempts("FarmerMaster", attempts, (r) =>
+      listOf<RawLoose>(r),
+    );
   };
 
   const rows = await one(ids);
@@ -199,20 +203,17 @@ export async function getData(
     );
     out = parts.flat();
   }
-  const mapped = out.map(({ r, v }, i) => mapRecord(r, v, i)).filter((m) => m.farmerId);
+  const mapped = out
+    .map(({ r, v }, i) => mapRecord(r, v, i))
+    .filter((m) => m.farmerId);
   if (mapped.length && mapped.every((m) => m.verified === null)) {
-    console.info(
-      "[FarmerMaster] The farmer list has no verify flag field, so Verified / Unverified is remembered in this browser. Fields in a row:",
-      Object.keys(out[0]?.r ?? {}),
-    );
   }
   return mapped;
 }
 
-// Verified farmers are remembered in this browser too. It is used only when the farmer list itself carries no verify flag,
-// so a page reload does not turn every farmer back to Unverified.
 const VERIFIED_STORE = "smartx:farmerVerified";
-const storeKey = (vlccid: string, farmerId: string | number) => `${vlccid}:${Number(farmerId)}`;
+const storeKey = (vlccid: string, farmerId: string | number) =>
+  `${vlccid}:${Number(farmerId)}`;
 
 function readVerifiedStore(): Set<string> {
   try {
@@ -224,11 +225,18 @@ function readVerifiedStore(): Set<string> {
   }
 }
 
-export function isRememberedVerified(vlccid: string, farmerId: string | number): boolean {
+export function isRememberedVerified(
+  vlccid: string,
+  farmerId: string | number,
+): boolean {
   return readVerifiedStore().has(storeKey(vlccid, farmerId));
 }
 
-function rememberVerified(vlccid: string, farmerId: string | number, verified: boolean): void {
+function rememberVerified(
+  vlccid: string,
+  farmerId: string | number,
+  verified: boolean,
+): void {
   try {
     const set = readVerifiedStore();
     if (verified) set.add(storeKey(vlccid, farmerId));
@@ -246,7 +254,9 @@ export async function getMaxId(vlccid: string): Promise<number | null> {
   } catch (e) {
     // second spelling of the parameter; if this fails too the caller falls back to the list
     if (!(e instanceof ApiError) || e.kind !== "server") throw e;
-    json = unwrapReply(await dpuGet(`${FARMER_MAXID_PATH}?vlccid=${q(vlccid)}`, 0));
+    json = unwrapReply(
+      await dpuGet(`${FARMER_MAXID_PATH}?vlccid=${q(vlccid)}`, 0),
+    );
   }
   if (typeof json === "number") return json;
   const best: number[] = [];
@@ -370,7 +380,9 @@ export function checkReply(
 // The decrypted root is a LIST of SmartXAccess.Model.SmartX.FarmerSave. The server's own replies show the property
 // types: `farmer` is a NUMBER (Int32); `vlccid` and `farmerstatus` are TEXT. Every other field is sent as text.
 const numIf = (v: unknown) =>
-  typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : v;
+  typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))
+    ? Number(v)
+    : v;
 
 export async function postData(
   f: FarmerInput,
@@ -388,7 +400,10 @@ export async function postData(
 // POST /api/Login/FarmerExcelSave  (root = list; the field types are tried the same way)
 export async function postExcel(list: FarmerInput[]): Promise<string> {
   const rows = list.map(toExcelPayload) as Array<Record<string, unknown>>;
-  const str = (k: string) => (r: Record<string, unknown>) => ({ ...r, [k]: String(r[k]) });
+  const str = (k: string) => (r: Record<string, unknown>) => ({
+    ...r,
+    [k]: String(r[k]),
+  });
   const villageText = rows.map(str("villageid"));
   const villageStatusText = villageText.map(str("farmerstatus"));
   const allText = villageStatusText.map(str("farmerid"));
@@ -396,7 +411,11 @@ export async function postExcel(list: FarmerInput[]): Promise<string> {
   const message = await dpuSaveAttempts("FarmerExcelSave", [
     { label: "xor-array", path, body: xor(rows) },
     { label: "xor-array-village-text", path, body: xor(villageText) },
-    { label: "xor-array-village-status-text", path, body: xor(villageStatusText) },
+    {
+      label: "xor-array-village-status-text",
+      path,
+      body: xor(villageStatusText),
+    },
     { label: "xor-array-all-text", path, body: xor(allText) },
   ]);
   clearRequestMemo();
@@ -433,7 +452,11 @@ export async function updateFarmerStatus(all: StatusChange[]): Promise<string> {
         { label: "xor-params", path, body: xor(params) },
         { label: "xor-array", path, body: xor([params]) },
         { label: "xor-params-pascal", path, body: xor(pascal(params)) },
-        { label: "xor-query-text", path, body: xor(new URLSearchParams(params).toString()) },
+        {
+          label: "xor-query-text",
+          path,
+          body: xor(new URLSearchParams(params).toString()),
+        },
       ],
       "PUT",
     );
@@ -452,19 +475,32 @@ export async function updateFarmerFlag(
   villageCode: string = vlccid,
 ): Promise<string> {
   const flag = verified ? 1 : 0;
-  const params = { villageid: String(villageCode), farmerid: String(farmerId), flag };
+  const params = {
+    villageid: String(villageCode),
+    farmerid: String(farmerId),
+    flag,
+  };
   const path = `${FARMER_FLAG_PATH}?villageid=${q(params.villageid)}&farmerid=${q(params.farmerid)}&flag=${flag}`;
   const attempts: SaveAttempt[] = [
     { label: "xor-params", path, body: xor(params) },
     { label: "xor-array", path, body: xor([params]) },
     { label: "xor-params-pascal", path, body: xor(pascal(params)) },
-    { label: "xor-params-text", path, body: xor({ ...params, flag: String(flag) }) },
+    {
+      label: "xor-params-text",
+      path,
+      body: xor({ ...params, flag: String(flag) }),
+    },
     { label: "empty-json", path, body: {} },
   ];
   let lastError: unknown;
   for (const method of ["PUT", "POST"] as const) {
     try {
-      const message = await dpuSaveAttempts(`updatefarmerflag-${method}`, attempts, method, FLAG_NOT_ACCEPTED);
+      const message = await dpuSaveAttempts(
+        `updatefarmerflag-${method}`,
+        attempts,
+        method,
+        FLAG_NOT_ACCEPTED,
+      );
       rememberVerified(vlccid, farmerId, verified);
       clearRequestMemo();
       return message;
@@ -476,8 +512,15 @@ export async function updateFarmerFlag(
   try {
     const text = await gatewayText(dpuUrl(path), { method: "GET" }, 0, true);
     if (/^\s*\{\s*"error"\s*:/i.test(text))
-      throw new ApiError("The server could not update the verify status.", "server");
-    const message = checkReply(text, "Could not update the verify status", true);
+      throw new ApiError(
+        "The server could not update the verify status.",
+        "server",
+      );
+    const message = checkReply(
+      text,
+      "Could not update the verify status",
+      true,
+    );
     rememberVerified(vlccid, farmerId, verified);
     clearRequestMemo();
     return message;

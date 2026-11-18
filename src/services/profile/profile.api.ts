@@ -105,7 +105,6 @@ async function call(url: string, init: RequestInit): Promise<unknown> {
 
 export async function getVillageInfo(loginId: string, fallback: Partial<Profile> = {}): Promise<Profile> {
   const json = await call(`${GET_VILLAGE_URL}?loginid=${encodeURIComponent(loginId)}`, { method: 'GET', cache: 'no-store' });
-  console.log('[profile] GetVillage response:', json);
   return profileFromRecord(json, fallback);
 }
 
