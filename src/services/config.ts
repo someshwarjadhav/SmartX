@@ -59,6 +59,6 @@ export const SHOW_CUSTOMER_ID =
   (import.meta.env.VITE_SHOW_CUSTOMER_ID ?? "true").toString().toLowerCase() !==
   "false";
 
-export const WARM_OTHER_CENTRES = true;
+export const WARM_OTHER_CENTRES = false;
 
 export const MAX_WARM_CENTRES = 40;

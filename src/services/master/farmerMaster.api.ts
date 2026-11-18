@@ -14,15 +14,6 @@ import type { RawLoose } from "../types/raw";
 import type { FarmerInput } from "./farmerMaster.rules.ts";
 import { DPU } from "../http/dpuEndpoints";
 
-// DPU API: https://dpu.shivinfotech.co.in/api/Login/<endpoint>
-//   POST   FarmerMaster          list of farmers of the given villages
-//   GET    FarmerCollectionDpu   highest farmer code of a village (next code = max + 1)
-//   GET    GetFarmer             one farmer (edit form)
-//   POST   FarmerSave            add / update one farmer
-//   POST   FarmerExcelSave       import many farmers
-//   PUT    updateFarmerStatus    Active / Inactive
-//   DELETE DeleteFarmer          delete one farmer
-// Every POST / PUT / DELETE body is { "payload": "<XOR + base64>" } (see the Swagger example { "payload": "string" }).
 export const FARMER_LIST_PATH = "/Login/FarmerMaster";
 export const FARMER_MAXID_PATH = "/Login/FarmerCollectionDpu";
 export const FARMER_GET_PATH = "/Login/GetFarmer";
@@ -37,10 +28,7 @@ const cap = (k: string) => k.charAt(0).toUpperCase() + k.slice(1);
 const pascal = <T extends Record<string, unknown>>(o: T) =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [cap(k), v]));
 
-/**
- * The DPU API answers { Success, Message: "<text>" } and puts a list (or a single row, or a number) inside Message
- * as JSON text. This opens that text; anything else is returned unchanged.
- */
+
 export function unwrapReply(reply: unknown): unknown {
   if (!isObj(reply)) return reply;
   for (const k of ["Message", "message", "Data", "data"]) {
@@ -454,11 +442,6 @@ export async function updateFarmerStatus(all: StatusChange[]): Promise<string> {
   return last;
 }
 
-// Verify / Unverify one farmer:  https://dpu.shivinfotech.co.in/api/Login/updatefarmerflag?villageid=<centre>&farmerid=<code>&flag=<1|0>
-// flag = 1 -> Verify, flag = 0 -> Unverify. The DPU server answers "415 Unsupported Media Type" to a request that has no JSON
-// body, so (like updateFarmerStatus) the call is sent with Content-Type application/json and the usual { payload: XOR } body.
-// Layouts are tried one after the other (PUT first, then POST; the working one is remembered). If the server still refuses
-// every body layout, the old body-less GET is tried as the last resort. The call is never cached.
 export const FARMER_FLAG_PATH = DPU.updateFarmerFlag;
 const FLAG_NOT_ACCEPTED = /error (404|405)\b/i;
 

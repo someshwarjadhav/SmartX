@@ -1,4 +1,6 @@
 import { BASE_URL, REQUEST_TIMEOUT_MS, STIPL_BASE } from "../config";
+import { dpuGet } from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
 import { getSession } from "../session";
 import { ApiError } from "../http/errors";
 import { norm } from "../utils/loose";
@@ -229,8 +231,9 @@ export async function getQualityPair(
   stationId: string,
   shift: string,
 ): Promise<{ vlc: Quality6; doc: Quality6 }> {
-  const json = await request(
-    `${STATIC}/home/collectionbulkquality?stationid=${encodeURIComponent(stationId)}&shift=${encodeURIComponent(shift)}`,
+  const json = await dpuGet(
+    `${DPU.collectionBulkQuality}?stationid=${encodeURIComponent(stationId)}&shift=${encodeURIComponent(shift)}`,
+    0,
   );
   return {
     vlc: qualityFrom(listOf(json, VLC_ARRAY)),
@@ -494,8 +497,9 @@ export async function getEkoCredentials(
   villageId: string,
 ): Promise<EkoCredentials> {
   const rec = recordsOf(
-    await request(
-      `${STATIC}/home/getVillageId?villageid=${encodeURIComponent(villageId)}`,
+    await dpuGet(
+      `${DPU.getVillageId}?villageid=${encodeURIComponent(villageId)}`,
+      1,
     ),
   )[0];
   if (!rec) return { ...emptyCredentials(), villageId };
