@@ -202,7 +202,7 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
                     </p>
                   </div>
                   <Link
-                    to="/settings"
+                    to="/portal/profile"
                     onClick={() => setMenu(false)}
                     className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-soft"
                   >

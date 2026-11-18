@@ -7,6 +7,7 @@ import { isRouteAllowed, useNav } from '../components/layout/operations/nav';
 import { applySession, ensureMenu, isSessionDataLoaded, loadSessionData } from '../services/bootstrap';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { PageLoader } from '../components/ui/PageLoader';
+import { landingRouteFor } from '../config/portal/landingRoutes';
 
 const Login = lazy(() => import('../pages/auth/Login'));
 const AppShell = lazy(() => import('../components/layout/AppShell'));
@@ -62,6 +63,7 @@ const PortalForm = lazy(() => import('../pages/operations/FormPlaceholder'));
 const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/': Dashboard,
   '/settings': Settings,
+  '/portal/profile': Settings,
   '/contact': Contact,
   '/live': LiveCollection,
   '/collections': FarmerCollection,
@@ -115,6 +117,14 @@ const ScrollToTop: React.FC = () => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [pathname]);
   return null;
+};
+
+// Accounts listed in config/portal/landingRoutes.ts open their own page instead of the dashboard.
+const HomeRoute: React.FC = () => {
+  const { user } = useAuth();
+  const landing = landingRouteFor(user?.email);
+  if (landing) return <Navigate to={landing} replace />;
+  return <Dashboard />;
 };
 
 const SessionGate: React.FC = () => {
@@ -171,7 +181,7 @@ const App: React.FC = () => {
             <Route element={<AppShell />}>
               <Route element={<RouteGate />}>
                 {Object.entries(PAGES).map(([path, Page]) =>
-                  path === '/' ? <Route key={path} index element={<Page />} /> : <Route key={path} path={path} element={<Page />} />,
+                  path === '/' ? <Route key={path} index element={<HomeRoute />} /> : <Route key={path} path={path} element={<Page />} />,
                 )}
               </Route>
               <Route path="*" element={<NotFound />} />
