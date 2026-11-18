@@ -208,6 +208,35 @@ export const PORTAL_ADMIN_LOGIN_RECORD: unknown | null = {
   ],
 };
 
+
+export const SKAD_LOGIN_RECORD: unknown | null = {
+  Data: [
+    {
+      id: 169,
+      email: "skadprocument@gmail.com",
+      username: "SKADAIRY",
+      mccid: "701",
+      mccname: "SKA Dairy",
+      mobile: "9422227060",
+      status: 1,
+      SessionID:
+        "8395,8396,OM391,OM394,OM381,OM395,OM396,OM397,VR40,T61929,T61930,T61931,8385,VR41,OM393,T61917,SP2040,SP2041,SP2042,SP2044,SP2045,SP2212,OM404,OM402,SP2433,T45761,SP2043,SP2052,SP2053,OM408,SP2627,T61934,T61932,T61933,SP2628,T61935,T61936,VR45,8402,T61937,8403,T61941,8404,SP854,PL381,PL404,PL1720,PL397,PL396,PL393,SP2025,T45846,T61951,P204,KH230,8410,8363,T61953,T61952,T61954,T61955,8414,T61962,8406,8417,8419,8421,T61970,1288,7011288,8422,8423,8261,T61975,8425,OM626,8343,8440",
+      CustomStationId: null,
+      LoginStatus: 0,
+      webLogin: 0,
+      PlantId: 1,
+      UserAccess: "6",
+      deviceName: "1",
+      lastLogin: null,
+      Token: "77df927b077f51dcea0207c2b5c4cc062825x1tr",
+      DataEncryption: 1,
+      GST: null,
+      Address: null,
+      logo: null,
+    },
+  ],
+};
+
 // Only these accounts are allowed. Everyone else is denied.
 export const STATIC_LOGINS: StaticLoginEntry[] = [
   {
@@ -251,6 +280,12 @@ export const STATIC_LOGINS: StaticLoginEntry[] = [
     passwordSha256:
       "3a500e5b9d43f16c616710ab46edaecaba09aaa919d3161315c0f3f82739ec85",
     record: PORTAL_ADMIN_LOGIN_RECORD,
+  },
+  {
+    username: "skadprocument@gmail.com",
+    passwordSha256:
+      "27a97fbf93dedb32362251392e3e0954f3beaf616fab4033d501c1be3294a644",
+    record: SKAD_LOGIN_RECORD,
   },
 ];
 

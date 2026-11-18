@@ -71,7 +71,7 @@ export function parseUsers(json: unknown): AccessUser[] {
       pickLike(row, ["name"], ["file", "path", "image"]);
     out.push({ id, name, email, label: labelOf(name, email) || `User ${id}` });
   }
-  return out.sort((a, b) => a.label.localeCompare(b.label));
+  return out;
 }
 
 export async function getUser(): Promise<AccessUser[]> {

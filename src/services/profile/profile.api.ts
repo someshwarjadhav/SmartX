@@ -7,6 +7,7 @@ import { isObj, pick, pickLike, rowsFrom, type Obj } from '../utils/loose';
 const HOST = BASE_URL || 'https://smartx.shivinfotech.co.in';
 const UPDATE_URL = `${HOST}/home/profileupdate`;
 const GET_VILLAGE_URL = `${HOST}/home/GetVillage`;
+const PUT_VILLAGE_URL = `${HOST}/home/PutVillage`;
 
 
 export interface Profile {
@@ -19,6 +20,7 @@ export interface Profile {
   Address: string;
   GST: string;
   SessionID: string;
+  CustomStationId: string;
   logo: File | null;
   
   logoUrl: string;
@@ -26,7 +28,7 @@ export interface Profile {
 
 export const emptyProfile = (): Profile => ({
   id: '', username: '', mccname: '', email: '', password: '',
-  mobile: '', Address: '', GST: '', SessionID: '', logo: null, logoUrl: '',
+  mobile: '', Address: '', GST: '', SessionID: '', CustomStationId: '', logo: null, logoUrl: '',
 });
 
 
@@ -59,6 +61,7 @@ export function profileFromRecord(json: unknown, fallback: Partial<Profile> = {}
     Address: pick(r, ['address']) || base.Address,
     GST: pick(r, ['gst', 'gstno', 'gstnumber']) || base.GST,
     SessionID: pick(r, ['sessionid', 'vlccid']) || base.SessionID,
+    CustomStationId: pick(r, ['customstationid']) || base.CustomStationId,
     
     password: pick(r, ['password', 'pwd', 'pass']) || base.password,
     logo: null,
@@ -148,4 +151,40 @@ export async function updateProfile(p: Profile): Promise<string> {
   }
   if (typeof reply === 'string' && /^(false|fail|failed|error)/i.test(reply)) throw new ApiError(reply, 'server');
   return typeof reply === 'string' && reply && reply.length < 120 ? reply : 'Profile updated successfully';
+}
+
+
+/** "A, B,C" -> ["A","B","C"] (empty parts dropped). */
+export const splitIds = (csv: string): string[] =>
+  (csv ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+
+/**
+ * Keeps the custom station ids in step with the station ids (the two lists are kept one-to-one on the server).
+ * A station that was already there keeps its custom id; a new station gets its own id as the custom id.
+ * If the old lists were not one-to-one, the old custom ids are sent back unchanged.
+ */
+export function alignCustomIds(oldIds: string[], oldCustomCsv: string, newIds: string[]): string {
+  const oldCustom = splitIds(oldCustomCsv);
+  if (!oldCustom.length || oldCustom.length !== oldIds.length) return (oldCustomCsv ?? '').trim();
+  const byId = new Map(oldIds.map((id, i) => [id.toLowerCase(), oldCustom[i]!]));
+  return newIds.map((id) => byId.get(id.toLowerCase()) ?? id).join(',');
+}
+
+/** Saves the station ids of the login (GET home/PutVillage?request=..&customstationid=..&loginId=..). */
+export async function putVillage(stationIds: string[], customStationIds: string, loginId: string): Promise<string> {
+  const url =
+    `${PUT_VILLAGE_URL}?request=${encodeURIComponent(stationIds.join(','))}` +
+    `&customstationid=${encodeURIComponent(customStationIds)}` +
+    `&loginId=${encodeURIComponent(loginId)}`;
+  const reply = await call(url, { method: 'GET', cache: 'no-store' });
+
+  if (isObj(reply)) {
+    const message = String(reply.Message ?? reply.message ?? reply.msg ?? '').trim();
+    const flag = reply.Success ?? reply.success ?? reply.status;
+    const failed = flag === false || /^(false|fail|failed|error)$/i.test(String(flag ?? ''));
+    if (failed) throw new ApiError(message || 'The station ids could not be saved.', 'server');
+    return message || 'Station ids saved successfully';
+  }
+  if (typeof reply === 'string' && /^(false|fail|failed|error)/i.test(reply)) throw new ApiError(reply, 'server');
+  return typeof reply === 'string' && reply && reply.length < 120 ? reply : 'Station ids saved successfully';
 }

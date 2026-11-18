@@ -1,23 +1,26 @@
-import type * as React from "react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Eye, EyeOff, ImagePlus, LogOut, Pencil, Save } from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
-import { useToast } from "../../context/ToastContext";
-import { useLoginData } from "../../hooks/useSessionData";
-import { Button } from "../../components/ui/Button";
-import { Field, Input } from "../../components/ui/Fields";
-import { PageHeader } from "../../components/ui/PageHeader";
-import { Panel } from "../../components/ui/Panel";
-import { initials } from "../../lib/format";
-import { ApiError } from "../../services/http/errors";
+import type * as React from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Eye, EyeOff, ImagePlus, LogOut, Pencil, Plus, Save, X } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { useLoginData } from '../../hooks/useSessionData';
+import { Button } from '../../components/ui/Button';
+import { Field, Input } from '../../components/ui/Fields';
+import { PageHeader } from '../../components/ui/PageHeader';
+import { Panel } from '../../components/ui/Panel';
+import { initials } from '../../lib/format';
+import { ApiError } from '../../services/http/errors';
 import {
+  alignCustomIds,
   getProfileFromSession,
   getVillageInfo,
+  putVillage,
+  splitIds,
   updateProfile,
   validateProfile,
   type Profile,
   type ProfileErrors,
-} from "../../services/profile/profile.api";
+} from '../../services/profile/profile.api';
 
 const Settings: React.FC = () => {
   const { user, logout } = useAuth();
@@ -29,11 +32,11 @@ const Settings: React.FC = () => {
   const initial = useMemo(
     () =>
       getProfileFromSession({
-        id: login?.userId ?? "",
-        username: user?.name ?? "",
-        mccname: login?.mccName ?? "",
-        email: user?.email ?? "",
-        SessionID: login?.vlccIds?.[0] ?? "",
+        id: login?.userId ?? '',
+        username: user?.name ?? '',
+        mccname: login?.mccName ?? '',
+        email: user?.email ?? '',
+        SessionID: login?.vlccIds?.[0] ?? '',
       }),
     [login, user],
   );
@@ -46,40 +49,39 @@ const Settings: React.FC = () => {
   const [showPass, setShowPass] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
 
+  // Station ids (Add StationId section)
+  const [stations, setStations] = useState<string[]>(() => splitIds(initial.SessionID));
+  const [savedStations, setSavedStations] = useState(() => ({ ids: splitIds(initial.SessionID), custom: initial.CustomStationId }));
+  const [stationInput, setStationInput] = useState('');
+  const [stationSaving, setStationSaving] = useState(false);
+
+  
   useEffect(() => {
     const id = initial.id;
     if (!id) return;
     let alive = true;
     setLoading(true);
     getVillageInfo(id, initial)
-      .then((p) => {
-        if (alive) setLoaded(p);
-      })
+      .then((p) => { if (alive) setLoaded(p); })
       .catch((e) => {
-        if (alive)
-          toast(
-            e instanceof ApiError
-              ? e.message
-              : "Could not load the profile from the server",
-            "warn",
-          );
+        if (alive) toast(e instanceof ApiError ? e.message : 'Could not load the profile from the server', 'warn');
       })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial.id]);
 
   useEffect(() => setForm(loaded ?? initial), [loaded, initial]);
 
   useEffect(() => {
-    if (!form.logo) {
-      setPreview(null);
-      return;
-    }
+    const src = loaded ?? initial;
+    const ids = splitIds(src.SessionID);
+    setStations(ids);
+    setSavedStations({ ids, custom: src.CustomStationId });
+  }, [loaded, initial]);
+
+  useEffect(() => {
+    if (!form.logo) { setPreview(null); return; }
     const url = URL.createObjectURL(form.logo);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
@@ -87,7 +89,7 @@ const Settings: React.FC = () => {
 
   const set = <K extends keyof Profile>(key: K, value: Profile[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
-    if (errors[key]) setErrors((e) => ({ ...e, [key]: "" }));
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: '' }));
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -96,7 +98,7 @@ const Settings: React.FC = () => {
     const found = validateProfile(form);
     setErrors(found);
     if (Object.values(found).some(Boolean)) {
-      toast("Please correct the highlighted fields", "warn");
+      toast('Please correct the highlighted fields', 'warn');
       return;
     }
     setSaving(true);
@@ -106,33 +108,74 @@ const Settings: React.FC = () => {
       const saved = { ...form, logoUrl: preview ?? form.logoUrl, logo: null };
       setForm(saved);
       setLoaded(saved);
-      if (fileRef.current) fileRef.current.value = "";
+      if (fileRef.current) fileRef.current.value = '';
     } catch (e) {
-      toast(
-        e instanceof ApiError ? e.message : "The profile could not be updated",
-        "warn",
-      );
+      toast(e instanceof ApiError ? e.message : 'The profile could not be updated', 'warn');
     } finally {
       setSaving(false);
     }
   };
 
-  const display = form.username || user?.name || "User";
+  const addStation = () => {
+    const parts = stationInput.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+    if (!parts.length) {
+      toast('Enter a Station ID', 'warn');
+      return;
+    }
+    const have = new Set(stations.map((s) => s.toLowerCase()));
+    const fresh: string[] = [];
+    const repeated: string[] = [];
+    for (const p of parts) {
+      const key = p.toLowerCase();
+      if (have.has(key)) repeated.push(p);
+      else {
+        have.add(key);
+        fresh.push(p);
+      }
+    }
+    if (fresh.length) {
+      setStations((s) => [...s, ...fresh]);
+      setStationInput('');
+    }
+    if (repeated.length) toast(`${repeated.join(', ')} ${repeated.length > 1 ? 'are' : 'is'} already in the list`, 'warn');
+  };
+
+  const removeStation = (index: number) => setStations((s) => s.filter((_, i) => i !== index));
+
+  const saveStations = async () => {
+    if (stationSaving) return;
+    if (!initial.id) {
+      toast('Your login id is missing, please sign in again', 'warn');
+      return;
+    }
+    if (!stations.length) {
+      toast('Add at least one Station ID before submitting', 'warn');
+      return;
+    }
+    setStationSaving(true);
+    try {
+      const custom = alignCustomIds(savedStations.ids, savedStations.custom, stations);
+      const message = await putVillage(stations, custom, initial.id);
+      toast(message);
+      setSavedStations({ ids: stations, custom });
+      setForm((f) => ({ ...f, SessionID: stations.join(','), CustomStationId: custom }));
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'The station ids could not be saved', 'warn');
+    } finally {
+      setStationSaving(false);
+    }
+  };
+
+  const display = form.username || user?.name || 'User';
   const photo = preview || form.logoUrl;
 
   return (
     <div>
-      <PageHeader
-        title="Profile"
-        subtitle="View and update your account details."
-      />
+      <PageHeader title="Profile" subtitle="View and update your account details." />
 
-      <Panel
-        title="Edit Profile"
-        subtitle={loading ? "Loading your profile…" : undefined}
-        bodyClassName="pt-5"
-      >
+      <Panel title="Edit Profile" subtitle={loading ? 'Loading your profile…' : undefined} bodyClassName="pt-5">
         <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+       
           <aside className="flex flex-col items-center self-start rounded-2xl bg-soft p-6 text-center">
             <button
               type="button"
@@ -145,9 +188,7 @@ const Settings: React.FC = () => {
                   src={photo}
                   alt="Logo"
                   className="h-full w-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
               ) : (
                 initials(display)
@@ -157,92 +198,49 @@ const Settings: React.FC = () => {
               </span>
             </button>
 
-            <p className="mt-4 break-all font-display text-xl font-extrabold uppercase text-brand">
-              {display}
-            </p>
+            <p className="mt-4 break-all font-display text-xl font-extrabold uppercase text-brand">{display}</p>
             <p className="mt-1 break-all text-xs text-mute">{form.email}</p>
             <hr className="my-5 w-full border-line" />
 
-            <Button
-              className="w-full"
-              icon={<Pencil size={16} />}
-              onClick={() => nameRef.current?.focus()}
-            >
-              Edit Profile
-            </Button>
-            <Button
-              variant="danger"
-              className="mt-3 w-full"
-              icon={<LogOut size={16} />}
-              onClick={logout}
-            >
-              Log Out
-            </Button>
+            <Button className="w-full" icon={<Pencil size={16} />} onClick={() => nameRef.current?.focus()}>Edit Profile</Button>
+            <Button variant="danger" className="mt-3 w-full" icon={<LogOut size={16} />} onClick={logout}>Log Out</Button>
           </aside>
 
-          <form
-            onSubmit={submit}
-            noValidate
-            className="grid min-w-0 gap-x-6 gap-y-4 sm:grid-cols-2"
-          >
+         
+          <form onSubmit={submit} noValidate className="grid min-w-0 gap-x-6 gap-y-4 sm:grid-cols-2">
             <Field label="Id" htmlFor="pf-id">
-              <Input
-                id="pf-id"
-                value={form.id}
-                onChange={(e) => set("id", e.target.value)}
-              />
+              <Input id="pf-id" value={form.id} onChange={(e) => set('id', e.target.value)} />
             </Field>
-            <Field
-              label="Username"
-              htmlFor="pf-username"
-              error={errors.username}
-            >
-              <Input
-                id="pf-username"
-                ref={nameRef}
-                value={form.username}
-                onChange={(e) => set("username", e.target.value)}
-              />
+            <Field label="Username" htmlFor="pf-username" error={errors.username}>
+              <Input id="pf-username" ref={nameRef} value={form.username} onChange={(e) => set('username', e.target.value)} />
             </Field>
 
             <Field label="MCC Name" htmlFor="pf-mcc" error={errors.mccname}>
-              <Input
-                id="pf-mcc"
-                value={form.mccname}
-                onChange={(e) => set("mccname", e.target.value)}
-              />
+              <Input id="pf-mcc" value={form.mccname} onChange={(e) => set('mccname', e.target.value)} />
             </Field>
             <Field label="Email" htmlFor="pf-email" error={errors.email}>
-              <Input
-                id="pf-email"
-                type="email"
-                value={form.email}
-                onChange={(e) => set("email", e.target.value)}
-              />
+              <Input id="pf-email" type="email" value={form.email} onChange={(e) => set('email', e.target.value)} />
             </Field>
 
-            <Field
-              label="Password"
-              htmlFor="pf-password"
-              error={errors.password}
-            >
+            <Field label="Password" htmlFor="pf-password" error={errors.password}>
               <div className="relative">
                 <Input
                   id="pf-password"
-                  type={showPass ? "text" : "password"}
+                  type={showPass ? 'text' : 'password'}
                   autoComplete="new-password"
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
                   value={form.password}
+                 
                   placeholder="Leave blank to keep current password"
                   className="pr-11"
-                  onChange={(e) => set("password", e.target.value)}
+                  onChange={(e) => set('password', e.target.value)}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass((s) => !s)}
-                  aria-label={showPass ? "Hide password" : "Show password"}
+                  aria-label={showPass ? 'Hide password' : 'Show password'}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-mute hover:text-ink"
                 >
                   {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -255,34 +253,20 @@ const Settings: React.FC = () => {
                 inputMode="numeric"
                 maxLength={10}
                 value={form.mobile}
-                onChange={(e) =>
-                  set("mobile", e.target.value.replace(/\D/g, "").slice(0, 10))
-                }
+               
+                onChange={(e) => set('mobile', e.target.value.replace(/\D/g, '').slice(0, 10))}
               />
             </Field>
 
             <Field label="Address" htmlFor="pf-address">
-              <Input
-                id="pf-address"
-                value={form.Address}
-                onChange={(e) => set("Address", e.target.value)}
-              />
+              <Input id="pf-address" value={form.Address} onChange={(e) => set('Address', e.target.value)} />
             </Field>
             <Field label="GST" htmlFor="pf-gst" error={errors.GST}>
-              <Input
-                id="pf-gst"
-                maxLength={15}
-                value={form.GST}
-                onChange={(e) => set("GST", e.target.value.toUpperCase())}
-              />
+              <Input id="pf-gst" maxLength={15} value={form.GST} onChange={(e) => set('GST', e.target.value.toUpperCase())} />
             </Field>
 
             <Field label="Session ID" htmlFor="pf-session">
-              <Input
-                id="pf-session"
-                value={form.SessionID}
-                onChange={(e) => set("SessionID", e.target.value)}
-              />
+              <Input id="pf-session" value={form.SessionID} onChange={(e) => set('SessionID', e.target.value)} />
             </Field>
             <Field label="Logo" htmlFor="pf-logo" error={errors.logo}>
               <input
@@ -290,24 +274,74 @@ const Settings: React.FC = () => {
                 ref={fileRef}
                 type="file"
                 accept="image/*"
-                onChange={(e) => set("logo", e.target.files?.[0] ?? null)}
+                onChange={(e) => set('logo', e.target.files?.[0] ?? null)}
                 className="block h-12 w-full cursor-pointer rounded-xl border border-line bg-panel text-sm text-mute file:mr-3 file:h-full file:cursor-pointer file:border-0 file:border-r file:border-line file:bg-soft file:px-4 file:font-semibold file:text-ink"
               />
             </Field>
 
             <div className="sm:col-span-2">
-              <Button
-                type="submit"
-                size="lg"
-                className="w-full"
-                loading={saving}
-                icon={<Save size={18} />}
-              >
+              <Button type="submit" size="lg" className="w-full" loading={saving} icon={<Save size={18} />}>
                 Submit
               </Button>
             </div>
           </form>
         </div>
+      </Panel>
+
+      <Panel
+        title="Add StationId"
+        subtitle={`${stations.length} station${stations.length === 1 ? '' : 's'}`}
+        className="mt-6"
+      >
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+          <Field label="Station ID" htmlFor="pf-station" >
+            <Input
+              id="pf-station"
+              value={stationInput}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              onChange={(e) => setStationInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addStation();
+                }
+              }}
+            />
+          </Field>
+          <Button variant="success" size="lg" className="w-full sm:w-36" icon={<Plus size={18} />} onClick={addStation}>
+            Add
+          </Button>
+          <Button size="lg" className="w-full sm:w-36" loading={stationSaving} icon={<Save size={18} />} onClick={saveStations}>
+            Submit
+          </Button>
+        </div>
+
+        {stations.length ? (
+          <ul className="mt-5 grid grid-cols-2 overflow-hidden rounded-xl border-l border-t border-line text-sm sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
+            {stations.map((id, i) => (
+              <li
+                key={`${id}-${i}`}
+                className="flex min-w-0 items-center justify-between gap-2 border-b border-r border-line px-3 py-2.5"
+              >
+                <span className="min-w-0 truncate" title={id}>{id}</span>
+                <button
+                  type="button"
+                  onClick={() => removeStation(i)}
+                  aria-label={`Remove station ${id}`}
+                  className="shrink-0 rounded p-1 text-danger hover:bg-danger/10"
+                >
+                  <X size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-5 rounded-xl border border-dashed border-line p-4 text-center text-sm text-mute">
+            No Station ID yet. Add one above.
+          </p>
+        )}
       </Panel>
     </div>
   );

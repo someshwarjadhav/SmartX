@@ -414,7 +414,7 @@ export const NAV_MODULES: NavModule[] = [
     name: "Profile",
     url: "/profile",
     icon: User,
-    children: [form("Profile", "/profile/profile", "profile")],
+    children: [form("Profile", "/profile/profile", "profile", "/portal/profile")],
   },
   {
     name: "Support",
