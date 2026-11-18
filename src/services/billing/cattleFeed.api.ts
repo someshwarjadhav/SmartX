@@ -1,10 +1,12 @@
-import { clearRequestMemo, gatewayGet } from "../http/client";
+import { clearRequestMemo } from "../http/client";
+import { dpuGet } from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
 import { ApiError } from "../http/errors";
 import { GLOBALS } from "../../lib/portal/global";
 import { isObj, norm, rowsFrom, type Obj } from "../utils/loose";
 import { num } from "../utils/parse";
 
-export const CF_BILL_PATH = "/dairy/dairy/getFarmerBill";
+export const CF_BILL_PATH = DPU.getFarmerBill;
 
 export const plantIdOf = (): string => String(GLOBALS.plantid || "1").trim();
 
@@ -86,7 +88,7 @@ export async function getFarmerBills(vlcId: string, from: string, to: string): P
     `&fromdate=${encodeURIComponent(from)}&todate=${encodeURIComponent(to)}` +
     `&plantid=${encodeURIComponent(plantIdOf())}`;
   try {
-    return parseBills(await gatewayGet(q, 0));
+    return parseBills(await dpuGet(q, 0));
   } catch (e) {
     if (e instanceof ApiError && e.kind === "parse" && /empty/i.test(e.message)) return [];
     throw e;

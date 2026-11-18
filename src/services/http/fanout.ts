@@ -3,6 +3,7 @@ import { getSession } from '../session';
 import type { MilkCode, ShiftCode } from '../types/raw';
 import { apiDate } from '../utils/date';
 import { gatewayPost, listOf, type Priority } from './client';
+import { dpuPostJson } from './dpu';
 import { ApiError } from './errors';
 
 export interface QueryData<T> {
@@ -109,6 +110,27 @@ export function waves<T>(ids: string[], jobsFor: (id: string) => Array<Job<T>>):
 const milkCodes = (m: MilkCode | 'ALL'): MilkCode[] =>
   m !== 'ALL' ? [m] : ALL_MILK_CODE ? ([ALL_MILK_CODE] as MilkCode[]) : (FARMER_MILK_CODES as MilkCode[]);
 
+
+/** Same as collectionWaves, but the request goes to the DPU API (https://dpu.shivinfotech.co.in/api/Login/<name>). */
+export function dpuCollectionWaves<T>(path: string, p: CollectionParams, extra: Record<string, string> = {}) {
+  const s = needSession();
+  return waves<T>(p.vlccIds, (id) =>
+    milkCodes(p.milk).map((code) => async () =>
+      listOf<T>(
+        await dpuPostJson(path, {
+          id,
+          shift: p.shift,
+          milktype: code,
+          fromdate: apiDate(p.from),
+          todate: apiDate(p.to),
+          stationid: id,
+          ...(s.mccId ? { mccid: s.mccId } : {}),
+          ...extra,
+        }, p.priority ?? 1),
+      ),
+    ),
+  );
+}
 
 export function collectionWaves<T>(endpoint: string, p: CollectionParams, extra: Record<string, string> = {}) {
   const s = needSession();

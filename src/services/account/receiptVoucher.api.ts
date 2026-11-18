@@ -4,8 +4,9 @@
  * body formats. Nothing here is shared with the payment voucher except the
  * low-level transport.
  */
-import { checkReply } from "../master/farmerMaster.api";
 import { clearRequestMemo } from "../http/client";
+import { dpuSaveAttempts } from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
 import { apiDate } from "../utils/date";
 import { norm, rowsFrom, type Obj } from "../utils/loose";
 import {
@@ -16,13 +17,18 @@ import {
   type VoucherRow,
 } from "./voucher.common";
 import { ApiError } from "../http/errors";
-import { readPath, saveVoucherForm, sendPath } from "./voucher.http";
+import {
+  payloadBody,
+  readDpuPath,
+  readVoucherList,
+  saveVoucherPayload,
+} from "./voucher.http";
 import { getSession } from "../session";
 
-export const RECEIPT_LEDGER_PATH = "/dairy/dairy/getaccountledger";
-export const RECEIPT_SAVE_PATH = "/dairy/dairy/paymentvoucher";
-export const RECEIPT_LIST_PATH = "/dairy/dairy/paymentvoucherlist";
-export const RECEIPT_DELETE_PATH = "/dairy/dairy/paymentvoucherdelete";
+export const RECEIPT_LEDGER_PATH = DPU.getAccountLedger;
+export const RECEIPT_SAVE_PATH = DPU.paymentVoucher;
+export const RECEIPT_LIST_PATH = DPU.paymentVoucherList;
+export const RECEIPT_DELETE_PATH = DPU.paymentVoucherDelete;
 
 /** Live portal values for a receipt (decoded from its save request). */
 const FLAG = "RC";
@@ -57,7 +63,7 @@ export interface ReceiptVoucherInput {
 }
 
 export async function getLedgers(): Promise<VoucherOption[]> {
-  return ledgerOptions(rowsFrom(await readPath(RECEIPT_LEDGER_PATH)));
+  return ledgerOptions(rowsFrom(await readDpuPath(RECEIPT_LEDGER_PATH)));
 }
 
 /** Raw server rows by Id: the portal's delete wants the whole row, like Sale Entry does. */
@@ -67,8 +73,12 @@ export async function getReceiptVouchers(
   vlcid: string,
   date: string,
 ): Promise<VoucherRow[]> {
-  const qs = `stationid=${encodeURIComponent(vlcid)}&date=${encodeURIComponent(apiDate(date))}`;
-  const raw = rowsFrom(await readPath(`${RECEIPT_LIST_PATH}?${qs}`));
+  const raw = rowsFrom(
+    await readVoucherList("ReceiptVoucherList", RECEIPT_LIST_PATH, {
+      stationid: String(vlcid),
+      date: apiDate(date),
+    }),
+  );
   for (const r of raw) {
     const k = Object.keys(r).find((x) => norm(x) === "id");
     if (k !== undefined && r[k] != null) RAW_ROWS.set(String(r[k]), r);
@@ -98,14 +108,14 @@ export async function saveReceiptVoucher(
     TransactionFlag: TRANSACTION_FLAG,
     Narration: v.narration.trim() || "0",
   };
-  const text = await saveVoucherForm(
+  const message = await saveVoucherPayload(
     SAVE_PATH,
     fields,
     async () => (await getReceiptVouchers(v.vlcid, v.date)).length,
     "ReceiptVoucher",
   );
   clearRequestMemo();
-  return checkReply(text, "The receipt voucher could not be saved.", true);
+  return message;
 }
 
 const DELETE_KEY = "smartx.receiptVoucher.deleteFormat";
@@ -127,7 +137,7 @@ const rememberDelete = (n: string): void => {
 interface DeleteTry {
   name: string;
   path: string;
-  init: RequestInit;
+  body: { payload: string };
 }
 
 /**
@@ -142,12 +152,12 @@ export async function deleteReceiptVoucher(
 ): Promise<string> {
   const num = /^\d+$/.test(id) ? Number(id) : id;
   const row = { ...(RAW_ROWS.get(id) ?? {}), Id: num, StationId: vlcid ?? "" };
-  const json = encodeURIComponent(JSON.stringify(row));
-  const q = encodeURIComponent(id);
+  const path = `${RECEIPT_DELETE_PATH}?id=${encodeURIComponent(id)}`;
+  // DELETE with { payload: "<XOR + base64>" } (like DeleteFarmer); the id also stays in the URL
   const tries: DeleteTry[] = [
-    { name: "delete-json-id3", path: `${SAVE_PATH}?json=${json}&id=3`, init: { method: "DELETE" } },
-    { name: "get-delete-id", path: `${RECEIPT_DELETE_PATH}?id=${q}`, init: { method: "GET" } },
-    { name: "delete-delete-id", path: `${RECEIPT_DELETE_PATH}?id=${q}`, init: { method: "DELETE" } },
+    { name: "payload-id", path, body: payloadBody({ id: String(id) }) },
+    { name: "payload-row", path, body: payloadBody(row) },
+    { name: "payload-id-pascal", path, body: payloadBody({ Id: num }) },
   ];
   const known = rememberedDelete();
   const order = [
@@ -160,9 +170,13 @@ export async function deleteReceiptVoucher(
   const failed: string[] = [];
   for (const t of order) {
     try {
-      const text = await sendPath(t.path, () => t.init);
+      const message = await dpuSaveAttempts(
+        `ReceiptVoucherDelete:${t.name}`,
+        [{ label: t.name, path: t.path, body: t.body }],
+        "DELETE",
+      );
       clearRequestMemo();
-      if (!vlcid || !date) return checkReply(text, "The receipt voucher could not be deleted.", true);
+      if (!vlcid || !date) return message || "Deleted";
       if (!(await stillThere())) {
         rememberDelete(t.name);
         console.info(`[ReceiptVoucher] deleted using: ${t.name}`);

@@ -1,23 +1,26 @@
 import { directGet } from '../http/client';
 import { dpuGet } from '../http/dpu';
+import { DPU } from '../http/dpuEndpoints';
 import { REPORT_CONFIG_URL } from '../config';
 import { isObj, norm, pick, pickValue, rowsFrom, type Obj } from '../utils/loose';
 import { REPORT_INDEX } from '../../config/portal/reportAccess';
 
 
 /**
- * Report column access: DPU `GET /api/Login/UserReportConfig?userid=<id>`.
- * If the DPU call fails the old STIPL report-config URL is used so the columns never disappear.
+ * Report column access: DPU `GET https://dpu.shivinfotech.co.in/api/Login/UserReportConfig?userid=<id>`.
+ * (VITE_REPORT_CONFIG_URL can still point to another url if one is set in .env.local.)
  */
 export const getReportAccess = async (userid: string): Promise<unknown> => {
-  try {
-    return await dpuGet(`/Login/UserReportConfig?userid=${encodeURIComponent(userid)}`, 0);
-  } catch (e) {
-    console.warn('[UserReportConfig] DPU call failed, using the old report-config URL:', e instanceof Error ? e.message : e);
-    const url = new URL(REPORT_CONFIG_URL);
-    url.searchParams.set('userid', userid);
-    return directGet(url.toString(), 0);
+  if (import.meta.env.VITE_REPORT_CONFIG_URL) {
+    try {
+      const url = new URL(REPORT_CONFIG_URL);
+      url.searchParams.set('userid', userid);
+      return await directGet(url.toString(), 0);
+    } catch (e) {
+      console.warn('[UserReportConfig] the url from VITE_REPORT_CONFIG_URL failed, using the DPU UserReportConfig:', e instanceof Error ? e.message : e);
+    }
   }
+  return dpuGet(`${DPU.userReportConfig}?userid=${encodeURIComponent(userid)}`, 0);
 };
 
 

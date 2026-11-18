@@ -1,7 +1,8 @@
 import { BASE_URL } from "../config";
-import { directGet, gatewayGet, gatewayText } from "../http/client";
+import { directGet, gatewayGet, gatewayText, listOf } from "../http/client";
+import { dpuGet, dpuReadAttempts, dpuSaveAttempts } from "../http/dpu";
 import { ApiError, EmptyReplyError } from "../http/errors";
-import { encryptPayload } from "../../lib/portal/crypto";
+import { encryptPayload, encryptXorPayload } from "../../lib/portal/crypto";
 
 const gatewayRoot = (): string => {
   const root = BASE_URL || "https://smartx.shivinfotech.co.in";
@@ -23,6 +24,90 @@ export async function readPath(path: string): Promise<unknown> {
       if (second instanceof EmptyReplyError) return [];
       throw first;
     }
+  }
+}
+
+/** GET on the DPU API (https://dpu.shivinfotech.co.in/api/Login/<name>). An empty reply means an empty list. */
+export async function readDpuPath(path: string): Promise<unknown> {
+  try {
+    return await dpuGet(path, 0);
+  } catch (e) {
+    if (e instanceof EmptyReplyError) return [];
+    throw e;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* DPU payload API (payment / receipt voucher):                         */
+/* https://dpu.shivinfotech.co.in/api/Login/<name>                      */
+/* every body is { "payload": "<XOR + base64 of the JSON>" }            */
+/* ------------------------------------------------------------------ */
+
+export const payloadBody = (value: unknown): { payload: string } => ({
+  payload: encryptXorPayload(value),
+});
+
+/** Voucher list of one day: POST with the payload (the values also stay in the URL, like the other DPU calls). */
+export async function readVoucherList(
+  key: string,
+  path: string,
+  params: Record<string, string>,
+): Promise<Array<Record<string, unknown>>> {
+  const url = `${path}?${new URLSearchParams(params).toString()}`;
+  try {
+    return await dpuReadAttempts(
+      key,
+      [
+        { label: "payload-params", path: url, body: payloadBody(params) },
+        { label: "payload-array", path: url, body: payloadBody([params]) },
+      ],
+      (reply) => listOf<Record<string, unknown>>(reply),
+      "POST",
+    );
+  } catch (e) {
+    if (e instanceof EmptyReplyError) return [];
+    if (e instanceof ApiError && /empty reply/i.test(e.message)) return [];
+    throw e;
+  }
+}
+
+/**
+ * Save a voucher: ONE POST whose body is { payload } = the voucher JSON, XOR + base64. If a failed attempt still
+ * stored the row, the day's count grows and the save is treated as done - a retry can never create a duplicate.
+ */
+export async function saveVoucherPayload(
+  path: string,
+  fields: VoucherFields,
+  count: () => Promise<number>,
+  label: string,
+): Promise<string> {
+  console.info(`[${label}] SAVE -> POST ${path}  payload=${JSON.stringify(fields)}`);
+  let before = -1;
+  try {
+    before = await count();
+  } catch {
+    before = -1;
+  }
+  try {
+    const message = await dpuSaveAttempts(
+      `${label}Save`,
+      [
+        { label: "payload-params", path, body: payloadBody(fields) },
+        { label: "payload-array", path, body: payloadBody([fields]) },
+      ],
+      "POST",
+    );
+    console.info(`[${label}] SAVE <- ${message.slice(0, 200)}`);
+    return message || "Record Saved.";
+  } catch (e) {
+    if (e instanceof ApiError && e.kind !== "auth" && before >= 0) {
+      try {
+        if ((await count()) > before) return "Saved";
+      } catch {
+        /* list may be failing too */
+      }
+    }
+    throw e;
   }
 }
 
