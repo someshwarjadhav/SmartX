@@ -55,6 +55,7 @@ const MobileAppSettings = lazy(() => import('../pages/operations/settings/Mobile
 const DpuSettings = lazy(() => import('../pages/operations/settings/DpuSettings'));
 const EkoMilkSettings = lazy(() => import('../pages/operations/settings/EkoMilkSettings'));
 const UserAccess = lazy(() => import('../pages/operations/administrator/UserAccess'));
+const EncryptionDecryption = lazy(() => import('../pages/operations/administrator/EncryptionDecryption'));
 const PortalForm = lazy(() => import('../pages/operations/FormPlaceholder'));
 
 
@@ -102,6 +103,7 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/administrator/user-access': UserAccess,
   '/administrator/bill-unfreeze': BillUnfreeze,
   '/administrator/dpu-sync-async': DpuSyncAsync, 
+  '/portal/administrator/encryptiondecryption': EncryptionDecryption,
   '/quality': Quality,
   '/pipeline': Pipeline,
   '/portal/*': PortalForm,

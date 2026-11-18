@@ -5,6 +5,8 @@
  */
 import { checkReply } from "../master/farmerMaster.api";
 import { clearRequestMemo } from "../http/client";
+import { dpuGet } from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
 import { apiDate } from "../utils/date";
 import { norm, rowsFrom, type Obj } from "../utils/loose";
 import {
@@ -21,12 +23,11 @@ import { readPath, saveVoucherForm, sendPath } from "./voucher.http";
 import { getSession } from "../session";
 
 export const PAYMENT_LEDGER_PATH = "/dairy/dairy/getaccountledger";
-export const PAYMENT_BILL_HEAD_PATH = "/dairy/dairy/getbillhead";
+export const PAYMENT_BILL_HEAD_PATH = DPU.getBillHead;
 export const PAYMENT_SAVE_PATH = "/dairy/dairy/paymentvoucher";
 export const PAYMENT_LIST_PATH = "/dairy/dairy/paymentvoucherlist";
 export const PAYMENT_DELETE_PATH = "/dairy/dairy/paymentvoucherdelete";
 
-/** Fallback only: the real Flag / TransactionFlag are copied from a payment row the live portal already saved. */
 const FLAG = "PY";
 const TRANSACTION_FLAG = "DR";
 
@@ -41,10 +42,6 @@ const modeNumber = (mode: string, ledgerType?: string): number =>
       ? 2
       : 1;
 
-/**
- * Flag / TransactionFlag of a payment: copied from a payment row (DeductionType
- * not 0) that the live portal already saved today, when the list carries them.
- */
 function learnFlags(): { flag: string; txn: string } {
   for (const r of RAW_ROWS.values()) {
     if ((deductionOf(r) ?? 0) === 0) continue;
@@ -88,8 +85,9 @@ export async function getDeductionTypes(
 ): Promise<VoucherOption[]> {
   try {
     const rows = rowsFrom(
-      await readPath(
+      await dpuGet(
         `${PAYMENT_BILL_HEAD_PATH}?stationid=${encodeURIComponent(vlcid)}`,
+        0,
       ),
     );
     const all = unique(
@@ -211,11 +209,6 @@ interface DeleteTry {
   init: RequestInit;
 }
 
-/**
- * Delete, then CHECK the list: the voucher counts as deleted only when the
- * server really stopped returning it. Formats are tried until one works, and
- * the one that worked is remembered.
- */
 export async function deletePaymentVoucher(
   id: string,
   vlcid?: string,
@@ -226,9 +219,21 @@ export async function deletePaymentVoucher(
   const json = encodeURIComponent(JSON.stringify(row));
   const q = encodeURIComponent(id);
   const tries: DeleteTry[] = [
-    { name: "delete-json-id3", path: `${SAVE_PATH}?json=${json}&id=3`, init: { method: "DELETE" } },
-    { name: "get-delete-id", path: `${PAYMENT_DELETE_PATH}?id=${q}`, init: { method: "GET" } },
-    { name: "delete-delete-id", path: `${PAYMENT_DELETE_PATH}?id=${q}`, init: { method: "DELETE" } },
+    {
+      name: "delete-json-id3",
+      path: `${SAVE_PATH}?json=${json}&id=3`,
+      init: { method: "DELETE" },
+    },
+    {
+      name: "get-delete-id",
+      path: `${PAYMENT_DELETE_PATH}?id=${q}`,
+      init: { method: "GET" },
+    },
+    {
+      name: "delete-delete-id",
+      path: `${PAYMENT_DELETE_PATH}?id=${q}`,
+      init: { method: "DELETE" },
+    },
   ];
   const known = rememberedDelete();
   const order = [
@@ -236,14 +241,21 @@ export async function deletePaymentVoucher(
     ...tries.filter((t) => t.name !== known),
   ];
   const stillThere = async (): Promise<boolean> =>
-    !!vlcid && !!date && (await getPaymentVouchers(vlcid, date)).some((r) => r.id === id);
+    !!vlcid &&
+    !!date &&
+    (await getPaymentVouchers(vlcid, date)).some((r) => r.id === id);
 
   const failed: string[] = [];
   for (const t of order) {
     try {
       const text = await sendPath(t.path, () => t.init);
       clearRequestMemo();
-      if (!vlcid || !date) return checkReply(text, "The payment voucher could not be deleted.", true);
+      if (!vlcid || !date)
+        return checkReply(
+          text,
+          "The payment voucher could not be deleted.",
+          true,
+        );
       if (!(await stillThere())) {
         rememberDelete(t.name);
         console.info(`[PaymentVoucher] deleted using: ${t.name}`);

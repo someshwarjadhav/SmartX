@@ -1,10 +1,8 @@
-import { gatewayPostJson } from '../http/client';
 import { dpuGet } from '../http/dpu';
-import { pick, rowsFrom } from '../utils/loose';
+import { DPU } from '../http/dpuEndpoints';
+import { pick, pickLike, rowsFrom } from '../utils/loose';
 import type { Center } from '../mappers/center.mapper.ts';
 
-
-export const getCenter = (id: string): Promise<unknown> => gatewayPostJson('/home/farmercollectiondpu', { id }, 0);
 
 const ID_KEYS = ['vlccid', 'vlcid', 'vlccode', 'centerid', 'centreid', 'villageid', 'dcsid', 'dcscode', 'id', 'code'];
 const NAME_KEYS = ['villagename', 'vlccname', 'vlcname', 'centername', 'centrename', 'dcsname', 'name', 'village'];
@@ -14,6 +12,7 @@ export const cleanCentreName = (n: string): string => n.replace(/\s*\|\s*[\w-]*\
 
 const ROUTE_ID_KEYS = ['routeid', 'routecode', 'routeno', 'route', 'routesupervisorid', 'mccid', 'plantid'];
 const ROUTE_NAME_KEYS = ['routename', 'routetitle', 'routedesc', 'mccname', 'plantname'];
+const NAME_NOT = ['route', 'mcc', 'plant', 'agent', 'farmer', 'user', 'union', 'society', 'bank', 'branch', 'dairy', 'file', 'login', 'contact'];
 const STATION_KEYS = ['customstationid', 'stationid', 'stationcode', 'stationno', 'station'];
 
 export function parseCenters(json: unknown): Center[] {
@@ -21,7 +20,8 @@ export function parseCenters(json: unknown): Center[] {
   for (const row of rowsFrom(json)) {
     const id = pick(row, ID_KEYS);
     if (!id || out.some((c) => c.id === id)) continue;
-    const name = cleanCentreName(pick(row, NAME_KEYS));
+    
+    const name = cleanCentreName(pick(row, NAME_KEYS) || pickLike(row, ['name'], NAME_NOT));
     out.push({
       id,
       name,
@@ -39,9 +39,9 @@ export function parseCenters(json: unknown): Center[] {
   return out;
 }
 
-/**
- * Centre list for the report dropdowns: DPU `GET /api/Login/FarmerCollectionDpu?id=<station id>`
- * (replaces the old STIPL `/home/farmercollectiondpu` call used only by the report pages).
- */
+
 export const getDpuCenter = (id: string, param: 'id' | 'stationid' | 'userid' | 'mccid' = 'id'): Promise<unknown> =>
-  dpuGet(`/Login/FarmerCollectionDpu?${param}=${encodeURIComponent(id)}`, 0);
+  dpuGet(`${DPU.farmerCollectionDpu}?${param}=${encodeURIComponent(id)}`, 0);
+
+/** Centres of one station id (used when the person signs in). */
+export const getCenter = (id: string): Promise<unknown> => getDpuCenter(id);
