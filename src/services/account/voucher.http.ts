@@ -1,7 +1,8 @@
 import { BASE_URL } from "../config";
 import { directGet, gatewayGet, gatewayText, listOf } from "../http/client";
-import { dpuGet, dpuReadAttempts, dpuSaveAttempts } from "../http/dpu";
+import { dpuGet, dpuSave, dpuSaveAttempts, dpuWrite } from "../http/dpu";
 import { ApiError, EmptyReplyError } from "../http/errors";
+import { getSession } from "../session";
 import { encryptPayload, encryptXorPayload } from "../../lib/portal/crypto";
 
 const gatewayRoot = (): string => {
@@ -37,38 +38,97 @@ export async function readDpuPath(path: string): Promise<unknown> {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* DPU payload API (payment / receipt voucher):                         */
-/* https://dpu.shivinfotech.co.in/api/Login/<name>                      */
-/* every body is { "payload": "<XOR + base64 of the JSON>" }            */
-/* ------------------------------------------------------------------ */
-
 export const payloadBody = (value: unknown): { payload: string } => ({
   payload: encryptXorPayload(value),
 });
 
-/** Voucher list of one day: POST with the payload (the values also stay in the URL, like the other DPU calls). */
+const errText = (e: unknown): string =>
+  (e instanceof Error ? e.message : String(e))
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+
+const authHeaders = (): Record<string, string> => {
+  const token = getSession()?.token;
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
+const REMEMBER = "smartx.voucher.format.";
+const remembered = (key: string): string => {
+  try {
+    return localStorage.getItem(REMEMBER + key) ?? "";
+  } catch {
+    return "";
+  }
+};
+const remember = (key: string, name: string): void => {
+  try {
+    localStorage.setItem(REMEMBER + key, name);
+  } catch {
+    /* ignore */
+  }
+};
+const preferFirst = <T extends { name: string }>(
+  key: string,
+  list: T[],
+): T[] => {
+  const known = remembered(key);
+  return [
+    ...list.filter((t) => t.name === known),
+    ...list.filter((t) => t.name !== known),
+  ];
+};
+
+interface ListTry {
+  name: string;
+  run: () => Promise<unknown>;
+}
+
 export async function readVoucherList(
   key: string,
   path: string,
   params: Record<string, string>,
 ): Promise<Array<Record<string, unknown>>> {
   const url = `${path}?${new URLSearchParams(params).toString()}`;
-  try {
-    return await dpuReadAttempts(
-      key,
-      [
-        { label: "payload-params", path: url, body: payloadBody(params) },
-        { label: "payload-array", path: url, body: payloadBody([params]) },
-      ],
-      (reply) => listOf<Record<string, unknown>>(reply),
-      "POST",
-    );
-  } catch (e) {
-    if (e instanceof EmptyReplyError) return [];
-    if (e instanceof ApiError && /empty reply/i.test(e.message)) return [];
-    throw e;
+  const post = (name: string, body: unknown): ListTry => ({
+    name,
+    run: () =>
+      dpuWrite(
+        url,
+        { method: "POST", headers: authHeaders(), body: JSON.stringify(body) },
+        1,
+      ),
+  });
+
+  const tries: ListTry[] = preferFirst(key, [
+    post("post-payload-params", { payload: encryptXorPayload(params) }),
+    post("post-payload-array", { payload: encryptXorPayload([params]) }),
+    post("post-json", params),
+    { name: "get-query", run: () => dpuGet(url, 1, undefined, true) },
+  ]);
+  const failed: string[] = [];
+  let lastAuth: unknown = null;
+  for (const t of tries) {
+    try {
+      const rows = listOf<Record<string, unknown>>(await t.run());
+      remember(key, t.name);
+      return rows;
+    } catch (e) {
+      if (e instanceof EmptyReplyError) return [];
+      if (e instanceof ApiError && /empty reply/i.test(e.message)) return [];
+      if (e instanceof ApiError && e.kind === "auth") lastAuth = e;
+      failed.push(`${t.name}: ${errText(e)}`);
+      console.warn(`[${key}] list layout "${t.name}" failed:`, e);
+    }
   }
+  if (lastAuth) throw lastAuth;
+  throw new ApiError(
+    `The voucher list could not be read (${failed.join(" | ")}).`,
+    "server",
+  );
 }
 
 /**
@@ -81,7 +141,9 @@ export async function saveVoucherPayload(
   count: () => Promise<number>,
   label: string,
 ): Promise<string> {
-  console.info(`[${label}] SAVE -> POST ${path}  payload=${JSON.stringify(fields)}`);
+  console.info(
+    `[${label}] SAVE -> POST ${path}  payload=${JSON.stringify(fields)}`,
+  );
   let before = -1;
   try {
     before = await count();
@@ -93,9 +155,49 @@ export async function saveVoucherPayload(
       `${label}Save`,
       [
         { label: "payload-params", path, body: payloadBody(fields) },
+        {
+          label: "payload-aes-params",
+          path,
+          body: { payload: encryptPayload(fields) },
+        },
+        {
+          label: "payload-aes-array",
+          path,
+          body: { payload: encryptPayload([fields]) },
+        },
+        {
+          label: "Payload-aes-params",
+          path,
+          body: { Payload: encryptPayload(fields) },
+        },
+
+        {
+          label: "payload-data-text",
+          path,
+          body: payloadBody({ data: JSON.stringify(fields) }),
+        },
+        {
+          label: "payload-Data-text",
+          path,
+          body: payloadBody({ Data: JSON.stringify(fields) }),
+        },
+        {
+          label: "payload-json-text",
+          path,
+          body: payloadBody({ json: JSON.stringify(fields) }),
+        },
+        {
+          label: "payload-data-array-text",
+          path,
+          body: payloadBody({ data: JSON.stringify([fields]) }),
+        },
         { label: "payload-array", path, body: payloadBody([fields]) },
+        { label: "json-params", path, body: fields },
+        { label: "json-array", path, body: [fields] },
       ],
       "POST",
+      // "Please check data." (HTTP 200, Success:false) = this layout is not what the server wants: try the next one.
+      /please\s*check\s*data/i,
     );
     console.info(`[${label}] SAVE <- ${message.slice(0, 200)}`);
     return message || "Record Saved.";
@@ -109,6 +211,86 @@ export async function saveVoucherPayload(
     }
     throw e;
   }
+}
+
+export async function deleteVoucherById(opts: {
+  key: string;
+  deletePath: string;
+  savePath: string;
+  id: string;
+  row: Record<string, unknown>;
+  stillThere?: () => Promise<boolean>;
+}): Promise<string> {
+  const { key, deletePath, id, row, stillThere } = opts;
+  const num = /^\d+$/.test(id) ? Number(id) : id;
+  const url = `${deletePath}?id=${encodeURIComponent(id)}`;
+
+  const send = (method: "DELETE" | "POST", path: string, body?: unknown) =>
+    dpuSave(
+      path,
+      body === undefined ? undefined : JSON.stringify(body),
+      method,
+      authHeaders(),
+    );
+
+  const tries: ListTry[] = preferFirst(`delete.${key}`, [
+    {
+      name: "post-payload-id",
+      run: () => send("POST", url, payloadBody({ id: String(id) })),
+    },
+    {
+      name: "post-payload-id-pascal",
+      run: () => send("POST", url, payloadBody({ Id: num })),
+    },
+    {
+      name: "post-payload-row",
+      run: () => send("POST", url, payloadBody(row)),
+    },
+    {
+      name: "post-payload-array",
+      run: () => send("POST", url, payloadBody([{ id: String(id) }])),
+    },
+    { name: "post-query-only", run: () => send("POST", url) },
+    { name: "delete-query", run: () => send("DELETE", url) },
+    {
+      name: "delete-payload-id",
+      run: () => send("DELETE", url, payloadBody({ id: String(id) })),
+    },
+  ]);
+
+  const failed: string[] = [];
+  for (const t of tries) {
+    try {
+      const reply = await t.run();
+      const message = typeof reply === "string" ? reply : "";
+      if (stillThere) {
+        let present = false;
+        try {
+          present = await stillThere();
+        } catch {
+          present = false; // the list cannot be read: believe the server's answer, the page re-reads the list anyway
+        }
+        if (present) {
+          failed.push(
+            `${t.name}: answered OK but the voucher is still in the list`,
+          );
+          continue;
+        }
+      }
+      remember(`delete.${key}`, t.name);
+      console.info(`[${key}] deleted using: ${t.name}`);
+      return message || "Deleted";
+    } catch (e) {
+      if (e instanceof ApiError && e.kind === "auth") throw e;
+      failed.push(`${t.name}: ${errText(e)}`);
+      console.warn(`[${key}] delete layout "${t.name}" failed:`, e);
+    }
+  }
+  console.table(failed.map((x) => ({ attempt: x })));
+  throw new ApiError(
+    `The server did not delete voucher ${id}. ${failed.slice(0, 4).join(" | ")}`,
+    "server",
+  );
 }
 
 export async function sendPath(
@@ -141,7 +323,8 @@ const buildJson = (fields: VoucherFields): RequestInit => ({
 
 const buildUrlEncoded = (fields: VoucherFields): RequestInit => {
   const p = new URLSearchParams();
-  for (const [key, value] of Object.entries(fields)) p.append(key, String(value));
+  for (const [key, value] of Object.entries(fields))
+    p.append(key, String(value));
   p.append("data", JSON.stringify(fields));
   return {
     method: "POST",
@@ -172,11 +355,6 @@ const zeroDeduction = (f: VoucherFields): VoucherFields => ({
   DeductionType: f.DeductionType === "" ? "0" : f.DeductionType,
 });
 
-/**
- * The voucher endpoint answers 500 when the body is not shaped the way the
- * portal sends it. The formats below are tried in order, and the one that
- * works is remembered for the rest of the session.
- */
 const ATTEMPTS: Attempt[] = [
   { name: "json", build: buildJson },
   { name: "json+deduction0", build: buildJson, tweak: zeroDeduction },
@@ -304,7 +482,9 @@ export async function saveVoucherForm(
   count: () => Promise<number>,
   label: string,
 ): Promise<string> {
-  console.info(`[${label}] SAVE -> POST ${path}  payload=${JSON.stringify(fields)}`);
+  console.info(
+    `[${label}] SAVE -> POST ${path}  payload=${JSON.stringify(fields)}`,
+  );
   const data = encryptPayload(fields);
 
   let before = -1;

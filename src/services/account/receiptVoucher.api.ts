@@ -5,7 +5,6 @@
  * low-level transport.
  */
 import { clearRequestMemo } from "../http/client";
-import { dpuSaveAttempts } from "../http/dpu";
 import { DPU } from "../http/dpuEndpoints";
 import { apiDate } from "../utils/date";
 import { norm, rowsFrom, type Obj } from "../utils/loose";
@@ -16,9 +15,8 @@ import {
   type VoucherOption,
   type VoucherRow,
 } from "./voucher.common";
-import { ApiError } from "../http/errors";
 import {
-  payloadBody,
+  deleteVoucherById,
   readDpuPath,
   readVoucherList,
   saveVoucherPayload,
@@ -118,33 +116,6 @@ export async function saveReceiptVoucher(
   return message;
 }
 
-const DELETE_KEY = "smartx.receiptVoucher.deleteFormat";
-const rememberedDelete = (): string => {
-  try {
-    return localStorage.getItem(DELETE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-};
-const rememberDelete = (n: string): void => {
-  try {
-    localStorage.setItem(DELETE_KEY, n);
-  } catch {
-    /* ignore */
-  }
-};
-
-interface DeleteTry {
-  name: string;
-  path: string;
-  body: { payload: string };
-}
-
-/**
- * Delete, then CHECK the list: the voucher counts as deleted only when the
- * server really stopped returning it. Formats are tried until one works, and
- * the one that worked is remembered.
- */
 export async function deleteReceiptVoucher(
   id: string,
   vlcid?: string,
@@ -152,45 +123,19 @@ export async function deleteReceiptVoucher(
 ): Promise<string> {
   const num = /^\d+$/.test(id) ? Number(id) : id;
   const row = { ...(RAW_ROWS.get(id) ?? {}), Id: num, StationId: vlcid ?? "" };
-  const path = `${RECEIPT_DELETE_PATH}?id=${encodeURIComponent(id)}`;
-  // DELETE with { payload: "<XOR + base64>" } (like DeleteFarmer); the id also stays in the URL
-  const tries: DeleteTry[] = [
-    { name: "payload-id", path, body: payloadBody({ id: String(id) }) },
-    { name: "payload-row", path, body: payloadBody(row) },
-    { name: "payload-id-pascal", path, body: payloadBody({ Id: num }) },
-  ];
-  const known = rememberedDelete();
-  const order = [
-    ...tries.filter((t) => t.name === known),
-    ...tries.filter((t) => t.name !== known),
-  ];
-  const stillThere = async (): Promise<boolean> =>
-    !!vlcid && !!date && (await getReceiptVouchers(vlcid, date)).some((r) => r.id === id);
-
-  const failed: string[] = [];
-  for (const t of order) {
-    try {
-      const message = await dpuSaveAttempts(
-        `ReceiptVoucherDelete:${t.name}`,
-        [{ label: t.name, path: t.path, body: t.body }],
-        "DELETE",
-      );
-      clearRequestMemo();
-      if (!vlcid || !date) return message || "Deleted";
-      if (!(await stillThere())) {
-        rememberDelete(t.name);
-        console.info(`[ReceiptVoucher] deleted using: ${t.name}`);
-        return "Deleted";
-      }
-      failed.push(`${t.name} (no effect)`);
-    } catch (e) {
-      if (e instanceof ApiError && e.kind === "auth") throw e;
-      failed.push(t.name);
-      console.warn(`[ReceiptVoucher] delete failed with ${t.name}:`, e);
-    }
-  }
-  throw new ApiError(
-    `The server did not delete voucher ${id} (tried: ${failed.join(", ")}).`,
-    "server",
-  );
+  const message = await deleteVoucherById({
+    key: "ReceiptVoucher",
+    deletePath: RECEIPT_DELETE_PATH,
+    savePath: SAVE_PATH,
+    id,
+    row,
+    ...(vlcid && date
+      ? {
+          stillThere: async () =>
+            (await getReceiptVouchers(vlcid, date)).some((r) => r.id === id),
+        }
+      : {}),
+  });
+  clearRequestMemo();
+  return message;
 }

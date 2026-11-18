@@ -1,5 +1,6 @@
 import type * as React from 'react';
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { cn } from '../../../lib/portal/cn';
@@ -22,7 +23,8 @@ function useLock(open: boolean, onClose: () => void) {
 
 export const Modal: React.FC<Props> = ({ open, onClose, title, subtitle, children, footer, width = 'max-w-lg' }) => {
   useLock(open, onClose);
-  return (
+ 
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-[80] grid place-items-center p-4" role="dialog" aria-modal="true">
@@ -46,13 +48,14 @@ export const Modal: React.FC<Props> = ({ open, onClose, title, subtitle, childre
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 };
 
 export const Drawer: React.FC<Omit<Props, 'footer'>> = ({ open, onClose, title, subtitle, children, width = 'max-w-xl' }) => {
   useLock(open, onClose);
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-[80]" role="dialog" aria-modal="true">
@@ -75,6 +78,7 @@ export const Drawer: React.FC<Omit<Props, 'footer'>> = ({ open, onClose, title, 
           </motion.aside>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 };

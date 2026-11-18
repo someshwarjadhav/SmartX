@@ -4,7 +4,7 @@
  * shared with the receipt voucher except the low-level transport.
  */
 import { clearRequestMemo } from "../http/client";
-import { dpuGet, dpuSaveAttempts } from "../http/dpu";
+import { dpuGet } from "../http/dpu";
 import { DPU } from "../http/dpuEndpoints";
 import { apiDate } from "../utils/date";
 import { norm, rowsFrom, type Obj } from "../utils/loose";
@@ -17,9 +17,8 @@ import {
   type VoucherOption,
   type VoucherRow,
 } from "./voucher.common";
-import { ApiError } from "../http/errors";
 import {
-  payloadBody,
+  deleteVoucherById,
   readDpuPath,
   readVoucherList,
   saveVoucherPayload,
@@ -32,6 +31,7 @@ export const PAYMENT_SAVE_PATH = DPU.paymentVoucher;
 export const PAYMENT_LIST_PATH = DPU.paymentVoucherList;
 export const PAYMENT_DELETE_PATH = DPU.paymentVoucherDelete;
 
+// The old working portal save (first voucher of a day, no rows to learn from) sent Flag "PY" / TransactionFlag "DR".
 const FLAG = "PY";
 const TRANSACTION_FLAG = "DR";
 
@@ -176,11 +176,13 @@ export async function savePaymentVoucher(
   const fields = {
     StationId: stationOf(v.vlcid),
     FarmerId: String(v.farmerId),
-    FarmerMasterCode: toNumber(v.farmerCode || v.farmerId),
+    // The backend class PaymentVoucher has ONLY string properties: a JSON number (3, 100, 1) cannot be bound to
+    // a string and ends in "Please check data.", so every value is sent as text.
+    FarmerMasterCode: String(toNumber(v.farmerCode || v.farmerId)),
     EntryDate: apiDate(v.date),
-    Amount: toNumber(v.amount),
+    Amount: String(toNumber(v.amount)),
     DeductionType: String(v.deductionType),
-    PaymentMode: modeNumber(v.paymentMode, v.ledgerType),
+    PaymentMode: String(modeNumber(v.paymentMode, v.ledgerType)),
     Flag: learned.flag,
     TransactionFlag: learned.txn,
     Narration: v.narration.trim() || "0",
@@ -195,28 +197,6 @@ export async function savePaymentVoucher(
   return message;
 }
 
-const DELETE_KEY = "smartx.paymentVoucher.deleteFormat";
-const rememberedDelete = (): string => {
-  try {
-    return localStorage.getItem(DELETE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-};
-const rememberDelete = (n: string): void => {
-  try {
-    localStorage.setItem(DELETE_KEY, n);
-  } catch {
-    /* ignore */
-  }
-};
-
-interface DeleteTry {
-  name: string;
-  path: string;
-  body: { payload: string };
-}
-
 export async function deletePaymentVoucher(
   id: string,
   vlcid?: string,
@@ -224,47 +204,19 @@ export async function deletePaymentVoucher(
 ): Promise<string> {
   const num = /^\d+$/.test(id) ? Number(id) : id;
   const row = { ...(RAW_ROWS.get(id) ?? {}), Id: num, StationId: vlcid ?? "" };
-  const path = `${PAYMENT_DELETE_PATH}?id=${encodeURIComponent(id)}`;
-  // DELETE with { payload: "<XOR + base64>" } (like DeleteFarmer); the id also stays in the URL
-  const tries: DeleteTry[] = [
-    { name: "payload-id", path, body: payloadBody({ id: String(id) }) },
-    { name: "payload-row", path, body: payloadBody(row) },
-    { name: "payload-id-pascal", path, body: payloadBody({ Id: num }) },
-  ];
-  const known = rememberedDelete();
-  const order = [
-    ...tries.filter((t) => t.name === known),
-    ...tries.filter((t) => t.name !== known),
-  ];
-  const stillThere = async (): Promise<boolean> =>
-    !!vlcid &&
-    !!date &&
-    (await getPaymentVouchers(vlcid, date)).some((r) => r.id === id);
-
-  const failed: string[] = [];
-  for (const t of order) {
-    try {
-      const message = await dpuSaveAttempts(
-        `PaymentVoucherDelete:${t.name}`,
-        [{ label: t.name, path: t.path, body: t.body }],
-        "DELETE",
-      );
-      clearRequestMemo();
-      if (!vlcid || !date) return message || "Deleted";
-      if (!(await stillThere())) {
-        rememberDelete(t.name);
-        console.info(`[PaymentVoucher] deleted using: ${t.name}`);
-        return "Deleted";
-      }
-      failed.push(`${t.name} (no effect)`);
-    } catch (e) {
-      if (e instanceof ApiError && e.kind === "auth") throw e;
-      failed.push(t.name);
-      console.warn(`[PaymentVoucher] delete failed with ${t.name}:`, e);
-    }
-  }
-  throw new ApiError(
-    `The server did not delete voucher ${id} (tried: ${failed.join(", ")}).`,
-    "server",
-  );
+  const message = await deleteVoucherById({
+    key: "PaymentVoucher",
+    deletePath: PAYMENT_DELETE_PATH,
+    savePath: SAVE_PATH,
+    id,
+    row,
+    ...(vlcid && date
+      ? {
+          stillThere: async () =>
+            (await getPaymentVouchers(vlcid, date)).some((r) => r.id === id),
+        }
+      : {}),
+  });
+  clearRequestMemo();
+  return message;
 }

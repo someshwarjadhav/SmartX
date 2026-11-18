@@ -111,7 +111,6 @@ const milkCodes = (m: MilkCode | 'ALL'): MilkCode[] =>
   m !== 'ALL' ? [m] : ALL_MILK_CODE ? ([ALL_MILK_CODE] as MilkCode[]) : (FARMER_MILK_CODES as MilkCode[]);
 
 
-/** Same as collectionWaves, but the request goes to the DPU API (https://dpu.shivinfotech.co.in/api/Login/<name>). */
 export function dpuCollectionWaves<T>(path: string, p: CollectionParams, extra: Record<string, string> = {}) {
   const s = needSession();
   return waves<T>(p.vlccIds, (id) =>

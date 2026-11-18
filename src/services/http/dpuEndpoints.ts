@@ -20,8 +20,8 @@ export const DPU = {
   getAccountLedger: '/Login/getaccountledger', //            GET    (was /dairy/dairy/getaccountledger)
   // payment / receipt voucher: body is { payload: "<XOR + base64>" } (same as FarmerSave / DeleteFarmer)
   paymentVoucher: '/Login/paymentvoucher', //                POST   payload (was /dairy/dairy/paymentvoucher)
-  paymentVoucherList: '/Login/paymentvoucherlist', //        POST   payload (was /dairy/dairy/paymentvoucherlist)
-  paymentVoucherDelete: '/Login/paymentvoucherdelete', //    DELETE payload (was /dairy/dairy/paymentvoucherdelete)
+  paymentVoucherList: '/Login/paymentvoucherlist', //        POST   payload (Postman: GET gives 405) (was /dairy/dairy/paymentvoucherlist)
+  paymentVoucherDelete: '/Login/paymentvoucherdelete', //    POST   payload (Postman: DELETE gives 405) (was /dairy/dairy/paymentvoucherdelete)
   // rate
   getRate: '/Login/getRate',
   getRateStatus: '/Login/GetRateStatus',
