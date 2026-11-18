@@ -37,7 +37,8 @@ import { ApiError } from "../../../services/http/errors";
 import { norm } from "../../../services/utils/loose";
 import { focusFirstEmpty, handleEnterNext } from "../../../hooks/useEnterNext";
 
-const ALL = "ALL";
+
+const BIG = "!h-20 !text-center !text-2xl !font-semibold sm:!text-3xl";
 
 const SHIFTS = GLOBALSSHIFT.shiftOptions.filter(
   (s) => s.Id === "M" || s.Id === "E",
@@ -153,7 +154,7 @@ const VlcMilkEntry: React.FC = () => {
   const centers = useCenters();
   const sessionIds = getSession()?.vlccIds ?? [];
   const allIds = centers.length ? centers.map((c) => c.id) : sessionIds;
-  // Plant/MCC Name: the VLC dropdown shows only the centres of the picked plant ("All" = every centre)
+  
   const { plantOptions, plant, setPlant, belongs } = usePlantScope();
   const ids = allIds.filter((id) => belongs(id));
 
@@ -430,7 +431,6 @@ const VlcMilkEntry: React.FC = () => {
             }
           />
           <div
-            className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-4"
             onKeyDown={(e) =>
               handleEnterNext(e, {
                 onLast: (root) =>
@@ -438,6 +438,7 @@ const VlcMilkEntry: React.FC = () => {
               })
             }
           >
+          <div className="grid gap-4 px-5 pt-5 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 xl:grid-cols-5">
             <PlantSelectField
               value={plant}
               onChange={changePlant}
@@ -479,7 +480,9 @@ const VlcMilkEntry: React.FC = () => {
                 onChange={(e) => setDate(e.target.value)}
               />
             </Field>
+          </div>
 
+          <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4 sm:p-6">
             <Field label="Weight Ltr">
               <Input
                 type="number"
@@ -488,6 +491,7 @@ const VlcMilkEntry: React.FC = () => {
                 step="any"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
+                className={BIG}
               />
             </Field>
             <Field label="Fat">
@@ -498,6 +502,7 @@ const VlcMilkEntry: React.FC = () => {
                 step="any"
                 value={fat}
                 onChange={(e) => onFat(e.target.value)}
+                className={BIG}
               />
             </Field>
             <Field label="SNF">
@@ -508,6 +513,7 @@ const VlcMilkEntry: React.FC = () => {
                 step="any"
                 value={snf}
                 onChange={(e) => onSnf(e.target.value)}
+                className={BIG}
               />
             </Field>
             <Field label="CLR">
@@ -515,11 +521,11 @@ const VlcMilkEntry: React.FC = () => {
                 readOnly
                 tabIndex={-1}
                 value={clr}
-                className="bg-soft/60"
+                className={`bg-soft/60 ${BIG}`}
               />
             </Field>
 
-            <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:flex-wrap sm:items-end lg:col-span-4">
+            <div className="col-span-2 flex flex-col gap-3 sm:col-span-4 sm:flex-row sm:flex-wrap sm:items-end">
               <Button
                 className="w-full sm:w-auto sm:min-w-48"
                 icon={<Save size={16} />}
@@ -552,6 +558,7 @@ const VlcMilkEntry: React.FC = () => {
                 </p>
               )}
             </div>
+          </div>
           </div>
         </Card>
       </Reveal>
