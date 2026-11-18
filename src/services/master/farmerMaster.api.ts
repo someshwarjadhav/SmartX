@@ -1,6 +1,7 @@
-import { clearRequestMemo, listOf, parseGatewayText } from "../http/client";
+import { clearRequestMemo, gatewayText, listOf, parseGatewayText } from "../http/client";
 import {
   dpuGet,
+  dpuUrl,
   dpuReadAttempts,
   dpuSaveAttempts,
   type SaveAttempt,
@@ -11,7 +12,7 @@ import { isObj, pickLike, rowsFrom } from "../utils/loose";
 import { pickLoose } from "../farmer/farmerBook";
 import type { RawLoose } from "../types/raw";
 import type { FarmerInput } from "./farmerMaster.rules.ts";
-import { sendPath } from "../account/voucher.http";
+import { DPU } from "../http/dpuEndpoints";
 
 // DPU API: https://dpu.shivinfotech.co.in/api/Login/<endpoint>
 //   POST   FarmerMaster          list of farmers of the given villages
@@ -453,11 +454,11 @@ export async function updateFarmerStatus(all: StatusChange[]): Promise<string> {
   return last;
 }
 
-// Verify / Unverify one farmer:  /dairy/dairy/updatefarmerflag?villageid=<centre>&farmerid=<code>&flag=<1|0>
+// Verify / Unverify one farmer:  https://dpu.shivinfotech.co.in/api/Login/updatefarmerflag?villageid=<centre>&farmerid=<code>&flag=<1|0>
 // flag = 1 -> Verify, flag = 0 -> Unverify (the dairy's backend developer gave this one API for both). The call is not
 // cached (a second Verify / Unverify of the same farmer must reach the server again). GET is what the API example uses;
 // if the server answers "method not allowed" PUT and then POST are tried, and the working one is remembered.
-export const FARMER_FLAG_PATH = "/dairy/dairy/updatefarmerflag";
+export const FARMER_FLAG_PATH = DPU.updateFarmerFlag;
 const FLAG_METHODS = ["GET", "PUT", "POST"] as const;
 let flagMethod = 0;
 
@@ -473,7 +474,7 @@ export async function updateFarmerFlag(
     const i = (flagMethod + n) % FLAG_METHODS.length;
     const method = FLAG_METHODS[i]!;
     try {
-      const text = await sendPath(path, () => ({ method }));
+      const text = await gatewayText(dpuUrl(path), { method }, 0, true);
       if (/^\s*\{\s*"error"\s*:/i.test(text))
         throw new ApiError("The server could not update the verify status.", "server");
       const message = checkReply(text, "Could not update the verify status", true);

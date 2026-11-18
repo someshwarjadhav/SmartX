@@ -2,7 +2,8 @@ import { BASE_URL } from "../config";
 import { getSession } from "../session";
 import { ApiError } from "../http/errors";
 import { gatewayText, parseGatewayText } from "../http/client";
-import { sendPath } from "../account/voucher.http";
+import { dpuUrl } from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
 import { getMenu } from "../menu/menu.api.ts";
 import { asFlag } from "../report/report.api.ts";
 import {
@@ -18,7 +19,7 @@ import {
 const HOST = BASE_URL || "https://smartx.shivinfotech.co.in";
 const GET_USER_URL = `${HOST}/home/getuser`;
 
-const ADD_USER_ACCESS_PATH = "/dairy/dairy/addUserAccess";
+const ADD_USER_ACCESS_PATH = DPU.addUserAccess;
 
 export interface AccessUser {
   id: string;
@@ -220,10 +221,15 @@ export async function postData(formData: FormData): Promise<void> {
       }
     })(),
   );
-  const text = await sendPath(ADD_USER_ACCESS_PATH, () => ({
-    method: "POST",
-    body: formData,
-  }));
+  const text = await gatewayText(
+    dpuUrl(ADD_USER_ACCESS_PATH),
+    {
+      method: "POST",
+      body: formData,
+    },
+    0,
+    true,
+  );
   console.info("[UserAccess] addUserAccess reply <-", text.slice(0, 200));
   assertSaved(text);
 }

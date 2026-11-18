@@ -19,14 +19,8 @@ import {
 
 const BASE = `${DPU_HOST}/api/Login`;
 
-// DPU server APIs (same as the DPUSyncAsyncService of the DPU project):
-//   POST {DPU}/home/farmermaster          body { VillageIds: "7030974,7030978" }
-//   GET  {DPU}/home/UpdateFarmerBuff?villageid=..&farmerids=..
-// The /api/Login/... paths are only a fallback. STIPL is not used here any more.
-const LIST_URLS = [
-  `${DPU_HOST}/home/farmermaster`,
-  `${BASE}/FarmerMaster`,
-];
+
+const LIST_URLS = [`${BASE}/FarmerMaster`];
 
 const UPDATE_URLS = [
   `${DPU_HOST}/home/UpdateFarmerBuff`,

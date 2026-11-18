@@ -3,7 +3,6 @@
  * Its own paths, its own payload and its own body formats. Nothing here is
  * shared with the receipt voucher except the low-level transport.
  */
-import { checkReply } from "../master/farmerMaster.api";
 import { clearRequestMemo } from "../http/client";
 import { dpuGet } from "../http/dpu";
 import { DPU } from "../http/dpuEndpoints";
@@ -18,16 +17,21 @@ import {
   type VoucherOption,
   type VoucherRow,
 } from "./voucher.common";
-import { ApiError } from "../http/errors";
-import { readPath, saveVoucherForm, sendPath } from "./voucher.http";
+import {
+  deleteVoucherById,
+  readDpuPath,
+  readVoucherList,
+  saveVoucherPayload,
+} from "./voucher.http";
 import { getSession } from "../session";
 
-export const PAYMENT_LEDGER_PATH = "/dairy/dairy/getaccountledger";
+export const PAYMENT_LEDGER_PATH = DPU.getAccountLedger;
 export const PAYMENT_BILL_HEAD_PATH = DPU.getBillHead;
-export const PAYMENT_SAVE_PATH = "/dairy/dairy/paymentvoucher";
-export const PAYMENT_LIST_PATH = "/dairy/dairy/paymentvoucherlist";
-export const PAYMENT_DELETE_PATH = "/dairy/dairy/paymentvoucherdelete";
+export const PAYMENT_SAVE_PATH = DPU.paymentVoucher;
+export const PAYMENT_LIST_PATH = DPU.paymentVoucherList;
+export const PAYMENT_DELETE_PATH = DPU.paymentVoucherDelete;
 
+// The old working portal save (first voucher of a day, no rows to learn from) sent Flag "PY" / TransactionFlag "DR".
 const FLAG = "PY";
 const TRANSACTION_FLAG = "DR";
 
@@ -74,7 +78,7 @@ export interface PaymentVoucherInput {
 }
 
 export async function getLedgers(): Promise<VoucherOption[]> {
-  return ledgerOptions(rowsFrom(await readPath(PAYMENT_LEDGER_PATH)));
+  return ledgerOptions(rowsFrom(await readDpuPath(PAYMENT_LEDGER_PATH)));
 }
 
 /** The portal has a single deduction type for payment vouchers: Advance (5000). */
@@ -139,8 +143,12 @@ export async function getPaymentVouchers(
   vlcid: string,
   date: string,
 ): Promise<VoucherRow[]> {
-  const qs = `stationid=${encodeURIComponent(vlcid)}&date=${encodeURIComponent(apiDate(date))}`;
-  const raw = rowsFrom(await readPath(`${PAYMENT_LIST_PATH}?${qs}`));
+  const raw = rowsFrom(
+    await readVoucherList("PaymentVoucherList", PAYMENT_LIST_PATH, {
+      stationid: String(vlcid),
+      date: apiDate(date),
+    }),
+  );
   for (const r of raw) {
     const k = Object.keys(r).find((x) => norm(x) === "id");
     if (k !== undefined && r[k] != null) RAW_ROWS.set(String(r[k]), r);
@@ -168,45 +176,25 @@ export async function savePaymentVoucher(
   const fields = {
     StationId: stationOf(v.vlcid),
     FarmerId: String(v.farmerId),
-    FarmerMasterCode: toNumber(v.farmerCode || v.farmerId),
+    // The backend class PaymentVoucher has ONLY string properties: a JSON number (3, 100, 1) cannot be bound to
+    // a string and ends in "Please check data.", so every value is sent as text.
+    FarmerMasterCode: String(toNumber(v.farmerCode || v.farmerId)),
     EntryDate: apiDate(v.date),
-    Amount: toNumber(v.amount),
+    Amount: String(toNumber(v.amount)),
     DeductionType: String(v.deductionType),
-    PaymentMode: modeNumber(v.paymentMode, v.ledgerType),
+    PaymentMode: String(modeNumber(v.paymentMode, v.ledgerType)),
     Flag: learned.flag,
     TransactionFlag: learned.txn,
     Narration: v.narration.trim() || "0",
   };
-  const text = await saveVoucherForm(
+  const message = await saveVoucherPayload(
     SAVE_PATH,
     fields,
     async () => (await getPaymentVouchers(v.vlcid, v.date)).length,
     "PaymentVoucher",
   );
   clearRequestMemo();
-  return checkReply(text, "The payment voucher could not be saved.", true);
-}
-
-const DELETE_KEY = "smartx.paymentVoucher.deleteFormat";
-const rememberedDelete = (): string => {
-  try {
-    return localStorage.getItem(DELETE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-};
-const rememberDelete = (n: string): void => {
-  try {
-    localStorage.setItem(DELETE_KEY, n);
-  } catch {
-    /* ignore */
-  }
-};
-
-interface DeleteTry {
-  name: string;
-  path: string;
-  init: RequestInit;
+  return message;
 }
 
 export async function deletePaymentVoucher(
@@ -216,60 +204,19 @@ export async function deletePaymentVoucher(
 ): Promise<string> {
   const num = /^\d+$/.test(id) ? Number(id) : id;
   const row = { ...(RAW_ROWS.get(id) ?? {}), Id: num, StationId: vlcid ?? "" };
-  const json = encodeURIComponent(JSON.stringify(row));
-  const q = encodeURIComponent(id);
-  const tries: DeleteTry[] = [
-    {
-      name: "delete-json-id3",
-      path: `${SAVE_PATH}?json=${json}&id=3`,
-      init: { method: "DELETE" },
-    },
-    {
-      name: "get-delete-id",
-      path: `${PAYMENT_DELETE_PATH}?id=${q}`,
-      init: { method: "GET" },
-    },
-    {
-      name: "delete-delete-id",
-      path: `${PAYMENT_DELETE_PATH}?id=${q}`,
-      init: { method: "DELETE" },
-    },
-  ];
-  const known = rememberedDelete();
-  const order = [
-    ...tries.filter((t) => t.name === known),
-    ...tries.filter((t) => t.name !== known),
-  ];
-  const stillThere = async (): Promise<boolean> =>
-    !!vlcid &&
-    !!date &&
-    (await getPaymentVouchers(vlcid, date)).some((r) => r.id === id);
-
-  const failed: string[] = [];
-  for (const t of order) {
-    try {
-      const text = await sendPath(t.path, () => t.init);
-      clearRequestMemo();
-      if (!vlcid || !date)
-        return checkReply(
-          text,
-          "The payment voucher could not be deleted.",
-          true,
-        );
-      if (!(await stillThere())) {
-        rememberDelete(t.name);
-        console.info(`[PaymentVoucher] deleted using: ${t.name}`);
-        return "Deleted";
-      }
-      failed.push(`${t.name} (no effect)`);
-    } catch (e) {
-      if (e instanceof ApiError && e.kind === "auth") throw e;
-      failed.push(t.name);
-      console.warn(`[PaymentVoucher] delete failed with ${t.name}:`, e);
-    }
-  }
-  throw new ApiError(
-    `The server did not delete voucher ${id} (tried: ${failed.join(", ")}).`,
-    "server",
-  );
+  const message = await deleteVoucherById({
+    key: "PaymentVoucher",
+    deletePath: PAYMENT_DELETE_PATH,
+    savePath: SAVE_PATH,
+    id,
+    row,
+    ...(vlcid && date
+      ? {
+          stillThere: async () =>
+            (await getPaymentVouchers(vlcid, date)).some((r) => r.id === id),
+        }
+      : {}),
+  });
+  clearRequestMemo();
+  return message;
 }

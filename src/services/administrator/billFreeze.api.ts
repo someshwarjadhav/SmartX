@@ -1,14 +1,15 @@
+import { clearRequestMemo } from "../http/client";
 import {
-  clearRequestMemo,
-  gatewayGet,
-  gatewayText,
-  parseGatewayText,
-} from "../http/client";
-import { ApiError, EmptyReplyError } from "../http/errors";
+  dpuReadAttempts,
+  dpuSaveAttempts,
+  encryptedShapes,
+  type SaveAttempt,
+} from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
+import { ApiError } from "../http/errors";
 import { isObj, pick, rowsFrom, type Obj } from "../utils/loose";
 
-const PATH = "/dairy/dairy/getMilkBillFreeze";
-
+const PATH = DPU.getMilkBillFreeze;
 
 export const FREEZE_FIELDS = {
   id: ["autorownum", "unfreezeno", "unfreezenumber", "freezeno", "id"],
@@ -18,18 +19,34 @@ export const FREEZE_FIELDS = {
   end: ["enddate", "todate", "end"],
 };
 
-const query = (o: Partial<Record<string, string>>) =>
-  `${PATH}?data=${encodeURIComponent(
-    JSON.stringify({
-      AutoRowNum: "0",
-      VillageId: "",
-      EntryDate: "",
-      StartDate: "",
-      EndDate: "",
-      flag: "0",
-      ...o,
-    }),
-  )}`;
+const layouts = (o: Partial<Record<string, string>>): SaveAttempt[] => {
+  const text = {
+    AutoRowNum: "0",
+    VillageId: "",
+    EntryDate: "",
+    StartDate: "",
+    EndDate: "",
+    flag: "0",
+    ...o,
+  };
+  const numbers = {
+    ...text,
+    AutoRowNum: Number(text.AutoRowNum) || 0,
+    flag: Number(text.flag) || 0,
+    json: "",
+  };
+  const attempts: SaveAttempt[] = [
+    { label: "json", path: PATH, body: numbers },
+    { label: "json-text", path: PATH, body: { ...text, json: "" } },
+  ];
+  try {
+    for (const body of encryptedShapes(numbers))
+      attempts.push({ label: "payload", path: PATH, body });
+  } catch {
+    /* no encryption key configured: only the plain bodies are tried */
+  }
+  return attempts;
+};
 
 function listFrom(json: unknown): Obj[] {
   if (isObj(json)) {
@@ -43,17 +60,19 @@ function listFrom(json: unknown): Obj[] {
   return rowsFrom(json);
 }
 
-
 export async function getBillFreezes(villageId: string): Promise<Obj[]> {
-  clearRequestMemo(); 
-  const json = await gatewayGet(query({ VillageId: villageId }), 1);
-  return listFrom(json);
+  clearRequestMemo();
+  return dpuReadAttempts(
+    "BillFreezeList",
+    layouts({ VillageId: villageId }),
+    listFrom,
+  );
 }
 
-
 export async function unfreezeBill(row: Obj, villageId: string): Promise<void> {
-  const text = await gatewayText(
-    query({
+  await dpuSaveAttempts(
+    "BillUnfreeze",
+    layouts({
       AutoRowNum: pick(row, FREEZE_FIELDS.id),
       VillageId: pick(row, FREEZE_FIELDS.villageId) || villageId,
       EntryDate: "",
@@ -61,24 +80,6 @@ export async function unfreezeBill(row: Obj, villageId: string): Promise<void> {
       EndDate: "",
       flag: "2",
     }),
-    {},
-    1,
   );
-  let json: unknown;
-  try {
-    json = parseGatewayText(text);
-  } catch (e) {
-    if (e instanceof EmptyReplyError) return;
-    throw e;
-  }
-  if (isObj(json)) {
-    const ok = json.Success ?? json.success;
-    if (ok === false) {
-      throw new ApiError(
-        String(json.Message ?? json.message ?? "").trim() ||
-          "The server could not unfreeze this bill.",
-        "server",
-      );
-    }
-  }
+  clearRequestMemo();
 }
