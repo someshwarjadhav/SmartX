@@ -207,8 +207,6 @@ export function parseMenu(json: unknown): MenuNode[] {
     }
     roots.push(node);
   }
-  if (!roots.length && json !== null && json !== undefined)
-    console.warn("[menu] no menu rows could be read from the reply:", json);
   return roots;
 }
 

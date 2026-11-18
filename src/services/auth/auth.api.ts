@@ -24,12 +24,11 @@ export interface LoginProfile {
   mccName?: string;
   userId?: string;
   centerStationId?: string;
- 
+
   stationByVlcc?: Record<string, string>;
 }
 
 type Obj = Record<string, unknown>;
-
 
 const BASE_URL = CONFIG_BASE_URL || "https://smartx.shivinfotech.co.in";
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH || "/home/userlogin";
@@ -107,7 +106,10 @@ function pickIds(rows: Obj[], names: string[]): string[] {
 function pickStationByVlcc(rows: Obj[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (const row of rows) {
-    const ids = pickIds([row], ["sessionid", "vlccid", "vlccids", "vlccode", "vlcid"]);
+    const ids = pickIds(
+      [row],
+      ["sessionid", "vlccid", "vlccids", "vlccode", "vlcid"],
+    );
     const codes = pickIds([row], ["customstationid"]);
     ids.forEach((id, i) => {
       const code = codes[i];
@@ -304,7 +306,6 @@ function unwrap(json: unknown): unknown {
     try {
       return decryptPayload(json.data);
     } catch (error) {
-      console.error("[api] Could not decrypt the server response:", error);
       throw new ApiError(
         "The server reply could not be read. Please contact support.",
       );
@@ -335,9 +336,6 @@ async function postJson(
       "text/html",
     );
     if (isHtml) {
-      console.error(
-        `[api] Expected JSON but got HTML from ${res.url}. Check VITE_API_BASE_URL, VITE_LOGIN_PATH and the proxy.`,
-      );
       throw new ApiError(
         "The sign-in service is not reachable right now. Please try again later.",
       );
@@ -374,7 +372,6 @@ export async function loginApi(
   username: string,
   password: string,
 ): Promise<LoginResult> {
- 
   const found = await resolveStaticLogin(username, password);
   if (found.kind === "match") {
     const profile = mapLoginResponse(found.record, username);
@@ -385,9 +382,6 @@ export async function loginApi(
   }
 
   if (!hasEncryptionKey()) {
-    console.error(
-      "[api] VITE_ENCRYPTION_KEY is missing. Add it to .env.local (next to package.json) and restart `npm run dev`.",
-    );
     throw new ApiError(
       import.meta.env.DEV
         ? "VITE_ENCRYPTION_KEY is missing in .env.local. Add it and restart `npm run dev`."
@@ -399,7 +393,6 @@ export async function loginApi(
   try {
     payload = encryptPayload({ username, password });
   } catch (error) {
-    console.error("[api] Encryption failed:", error);
     throw new ApiError(
       "Sign-in is not configured correctly. Please contact support.",
     );
@@ -414,7 +407,6 @@ export async function loginApi(
     if (ok) throw error;
     decoded = json;
   }
-
 
   if (!ok) {
     const message = isObj(decoded)

@@ -131,59 +131,26 @@ export async function dpuSaveShapes(
 ): Promise<string> {
   const log: Array<{ attempt: string; server: string }> = [];
   let last: unknown;
-  let n = 0;
-  const max = LAYOUTS.length * shapes.length;
-  console.group(
-    `[dpu] SAVE ${key}  ->  POST ${path}   (${shapes.length} field-name shapes, up to ${max} tries)`,
-  );
-  console.log(
-    'How it works: the data is packed (layout), encrypted with VITE_ENCRYPTION_KEY and posted as { Payload }. The server answers "Error in data !" for a wrong layout and "No VLCC found !" when it cannot find the centre. Nothing is stored for those answers, so the next try is made.',
-  );
-  const done = () => console.groupEnd();
 
   const run = async (
     layout: Layout,
     i: number,
   ): Promise<{ done: true; message: string } | { done: false }> => {
     const label = `${layout} / shape ${i + 1}`;
-    n += 1;
-    console.log(
-      `%c▶ try ${n}/${max}: layout "${layout}", field-name shape ${i + 1}`,
-      "font-weight:bold;color:#2563eb",
-    );
-    console.log(
-      '   plain data BEFORE encryption (copy this into Postman "innerJson"):\n' +
-        JSON.stringify(shapes[i]),
-    );
     try {
       const message = await dpuSaveAttempts(key, [
         { label, path, body: packLayout(layout, shapes[i]!) },
       ]);
       winningShape.set(key, { layout, shape: i });
       clearRequestMemo();
-      console.log(
-        `%c✔ SAVED with "${label}". Server message: ${message || "(none)"}`,
-        "font-weight:bold;color:#16a36e",
-      );
-      console.info(`[dpu] ${key}: saved with "${label}"`);
-      done();
       return { done: true, message };
     } catch (e) {
       last = e;
       const text = e instanceof Error ? e.message : String(e);
       log.push({ attempt: label, server: text });
       if (!(e instanceof ApiError && SHAPE_REFUSAL.test(text))) {
-        console.log(
-          `%c✖ STOPPED: "${text}" (not a layout problem, so no more tries)`,
-          "font-weight:bold;color:#e14250",
-        );
-        done();
         throw e;
       }
-      console.log(
-        `%c✖ refused: "${text}"  -> trying the next one`,
-        "color:#ea8c14",
-      );
       return { done: false };
     }
   };
@@ -204,9 +171,6 @@ export async function dpuSaveShapes(
       if (WRONG_LAYOUT.test(log[log.length - 1]!.server)) break;
     }
   }
-  console.warn(`[dpu] ${key}: the server refused every layout / shape`);
-  console.table(log);
-  done();
   throw last;
 }
 

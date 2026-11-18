@@ -205,8 +205,6 @@ export async function getMaxVlcc(
   if (!Number.isNaN(allocated)) out.allocated = String(allocated);
   if (!Number.isNaN(available)) out.available = String(available);
 
-  if (!Object.values(out).some(Boolean))
-    console.warn("[vlc] getMaxVlcc: no slot numbers found in the reply", o);
   return Object.values(out).some(Boolean) ? out : null;
 }
 
@@ -256,8 +254,7 @@ export async function getVillageDetails(
       () => dpuGet(`${P.list}?mccid=${q(mccid)}&routeid=${q(r)}`, 0),
       (json) => rowsOf(json).map((x, i) => mapVillage(x, i, routeid)),
       [],
-    ).catch((e) => {
-      console.warn(`[vlc] getVillageDetails routeid="${r}" failed:`, e);
+    ).catch(() => {
       return [] as VlcRecord[];
     });
     if (rows.length) return rows;

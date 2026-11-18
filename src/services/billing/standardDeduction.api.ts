@@ -70,19 +70,8 @@ export async function getFarmers(
     `id=${encodeURIComponent(vlcid)}` +
     `&flag=${encodeURIComponent(flag)}` +
     `&effectivedate=${encodeURIComponent(effectiveDate)}`;
-  console.log(
-    `[StdDeduction] LOAD farmers -> GET ${CN_LIST_PATH}?${qs}\n` +
-      `   vlcid=${vlcid}  flag=${flag}  effectiveDate=${effectiveDate}`,
-  );
   const reply = await dpuGet(`${CN_LIST_PATH}?${qs}`, 0); // already decrypted by dpu.ts
   const json = unwrapObj(reply, ["FarmerList", "CommisionList"]);
-  console.log(
-    `[StdDeduction] decrypted reply keys: ${
-      isObj(reply)
-        ? Object.keys(reply).join(", ") || "(empty object)"
-        : typeof reply
-    }  |  list found: ${json ? "yes" : "NO (unexpected shape)"}`,
-  );
   if (!json) {
     if (
       isNoRecord(reply) ||
@@ -113,12 +102,6 @@ export async function getFarmers(
 
   const have = new Set(saved.map((s) => s.farmerId));
   const out = { farmers: farmers.filter((f) => !have.has(f.farmerId)), saved };
-  console.log(
-    `[StdDeduction] parsed: ${farmers.length} farmers in FarmerList, ${saved.length} already saved (CommisionList), ` +
-      `${out.farmers.length} shown on the left`,
-  );
-  if (saved.length) console.table(saved);
-  if (out.farmers.length) console.table(out.farmers.slice(0, 15));
   return out;
 }
 
@@ -233,15 +216,6 @@ export function saveLayouts(
 }
 
 export async function saveCommission(s: CnSave): Promise<string> {
-  console.log(
-    `[StdDeduction] SAVE -> POST ${CN_SAVE_PATH}\n` +
-      `   vlcid=${s.vlcid}  flag=${s.flag}  effectiveDate=${s.effectiveDate}  rows=${s.rows.length}`,
-  );
-  console.table(s.rows);
-  if (!s.vlcid)
-    console.error(
-      "[StdDeduction] SAVE blocked: vlcid is EMPTY - the centre list did not load.",
-    );
   const message = await dpuSaveAttempts(
     "FarmerMasterCNEntry",
     saveLayouts(s),
@@ -249,8 +223,5 @@ export async function saveCommission(s: CnSave): Promise<string> {
     VLC_NOT_FOUND,
   );
   clearRequestMemo();
-  console.log(
-    `[StdDeduction] SAVE ok, server message: "${message || "(empty)"}"`,
-  );
   return message || "Saved";
 }

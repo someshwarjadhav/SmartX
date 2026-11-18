@@ -1,6 +1,11 @@
 import { clearRequestMemo } from "../http/client";
 import { getSession } from "../session";
-import { dpuGet, dpuSaveAttempts, encryptedShapes, type SaveAttempt } from "../http/dpu";
+import {
+  dpuGet,
+  dpuSaveAttempts,
+  encryptedShapes,
+  type SaveAttempt,
+} from "../http/dpu";
 import { ApiError, EmptyReplyError } from "../http/errors";
 import { apiDate } from "../utils/date";
 import { isObj, pickValue, type Obj } from "../utils/loose";
@@ -61,13 +66,20 @@ function looksLikeMilkRows(v: unknown): boolean {
   if (!Array.isArray(v)) return false;
   const first = v.find(isObj);
   if (!first) return false;
-  const keys = Object.keys(first).map((k) => k.toLowerCase().replace(/[^a-z0-9]/g, ""));
-  return keys.includes("dtdate") && (keys.includes("mweight") || keys.includes("eweight"));
+  const keys = Object.keys(first).map((k) =>
+    k.toLowerCase().replace(/[^a-z0-9]/g, ""),
+  );
+  return (
+    keys.includes("dtdate") &&
+    (keys.includes("mweight") || keys.includes("eweight"))
+  );
 }
-const isMilkList = (key: string, v: unknown): boolean => Array.isArray(v) && (/milk$/i.test(key) || looksLikeMilkRows(v));
+const isMilkList = (key: string, v: unknown): boolean =>
+  Array.isArray(v) && (/milk$/i.test(key) || looksLikeMilkRows(v));
 const merged = new WeakSet<object>();
 /** true when the bill was put together from several shorter requests (so it cannot be frozen as one bill) */
-export const isMergedBill = (raw: unknown): boolean => typeof raw === "object" && raw !== null && merged.has(raw);
+export const isMergedBill = (raw: unknown): boolean =>
+  typeof raw === "object" && raw !== null && merged.has(raw);
 
 const addDays = (iso: string, n: number): string => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -85,7 +97,8 @@ const asObj = (v: unknown): Obj | null => {
   }
   return isObj(x) ? x : null;
 };
-const SUM_KEYS = /^(incentive|totalincentive|transport|totaltransport|milkdeposit|deposit|advance|currentadvance|cattlefeed)$/;
+const SUM_KEYS =
+  /^(incentive|totalincentive|transport|totaltransport|milkdeposit|deposit|advance|currentadvance|cattlefeed)$/;
 
 /** Bills of the same farmer from several windows become one bill: daily milk lists are joined, Incentive / Transport / Deposit added up. */
 /** Figures that are added up when a farmer's bill is joined from several windows (name used in the joined bill -> BillExtras field). */
@@ -103,18 +116,26 @@ const ADD_UP_ALL: Array<[keyof BillExtras, string]> = [
   ["net", "NetPayment"],
 ];
 /** Server totals of ONE window - never kept as they are in a joined bill (they would be the first window's only). */
-const WINDOW_TOTALS = /^(totaldeduction|totaldeductions|deductionamount|netpayment|netpayable|netamount|payableamount)$/;
+const WINDOW_TOTALS =
+  /^(totaldeduction|totaldeductions|deductionamount|netpayment|netpayable|netamount|payableamount)$/;
 
 function mergeBills(parts: Obj[], from: string, to: string): Obj {
   const out: Obj = {};
   const idx = new Map<string, string>();
-  const acc = new Map<string, { parts: number; sum: Map<string, number>; n: Map<string, number> }>();
+  const acc = new Map<
+    string,
+    { parts: number; sum: Map<string, number>; n: Map<string, number> }
+  >();
   const dmy = (d: string) => d.split("-").reverse().join("-");
   for (const part of parts) {
     for (const [key, val] of Object.entries(part)) {
       if (!isObj(val)) continue;
       const id = billHeading(key).id || key;
-      const a = acc.get(id) ?? { parts: 0, sum: new Map<string, number>(), n: new Map<string, number>() };
+      const a = acc.get(id) ?? {
+        parts: 0,
+        sum: new Map<string, number>(),
+        n: new Map<string, number>(),
+      };
       acc.set(id, a);
       a.parts += 1;
       const found = scanExtras(val) as Record<string, number | undefined>;
@@ -127,7 +148,10 @@ function mergeBills(parts: Obj[], from: string, to: string): Obj {
       const have = idx.get(id);
       if (!have) {
         const segs = key.split(" : ");
-        const k = segs.length > 1 ? [...segs.slice(0, -1), `${dmy(from)} To ${dmy(to)}`].join(" : ") : key;
+        const k =
+          segs.length > 1
+            ? [...segs.slice(0, -1), `${dmy(from)} To ${dmy(to)}`].join(" : ")
+            : key;
         idx.set(id, k);
         out[k] = { ...val };
         continue;
@@ -135,8 +159,13 @@ function mergeBills(parts: Obj[], from: string, to: string): Obj {
       const into = out[have] as Obj;
       for (const [f, v] of Object.entries(val)) {
         const nf = f.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (Array.isArray(v) && (/milk$/.test(nf) || looksLikeMilkRows(v))) into[f] = [...(Array.isArray(into[f]) ? (into[f] as unknown[]) : []), ...v];
-        else if (SUM_KEYS.test(nf) && toNum(v) !== undefined) into[f] = (toNum(into[f]) ?? 0) + (toNum(v) as number);
+        if (Array.isArray(v) && (/milk$/.test(nf) || looksLikeMilkRows(v)))
+          into[f] = [
+            ...(Array.isArray(into[f]) ? (into[f] as unknown[]) : []),
+            ...v,
+          ];
+        else if (SUM_KEYS.test(nf) && toNum(v) !== undefined)
+          into[f] = (toNum(into[f]) ?? 0) + (toNum(v) as number);
         else if (!(f in into)) into[f] = v;
       }
     }
@@ -146,28 +175,44 @@ function mergeBills(parts: Obj[], from: string, to: string): Obj {
     const a = acc.get(id);
     const bill = out[k] as Obj;
     const rest: Obj = {};
-    for (const [f, v] of Object.entries(bill)) if (!WINDOW_TOTALS.test(f.toLowerCase().replace(/[^a-z0-9]/g, ""))) rest[f] = v;
+    for (const [f, v] of Object.entries(bill))
+      if (!WINDOW_TOTALS.test(f.toLowerCase().replace(/[^a-z0-9]/g, "")))
+        rest[f] = v;
     const extra: Obj = {};
     if (a) {
-      for (const [field, name] of ADD_UP) if ((a.n.get(field) ?? 0) > 0) extra[name] = Math.round((a.sum.get(field) as number) * 100) / 100;
-      for (const [field, name] of ADD_UP_ALL) if ((a.n.get(field) ?? 0) === a.parts) extra[name] = Math.round((a.sum.get(field) as number) * 100) / 100;
+      for (const [field, name] of ADD_UP)
+        if ((a.n.get(field) ?? 0) > 0)
+          extra[name] = Math.round((a.sum.get(field) as number) * 100) / 100;
+      for (const [field, name] of ADD_UP_ALL)
+        if ((a.n.get(field) ?? 0) === a.parts)
+          extra[name] = Math.round((a.sum.get(field) as number) * 100) / 100;
     }
     out[k] = { ...extra, ...rest };
   }
   return out;
 }
 
-async function billOnce(from: string, to: string, stationId: string, timeoutMs?: number): Promise<unknown> {
+async function billOnce(
+  from: string,
+  to: string,
+  stationId: string,
+  timeoutMs?: number,
+): Promise<unknown> {
   const qs = billQuery(from, to, stationId);
   clearRequestMemo();
   try {
     // fresh = true: every Show Record really calls the API again (the browser must not answer from its own cache)
-    return checkReply(await dpuGet(`${FARMER_BILL_PATH}?${qs}`, 0, timeoutMs, true));
+    return checkReply(
+      await dpuGet(`${FARMER_BILL_PATH}?${qs}`, 0, timeoutMs, true),
+    );
   } catch (e) {
     if (e instanceof EmptyReplyError) return {};
-    // The DPU host answers a VLC that has no bill for the period with this file-permission text: shown as "No record found"
-    if (e instanceof ApiError && e.kind !== "auth" && SERVER_FILE_ERROR.test(e.message)) {
-      console.warn("[farmer bill] DPU answered with a file error, shown as no record:", e.message);
+
+    if (
+      e instanceof ApiError &&
+      e.kind !== "auth" &&
+      SERVER_FILE_ERROR.test(e.message)
+    ) {
       return {};
     }
     throw e;
@@ -175,8 +220,9 @@ async function billOnce(from: string, to: string, stationId: string, timeoutMs?:
 }
 
 const partial = new WeakMap<object, string[]>();
-/** Date ranges the server could not answer while the bill was put together from shorter requests (empty when the bill is complete). */
-export const missingRanges = (raw: unknown): string[] => (typeof raw === "object" && raw !== null ? (partial.get(raw) ?? []) : []);
+
+export const missingRanges = (raw: unknown): string[] =>
+  typeof raw === "object" && raw !== null ? (partial.get(raw) ?? []) : [];
 
 /** true when the reply holds at least one farmer's bill */
 export function hasBillData(raw: unknown): boolean {
@@ -190,20 +236,24 @@ export function replyKeys(raw: unknown): string[] {
   return o ? Object.keys(o).slice(0, 3) : [];
 }
 
-/** A long period is asked in small windows (the server times out on big ones), a few at a time. */
 const WINDOW_DAYS = 5;
 const WINDOW_PARALLEL = 5;
-/** per window: a slow window gives up early and is cut into smaller pieces instead of blocking the screen for 90 seconds */
+
 const WINDOW_TIMEOUT_MS = 60_000;
-/** Answered windows are kept for a few minutes: showing the same VLC and dates again (or a longer period that contains them) is instant. */
+
 const winCache = new Map<string, { at: number; got: Obj[] }>();
 const CACHE_MS = 10 * 60_000;
 const localToday = (): string => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-const cacheKey = (stationId: string, start: string, end: string) => `${getSession()?.scope ?? ""}|${stationId}|${start}|${end}`;
-function fromCache(stationId: string, start: string, end: string): Obj[] | null {
+const cacheKey = (stationId: string, start: string, end: string) =>
+  `${getSession()?.scope ?? ""}|${stationId}|${start}|${end}`;
+function fromCache(
+  stationId: string,
+  start: string,
+  end: string,
+): Obj[] | null {
   const hit = winCache.get(cacheKey(stationId, start, end));
   return hit && Date.now() - hit.at < CACHE_MS ? hit.got : null;
 }
@@ -213,7 +263,11 @@ function toCache(stationId: string, start: string, end: string, got: Obj[]) {
   winCache.set(cacheKey(stationId, start, end), { at: Date.now(), got });
 }
 const dmyShort = (iso: string): string => iso.split("-").reverse().join("-");
-const dayCount = (from: string, to: string): number => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+const dayCount = (from: string, to: string): number =>
+  Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      86_400_000,
+  ) + 1;
 
 export interface BillProgress {
   done: number;
@@ -226,7 +280,12 @@ export interface BillProgress {
  * One window. When the server does not answer it, the window is cut in two and each half is asked again (down to single days);
  * a single day that still fails (after one more try) is added to `missing` - never hidden as "no record".
  */
-async function fetchSpan(start: string, end: string, stationId: string, missing: string[]): Promise<Obj[]> {
+async function fetchSpan(
+  start: string,
+  end: string,
+  stationId: string,
+  missing: string[],
+): Promise<Obj[]> {
   const kept = fromCache(stationId, start, end);
   if (kept) return kept;
   const missingBefore = missing.length;
@@ -235,17 +294,23 @@ async function fetchSpan(start: string, end: string, stationId: string, missing:
   return parts;
 }
 
-async function fetchSpanLive(start: string, end: string, stationId: string, missing: string[]): Promise<Obj[]> {
+async function fetchSpanLive(
+  start: string,
+  end: string,
+  stationId: string,
+  missing: string[],
+): Promise<Obj[]> {
   try {
     const got = asObj(await billOnce(start, end, stationId, WINDOW_TIMEOUT_MS));
     return got && Object.keys(got).length ? [got] : [];
   } catch (e) {
     if (e instanceof ApiError && e.kind === "auth") throw e;
     if (e instanceof ApiError && e.kind === "cancelled") throw e;
-    console.warn(`[farmer bill] ${start} to ${end} not answered:`, e instanceof Error ? e.message : e);
     if (start >= end) {
       try {
-        const got = asObj(await billOnce(start, end, stationId, WINDOW_TIMEOUT_MS));
+        const got = asObj(
+          await billOnce(start, end, stationId, WINDOW_TIMEOUT_MS),
+        );
         return got && Object.keys(got).length ? [got] : [];
       } catch {
         missing.push(start);
@@ -270,19 +335,35 @@ function dayRanges(days: string[]): string[] {
       prev = d;
       continue;
     }
-    if (from) out.push(from === prev ? dmyShort(from) : `${dmyShort(from)} To ${dmyShort(prev)}`);
+    if (from)
+      out.push(
+        from === prev
+          ? dmyShort(from)
+          : `${dmyShort(from)} To ${dmyShort(prev)}`,
+      );
     from = d;
     prev = d;
   }
-  if (from) out.push(from === prev ? dmyShort(from) : `${dmyShort(from)} To ${dmyShort(prev)}`);
+  if (from)
+    out.push(
+      from === prev ? dmyShort(from) : `${dmyShort(from)} To ${dmyShort(prev)}`,
+    );
   return out;
 }
 
-/** The period asked in small windows (a few at a time); the screen is filled as the windows arrive. */
-async function billInWindows(from: string, to: string, stationId: string, onProgress?: (p: BillProgress) => void, cancelled?: () => boolean): Promise<unknown> {
+async function billInWindows(
+  from: string,
+  to: string,
+  stationId: string,
+  onProgress?: (p: BillProgress) => void,
+  cancelled?: () => boolean,
+): Promise<unknown> {
   const spans: Array<[string, string]> = [];
   for (let start = from; start <= to; start = addDays(start, WINDOW_DAYS)) {
-    const end = addDays(start, WINDOW_DAYS - 1) < to ? addDays(start, WINDOW_DAYS - 1) : to;
+    const end =
+      addDays(start, WINDOW_DAYS - 1) < to
+        ? addDays(start, WINDOW_DAYS - 1)
+        : to;
     spans.push([start, end]);
   }
   const results: Obj[][] = spans.map(() => []);
@@ -300,12 +381,17 @@ async function billInWindows(from: string, to: string, stationId: string, onProg
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(WINDOW_PARALLEL, spans.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(WINDOW_PARALLEL, spans.length) }, worker),
+  );
   if (cancelled?.()) return {}; // a newer Show Record replaced this one
   const parts = results.flat();
   if (!parts.length) {
-    // nothing came back: when some days did not answer that is a server problem, not "no record"
-    if (missing.length) throw new ApiError(`The server did not answer for ${dayRanges(missing).join(", ")}. Please press Show Record again.`, "server");
+    if (missing.length)
+      throw new ApiError(
+        `The server did not answer for ${dayRanges(missing).join(", ")}. Please press Show Record again.`,
+        "server",
+      );
     return {};
   }
   const all = mergeBills(parts, from, to);
@@ -321,12 +407,10 @@ export async function getPrintTableData(
   onProgress?: (p: BillProgress) => void,
   cancelled?: () => boolean,
 ): Promise<unknown> {
-  // Every Show Record is a fresh load: windows kept from an earlier Show are dropped, so the API is called again each time
-  // (the cache below is then only used inside this one load, e.g. when a slow window is cut in two and retried).
   winCache.clear();
-  // DPU API only: GET https://dpu.shivinfotech.co.in/api/Login/MilkBillProcessma?id=0&fromdate=&todate=&stationid=
-  // A long period goes straight to small windows: asking it in one piece only makes the server time out after 90 seconds.
-  if (dayCount(from, to) > WINDOW_DAYS) return billInWindows(from, to, stationId, onProgress, cancelled);
+
+  if (dayCount(from, to) > WINDOW_DAYS)
+    return billInWindows(from, to, stationId, onProgress, cancelled);
   try {
     return await billOnce(from, to, stationId);
   } catch (e) {
@@ -338,9 +422,12 @@ export async function getPrintTableData(
 
 /** Freeze the bill. The plain JSON body is sent first; if the server refuses it, the encrypted { Payload } form is tried. */
 export async function postBillFreeze(data: BillFreeze): Promise<string> {
-  const attempts: SaveAttempt[] = [{ label: "json", path: BILL_FREEZE_PATH, body: data }];
+  const attempts: SaveAttempt[] = [
+    { label: "json", path: BILL_FREEZE_PATH, body: data },
+  ];
   try {
-    for (const body of encryptedShapes(data)) attempts.push({ label: "payload", path: BILL_FREEZE_PATH, body });
+    for (const body of encryptedShapes(data))
+      attempts.push({ label: "payload", path: BILL_FREEZE_PATH, body });
   } catch {
     /* no encryption key configured: only the plain body is tried */
   }
@@ -400,7 +487,9 @@ export const farmerLabel = (b: { id: string; name: string }): string => {
   const name = b.name.trim();
   if (!id) return name;
   if (!name) return id;
-  return name.toLowerCase().startsWith(`${id.toLowerCase()} `) ? name : `${id} ${name}`;
+  return name.toLowerCase().startsWith(`${id.toLowerCase()} `)
+    ? name
+    : `${id} ${name}`;
 };
 
 const BILL_KNOWN: Record<string, string> = {
@@ -580,13 +669,17 @@ function billOf(
     deposit: found.deposit ?? 0,
     advance: found.advance ?? 0,
     cattleFeed: found.cattleFeed ?? 0,
-    ...(found.totalDeduction !== undefined ? { totalDeduction: found.totalDeduction } : {}),
+    ...(found.totalDeduction !== undefined
+      ? { totalDeduction: found.totalDeduction }
+      : {}),
     ...(found.net !== undefined ? { net: found.net } : {}),
     ...(found.overRate !== undefined ? { overRate: found.overRate } : {}),
   };
-  const extrasFound = found.incentive !== undefined || found.transport !== undefined || found.deposit !== undefined;
+  const extrasFound =
+    found.incentive !== undefined ||
+    found.transport !== undefined ||
+    found.deposit !== undefined;
   if (import.meta.env.DEV && !extrasFound) {
-    console.info("[farmer bill] no Incentive / Transport / Milk Deposit in the reply of", key, "- fields:", Object.keys(value));
   }
 
   const h = billHeading(key);
@@ -610,9 +703,12 @@ function scanName(value: Obj): string {
   const NAMES = ["farmername", "membername", "fname", "name"];
   const look = (o: Obj): string => {
     for (const w of NAMES) {
-      const k = Object.keys(o).find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === w);
+      const k = Object.keys(o).find(
+        (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === w,
+      );
       const v = k === undefined ? undefined : o[k];
-      if (typeof v === "string" && v.trim() && !/^[\d\s.,-]+$/.test(v.trim())) return v.trim();
+      if (typeof v === "string" && v.trim() && !/^[\d\s.,-]+$/.test(v.trim()))
+        return v.trim();
     }
     return "";
   };
@@ -635,9 +731,11 @@ function withSummary(bill: FarmerBillData): FarmerBillData {
   const A = (k: string) => amounts[k] ?? 0;
   const totalLiter = Object.values(liters).reduce((a, b) => a + b, 0);
   const totalAmount = Object.values(amounts).reduce((a, b) => a + b, 0);
-  const totalDeduction = e.totalDeduction ?? e.deposit + e.advance + e.cattleFeed;
+  const totalDeduction =
+    e.totalDeduction ?? e.deposit + e.advance + e.cattleFeed;
   // old bill: Net Payment = Total Amount + Incentive + Transport - Total Deduction
-  const netValue = e.net ?? totalAmount + e.incentive + e.transport - totalDeduction;
+  const netValue =
+    e.net ?? totalAmount + e.incentive + e.transport - totalDeduction;
   const net = f2(netValue);
   const p = (label: string, v: number | string): BillPair => ({
     label,
@@ -689,8 +787,15 @@ function withSummary(bill: FarmerBillData): FarmerBillData {
 }
 
 /** Adds figures that arrived later (e.g. from the payment summary) and builds the summary again. */
-export function applyExtras(bill: FarmerBillData, patch: Partial<BillExtras>): FarmerBillData {
-  return withSummary({ ...bill, extras: { ...bill.extras, ...patch }, extrasFound: true });
+export function applyExtras(
+  bill: FarmerBillData,
+  patch: Partial<BillExtras>,
+): FarmerBillData {
+  return withSummary({
+    ...bill,
+    extras: { ...bill.extras, ...patch },
+    extrasFound: true,
+  });
 }
 
 /* ---- Incentive / Transport / Milk Deposit ... read from the bill reply, wherever the server keeps them ---- */
@@ -701,7 +806,18 @@ const toNum = (v: unknown): number | undefined => {
   const n = Number(v.replace(/,/g, "").trim());
   return Number.isFinite(n) ? n : undefined;
 };
-const NAME_FIELDS = ["billhead", "headname", "head", "deductionname", "deductiontype", "particular", "particulars", "description", "name", "type"];
+const NAME_FIELDS = [
+  "billhead",
+  "headname",
+  "head",
+  "deductionname",
+  "deductiontype",
+  "particular",
+  "particulars",
+  "description",
+  "name",
+  "type",
+];
 const AMOUNT_FIELDS = ["amount", "amt", "value", "total", "totalamount"];
 
 /** Scalars of the farmer's object (the daily milk lists are skipped). A list of { head name, amount } rows becomes name -> amount. */
@@ -714,10 +830,16 @@ function flatten(o: Obj, out: Map<string, number>, depth = 0): void {
       for (const item of v) {
         if (!isObj(item)) continue;
         const keys = Object.keys(item);
-        const nameKey = NAME_FIELDS.map((n) => keys.find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === n)).find((x) => x && typeof item[x] === "string");
-        const amountKey = AMOUNT_FIELDS.map((n) => keys.find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === n)).find((x) => x && toNum(item[x]) !== undefined);
+        const nameKey = NAME_FIELDS.map((n) =>
+          keys.find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === n),
+        ).find((x) => x && typeof item[x] === "string");
+        const amountKey = AMOUNT_FIELDS.map((n) =>
+          keys.find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === n),
+        ).find((x) => x && toNum(item[x]) !== undefined);
         if (nameKey && amountKey) {
-          const hk = String(item[nameKey]).toLowerCase().replace(/[^a-z0-9]/g, "");
+          const hk = String(item[nameKey])
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
           if (hk && !out.has(hk)) out.set(hk, toNum(item[amountKey]) as number);
         }
         flatten(item, out, depth + 1);
@@ -733,7 +855,10 @@ function flatten(o: Obj, out: Map<string, number>, depth = 0): void {
   }
 }
 
-const firstOf = (m: Map<string, number>, names: string[]): number | undefined => {
+const firstOf = (
+  m: Map<string, number>,
+  names: string[],
+): number | undefined => {
   for (const n of names) {
     const v = m.get(n);
     if (v !== undefined) return v;
@@ -741,7 +866,9 @@ const firstOf = (m: Map<string, number>, names: string[]): number | undefined =>
   return undefined;
 };
 const sumOf = (m: Map<string, number>, names: string[]): number | undefined => {
-  const vals = names.map((n) => m.get(n)).filter((x): x is number => x !== undefined);
+  const vals = names
+    .map((n) => m.get(n))
+    .filter((x): x is number => x !== undefined);
   return vals.length ? vals.reduce((a, b) => a + b, 0) : undefined;
 };
 
@@ -752,14 +879,52 @@ function scanExtras(value: Obj): Partial<BillExtras> {
   const set = <K extends keyof BillExtras>(k: K, v: number | undefined) => {
     if (v !== undefined) out[k] = v as BillExtras[K];
   };
-  set("incentive", firstOf(m, ["incentive", "totalincentive", "incentiveamount", "incentiveamt", "commission", "totalcommission", "comm", "totalcomm"]) ?? sumOf(m, ["cowcomm", "buffcomm", "buffalocomm", "mixcomm"]));
-  set("transport", firstOf(m, ["transport", "totaltransport", "transportamount", "transportamt"]) ?? sumOf(m, ["cowtrans", "bufftrans", "buffalotrans", "mixtrans"]));
-  set("deposit", firstOf(m, ["milkdeposit", "deposit", "totaldeposit", "milkdepositamount"]) ?? sumOf(m, ["cowdeposit", "buffdeposit", "buffalodeposit", "mixdeposit"]));
+  set(
+    "incentive",
+    firstOf(m, [
+      "incentive",
+      "totalincentive",
+      "incentiveamount",
+      "incentiveamt",
+      "commission",
+      "totalcommission",
+      "comm",
+      "totalcomm",
+    ]) ?? sumOf(m, ["cowcomm", "buffcomm", "buffalocomm", "mixcomm"]),
+  );
+  set(
+    "transport",
+    firstOf(m, [
+      "transport",
+      "totaltransport",
+      "transportamount",
+      "transportamt",
+    ]) ?? sumOf(m, ["cowtrans", "bufftrans", "buffalotrans", "mixtrans"]),
+  );
+  set(
+    "deposit",
+    firstOf(m, [
+      "milkdeposit",
+      "deposit",
+      "totaldeposit",
+      "milkdepositamount",
+    ]) ??
+      sumOf(m, ["cowdeposit", "buffdeposit", "buffalodeposit", "mixdeposit"]),
+  );
   set("advance", firstOf(m, ["currentadvance", "advance", "advanceamount"]));
-  set("cattleFeed", firstOf(m, ["cattlefeed", "cattlefeedamount", "cattlefeedamt"]));
+  set(
+    "cattleFeed",
+    firstOf(m, ["cattlefeed", "cattlefeedamount", "cattlefeedamt"]),
+  );
   set("overRate", firstOf(m, ["overrate", "overrateamount"]));
-  set("totalDeduction", firstOf(m, ["totaldeduction", "totaldeductions", "deductionamount"]));
-  set("net", firstOf(m, ["netpayment", "netpayable", "netamount", "payableamount"]));
+  set(
+    "totalDeduction",
+    firstOf(m, ["totaldeduction", "totaldeductions", "deductionamount"]),
+  );
+  set(
+    "net",
+    firstOf(m, ["netpayment", "netpayable", "netamount", "payableamount"]),
+  );
   return out;
 }
 
@@ -767,22 +932,44 @@ function scanExtras(value: Obj): Partial<BillExtras> {
  * Fallback when the bill reply carries no Incentive / Transport / Milk Deposit: the same figures from the farmer payment
  * summary (MilkBillPayCashMA) of the same VLC and dates, by farmer id. Quiet - an empty map when it has nothing.
  */
-export async function getExtrasFromSummary(from: string, to: string, stationId: string): Promise<Map<string, Partial<BillExtras>>> {
+export async function getExtrasFromSummary(
+  from: string,
+  to: string,
+  stationId: string,
+): Promise<Map<string, Partial<BillExtras>>> {
   const out = new Map<string, Partial<BillExtras>>();
   try {
-    const rows = await getCashSummary({ type: "farmer", fromdate: from, todate: to, stationid: stationId });
+    const rows = await getCashSummary({
+      type: "farmer",
+      fromdate: from,
+      todate: to,
+      stationid: stationId,
+    });
     for (const r of rows) {
       const m = new Map<string, number>();
       for (const [k, v] of Object.entries(r)) {
         const n = toNum(v);
-        if (n !== undefined) m.set(k.toLowerCase().replace(/[^a-z0-9]/g, ""), n);
+        if (n !== undefined)
+          m.set(k.toLowerCase().replace(/[^a-z0-9]/g, ""), n);
       }
-      const idRaw = ["farmerid", "codeno", "farmercode"].map((k) => r[Object.keys(r).find((x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === k) ?? ""]).find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+      const idRaw = ["farmerid", "codeno", "farmercode"]
+        .map(
+          (k) =>
+            r[
+              Object.keys(r).find(
+                (x) => x.toLowerCase().replace(/[^a-z0-9]/g, "") === k,
+              ) ?? ""
+            ],
+        )
+        .find((v) => v !== undefined && v !== null && String(v).trim() !== "");
       if (idRaw === undefined) continue;
       const part: Partial<BillExtras> = {};
-      const inc = sumOf(m, ["cowcomm", "buffcomm"]) ?? firstOf(m, ["incentive"]);
-      const tr = sumOf(m, ["cowtrans", "bufftrans"]) ?? firstOf(m, ["transport"]);
-      const dep = sumOf(m, ["cowdeposit", "buffdeposit"]) ?? firstOf(m, ["milkdeposit"]);
+      const inc =
+        sumOf(m, ["cowcomm", "buffcomm"]) ?? firstOf(m, ["incentive"]);
+      const tr =
+        sumOf(m, ["cowtrans", "bufftrans"]) ?? firstOf(m, ["transport"]);
+      const dep =
+        sumOf(m, ["cowdeposit", "buffdeposit"]) ?? firstOf(m, ["milkdeposit"]);
       if (inc !== undefined) part.incentive = inc;
       if (tr !== undefined) part.transport = tr;
       if (dep !== undefined) part.deposit = dep;

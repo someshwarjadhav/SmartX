@@ -82,9 +82,6 @@ export function openDpuReply(v: unknown, depth = 0, salvage = false): unknown {
           })();
       if (!got) return v;
       if (!got.complete) {
-        console.warn(
-          `[dpu] the server reply was cut off after ${v.length} characters (invalid JSON). Only the complete entries before the cut are used - the API must return the full JSON.`,
-        );
       }
       return openDpuReply(got.value, depth + 1, salvage);
     }
@@ -128,27 +125,6 @@ function stillEncrypted(reply: unknown): boolean {
   });
 }
 
-/**
- * Console note for every DPU reply. Pretty-printing a big decrypted reply (thousands of rows) into the console froze the
- * page for seconds, so only a short summary is printed; the full JSON is printed only if localStorage "smartx:debug" = "1".
- */
-function logReply(label: string, reply: unknown): void {
-  try {
-    if (localStorage.getItem("smartx:debug") === "1") {
-      console.log(
-        `${label} - decrypted JSON:\n${JSON.stringify(reply, null, 2)}`,
-      );
-      return;
-    }
-  } catch {
-    /* no localStorage */
-  }
-  const n = Array.isArray(reply) ? reply.length : undefined;
-  console.debug(
-    `${label} - reply ready${n === undefined ? "" : ` (${n} rows)`}`,
-  );
-}
-
 const SHOW = 400;
 const cut = (t: string, n = SHOW) =>
   t.length > n ? `${t.slice(0, n)}... (${t.length} chars)` : t;
@@ -171,41 +147,24 @@ export function plainBody(body: BodyInit | null | undefined): string {
   }
 }
 
-const looksEncryptedText = (t: string) =>
-  !/^\s*[[{]/.test(t) ||
-  /"(data|response|result|payload)"\s*:\s*"[A-Za-z0-9+/=_:-]{16,}"/i.test(t);
-
-function logRequest(label: string, url: string, init: RequestInit) {
-  const sent = typeof init.body === "string" ? cut(init.body, 160) : "(none)";
-  console.log(
-    `${label} >>> REQUEST\nURL: ${url}\nBody sent (encrypted, first chars): ${sent}\nBody plain (before encryption):\n${plainBody(init.body)}`,
-  );
-}
-
-function logRaw(label: string, text: string) {
-  console.log(
-    `${label} <<< RAW REPLY (${looksEncryptedText(text) ? "ENCRYPTED" : "plain JSON"}), ${text.length} chars:\n${cut(text)}`,
-  );
-}
-
 async function loggedText(
-  label: string,
+  _label: string,
   path: string,
   init: RequestInit,
   priority: Priority,
   timeoutMs?: number,
 ): Promise<string> {
   const url = dpuUrl(path);
-  logRequest(label, url, init);
   try {
-    const text = await gatewayText(url, init, priority, true, timeoutMs ? { timeoutMs } : {});
-    logRaw(label, text);
+    const text = await gatewayText(
+      url,
+      init,
+      priority,
+      true,
+      timeoutMs ? { timeoutMs } : {},
+    );
     return text;
   } catch (e) {
-    console.error(
-      `${label} !!! FAILED before a reply could be read: ${e instanceof Error ? e.message : String(e)}`,
-      e,
-    );
     throw e;
   }
 }
@@ -220,16 +179,11 @@ async function dpuSend(
   const text = await loggedText(label, path, init, priority, timeoutMs);
   const reply = openDpuReply(parseGatewayText(text), 0, true);
   if (stillEncrypted(reply)) {
-    console.error(
-      `${label} - reply could not be decrypted (check VITE_ENCRYPTION_KEY). Raw reply:`,
-      text.slice(0, 500),
-    );
     throw new ApiError(
       "The DPU reply is encrypted and could not be decrypted. Check VITE_ENCRYPTION_KEY in .env.local.",
       "parse",
     );
   }
-  logReply(label, reply);
   return reply;
 }
 
@@ -281,22 +235,16 @@ export async function dpuWrite(
       text.trim() &&
       !text.trim().startsWith("<")
     ) {
-      console.log(`${label} <<< TEXT REPLY (not JSON): ${text.slice(0, 500)}`);
       return text.trim();
     }
     throw e;
   }
   if (stillEncrypted(reply)) {
-    console.error(
-      `${label} - reply could not be decrypted (check VITE_ENCRYPTION_KEY). Raw reply:`,
-      text.slice(0, 500),
-    );
     throw new ApiError(
       "The DPU reply is encrypted and could not be decrypted. Check VITE_ENCRYPTION_KEY in .env.local.",
       "parse",
     );
   }
-  logReply(label, reply);
   return reply;
 }
 
@@ -381,10 +329,6 @@ export async function dpuSaveJson(
       const refused =
         e instanceof ApiError &&
         /error (400|415|422)\b|^no\s*data\b/i.test(e.message.trim());
-      console.warn(
-        `[dpu] ${method} ${path} - body shape ${i + 1}/${variants.length} refused:`,
-        e instanceof Error ? e.message : e,
-      );
       if (!refused) throw e;
     }
   }
@@ -445,9 +389,6 @@ export async function dpuSaveAttempts(
   const log: Array<{ attempt: string; server: string }> = [];
   for (let n = 0; n < ordered.length; n++) {
     const a = ordered[n]!;
-    console.log(
-      `[dpu] ${key}: trying layout ${n + 1}/${ordered.length} "${a.label}"`,
-    );
     try {
       const token = getSession()?.token;
       const message = await dpuSave(a.path, JSON.stringify(a.body), method, {
@@ -455,7 +396,6 @@ export async function dpuSaveAttempts(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       });
       winningLabel.set(key, a.label);
-      console.info(`[dpu] ${key}: saved with layout "${a.label}"`);
       return message;
     } catch (e) {
       const text = e instanceof Error ? e.message : String(e);
@@ -465,15 +405,10 @@ export async function dpuSaveAttempts(
         e instanceof ApiError &&
         e.kind === "server" &&
         (LAYOUT_REFUSAL.test(text.trim()) || !!alsoRefused?.test(text.trim()));
-      console.warn(
-        `[dpu] ${key}: layout "${a.label}" -> server said: ${text}${refused ? "  (not accepted, trying the next layout)" : "  (stopping here)"}`,
-      );
       if (!refused && !(e instanceof ApiError && REFUSED.test(text.trim())))
         throw e;
     }
   }
-  console.warn(`[dpu] ${key}: the server refused every layout`);
-  console.table(log);
 
   const distinct = [...new Set(log.map((l) => l.server))];
   throw new ApiError(
@@ -527,8 +462,6 @@ export async function dpuReadAttempts<T>(
       if (!refused) throw e;
     }
   }
-  console.warn(`[dpu] ${key}: the server refused every layout`);
-  console.table(log);
   const distinct = [...new Set(log.map((l) => l.server))];
   throw new ApiError(
     distinct.length === 1

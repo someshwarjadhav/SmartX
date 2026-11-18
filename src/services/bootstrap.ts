@@ -63,7 +63,6 @@ export const subscribeMenu = (fn: () => void) => {
   };
 };
 
-
 function persist(userId: string, raw: RawData) {
   vaultSave(DATA_KEY, {
     userId,
@@ -73,7 +72,6 @@ function persist(userId: string, raw: RawData) {
     vaultSave(MENU_KEY, { userId, raw: raw.menu } satisfies StoredMenu);
 }
 
-
 export async function refreshMenu(userId: string): Promise<void> {
   try {
     const raw = await getMenu(userId);
@@ -82,14 +80,8 @@ export async function refreshMenu(userId: string): Promise<void> {
     data = { ...data, menu: parseMenu(raw) };
     persist(userId, rawData);
     listeners.forEach((fn) => fn());
-  } catch (e) {
-    console.warn(
-      "[getMenu] refresh failed, saved menu kept:",
-      e instanceof Error ? e.message : e,
-    );
-  }
+  } catch (e) {}
 }
-
 
 let menuTried = false;
 export async function ensureMenu(userId: string): Promise<void> {
@@ -124,7 +116,8 @@ export function applySession(profile: LoginProfile) {
   const names: Record<string, string> = { ...(profile.vlccNames ?? {}) };
   for (const c of centers) if (c.name) names[c.id] = c.name;
   const stationByVlcc: Record<string, string> = {};
-  for (const c of centers) if (c.stationId && c.stationId !== c.id) stationByVlcc[c.id] = c.stationId;
+  for (const c of centers)
+    if (c.stationId && c.stationId !== c.id) stationByVlcc[c.id] = c.stationId;
   Object.assign(stationByVlcc, profile.stationByVlcc ?? {});
   setSession({
     ...profile,
@@ -212,7 +205,6 @@ export function restoreSession(): LoginProfile | null {
   }
   const saved = vaultLoad<StoredData>(DATA_KEY);
   if (saved && saved.userId === (profile.userId ?? "") && saved.raw) {
-   
     const menu = vaultLoad<StoredMenu>(MENU_KEY);
     const raw =
       menu && menu.userId === (profile.userId ?? "") && menu.raw
@@ -272,11 +264,6 @@ export async function refreshSessionCenters(): Promise<void> {
       applySession(profile);
       listeners.forEach((fn) => fn());
       return;
-    } catch (e) {
-      console.debug(
-        "[vlc] centre refresh skipped:",
-        e instanceof Error ? e.message : e,
-      );
-    }
+    } catch (e) {}
   }
 }

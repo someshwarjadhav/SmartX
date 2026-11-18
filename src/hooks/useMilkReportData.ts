@@ -1,52 +1,60 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { CollectionEntry, Shift } from '../data/farmerCollection';
-import type { MilkKind } from '../types';
-import { getSession } from '../services/session';
-import { useQuery, type QueryState } from './useQuery';
-import { fetchFarmerCollection } from '../services/farmer/farmer.api.ts';
-import { fetchVlccCollection } from '../services/vlcc/vlcc.api.ts';
-import { mapFarmers } from '../services/mappers/farmer.mapper.ts';
-import { mapVlcc } from '../services/mappers/vlcc.mapper.ts';
-import { useCenters } from './useSessionData';
-import { GLOBALS } from '../lib/portal/global';
-import { fetchDpuFarmerMaster, type MasterFarmerOption } from '../services/farmer/farmer.api.ts';
-import { getDpuCenter, parseCenters } from '../services/center/center.api.ts';
-import type { Center } from '../services/mappers/center.mapper.ts';
-import { isoFromTrdate } from '../services/utils/date';
-import { time24 } from '../lib/format';
-import { titleCase, stripRoute } from '../lib/titleCase';
-import { getMccRoute, getVillageDetails } from '../services/master/vlcMaster.api';
-import type { RawFarmerRow, RawVlccRow } from '../services/types/raw';
+import { useEffect, useMemo, useState } from "react";
+import type { CollectionEntry, Shift } from "../data/farmerCollection";
+import type { MilkKind } from "../types";
+import { getSession } from "../services/session";
+import { useQuery, type QueryState } from "./useQuery";
+import { fetchFarmerCollection } from "../services/farmer/farmer.api.ts";
+import { fetchVlccCollection } from "../services/vlcc/vlcc.api.ts";
+import { mapFarmers } from "../services/mappers/farmer.mapper.ts";
+import { mapVlcc } from "../services/mappers/vlcc.mapper.ts";
+import { useCenters } from "./useSessionData";
+import { GLOBALS } from "../lib/portal/global";
+import {
+  fetchDpuFarmerMaster,
+  type MasterFarmerOption,
+} from "../services/farmer/farmer.api.ts";
+import { getDpuCenter, parseCenters } from "../services/center/center.api.ts";
+import type { Center } from "../services/mappers/center.mapper.ts";
+import { isoFromTrdate } from "../services/utils/date";
+import { time24 } from "../lib/format";
+import { titleCase, stripRoute } from "../lib/titleCase";
+import {
+  getMccRoute,
+  getVillageDetails,
+} from "../services/master/vlcMaster.api";
+import type { RawFarmerRow, RawVlccRow } from "../services/types/raw";
 
 export interface LiveReportState<T> {
   rows: T[];
- 
+
   loading: boolean;
 
   fetching: boolean;
- 
+
   done: number;
   error: string | null;
   retry: () => void;
   updatedAt: number | null;
- 
+
   failed: number;
   total: number;
 }
 export interface LiveFilter {
   from: string;
   to: string;
-  shift?: Shift | 'both';
-  milk?: MilkKind | 'both';
-  vlccId?: string | 'all';
- 
+  shift?: Shift | "both";
+  milk?: MilkKind | "both";
+  vlccId?: string | "all";
+
   vlccIds?: string[];
 }
 
-
 const centreCache = new Map<string, Promise<Center[]>>();
 
-type CentreTry = { param: 'id' | 'stationid' | 'userid' | 'mccid'; value: string };
+type CentreTry = {
+  param: "id" | "stationid" | "userid" | "mccid";
+  value: string;
+};
 
 function loadReportCentres(key: string, tries: CentreTry[]): Promise<Center[]> {
   const hit = centreCache.get(key);
@@ -56,29 +64,27 @@ function loadReportCentres(key: string, tries: CentreTry[]): Promise<Center[]> {
       try {
         const list = parseCenters(await getDpuCenter(t.value, t.param));
         if (list.length) {
-          console.info(`[centres] FarmerCollectionDpu?${t.param}=${t.value} -> ${list.length} centres`, list.map((c) => `${c.name || '(no name)'} | ${c.id}`));
           return list;
         }
-        console.warn(`[centres] FarmerCollectionDpu?${t.param}=${t.value} answered but no centre rows were recognised`);
-      } catch (e) {
-        console.warn(`[centres] FarmerCollectionDpu?${t.param}=${t.value} failed:`, e instanceof Error ? e.message : e);
-      }
+      } catch (e) {}
     }
-    console.warn('[centres] DPU centre API gave no centres - the centres saved at login are shown instead.');
     return [];
   })();
   centreCache.set(key, p);
-  void p.then((list) => { if (!list.length) centreCache.delete(key); });
+  void p.then((list) => {
+    if (!list.length) centreCache.delete(key);
+  });
   return p;
 }
-
-
 
 type RouteOf = Map<string, { id: string; name: string }>;
 const routeCache = new Map<string, Promise<RouteOf>>();
 
-
-function loadRouteMap(mccid: string, plantid: string, total: number): Promise<RouteOf> {
+function loadRouteMap(
+  mccid: string,
+  plantid: string,
+  total: number,
+): Promise<RouteOf> {
   const key = `${mccid}|${plantid}`;
   const hit = routeCache.get(key);
   if (hit) return hit;
@@ -86,20 +92,32 @@ function loadRouteMap(mccid: string, plantid: string, total: number): Promise<Ro
     const out: RouteOf = new Map();
     try {
       const routes = await getMccRoute(mccid, plantid);
-      const lists = await Promise.all(routes.map((r) => getVillageDetails(mccid, r.routeId).then((v) => ({ r, v })).catch(() => ({ r, v: [] as Awaited<ReturnType<typeof getVillageDetails>> }))));
+      const lists = await Promise.all(
+        routes.map((r) =>
+          getVillageDetails(mccid, r.routeId)
+            .then((v) => ({ r, v }))
+            .catch(() => ({
+              r,
+              v: [] as Awaited<ReturnType<typeof getVillageDetails>>,
+            })),
+        ),
+      );
       for (const { r, v } of lists) {
-        
         if (routes.length > 1 && total > 0 && v.length >= total) continue;
-        for (const x of v) if (x.villageId && !out.has(x.villageId)) out.set(x.villageId, { id: r.routeId, name: r.routeName || r.routeId });
+        for (const x of v)
+          if (x.villageId && !out.has(x.villageId))
+            out.set(x.villageId, {
+              id: r.routeId,
+              name: r.routeName || r.routeId,
+            });
       }
-      console.info(`[routes] ${routes.length} route(s):`, routes.map((r) => `${r.routeName} | ${r.routeId}`), `-> ${out.size} centres placed`);
-    } catch (e) {
-      console.warn('[routes] could not load the routes:', e instanceof Error ? e.message : e);
-    }
+    } catch (e) {}
     return out;
   })();
   routeCache.set(key, p);
-  void p.then((m) => { if (!m.size) routeCache.delete(key); });
+  void p.then((m) => {
+    if (!m.size) routeCache.delete(key);
+  });
   return p;
 }
 
@@ -107,102 +125,187 @@ function useReportCenters(): Center[] {
   const session = getSession();
   const saved = useCenters();
   const [dpu, setDpu] = useState<Center[]>([]);
-  const vlccKey = session?.vlccIds.join(',') ?? '';
-  const scope = session?.scope ?? '';
+  const vlccKey = session?.vlccIds.join(",") ?? "";
+  const scope = session?.scope ?? "";
   useEffect(() => {
-    const ids = [GLOBALS.stationid, vlccKey, session?.mccLoginId, session?.stationId]
-      .map((x) => (x ?? '').trim())
+    const ids = [
+      GLOBALS.stationid,
+      vlccKey,
+      session?.mccLoginId,
+      session?.stationId,
+    ]
+      .map((x) => (x ?? "").trim())
       .filter((x, i, all) => x && all.indexOf(x) === i);
-    const tries: CentreTry[] = ids.map((value) => ({ param: 'id' as const, value }));
-    if (ids[0]) tries.push({ param: 'stationid', value: ids[0] });
-    if (GLOBALS.userid) tries.push({ param: 'userid', value: GLOBALS.userid });
-    if (session?.mccId) tries.push({ param: 'mccid', value: session.mccId });
+    const tries: CentreTry[] = ids.map((value) => ({
+      param: "id" as const,
+      value,
+    }));
+    if (ids[0]) tries.push({ param: "stationid", value: ids[0] });
+    if (GLOBALS.userid) tries.push({ param: "userid", value: GLOBALS.userid });
+    if (session?.mccId) tries.push({ param: "mccid", value: session.mccId });
     if (!tries.length) return;
     let alive = true;
-    void loadReportCentres(`${scope}|${tries.map((t) => `${t.param}=${t.value}`).join('/')}`, tries).then((list) => { if (alive) setDpu(list); });
-    return () => { alive = false; };
-   
+    void loadReportCentres(
+      `${scope}|${tries.map((t) => `${t.param}=${t.value}`).join("/")}`,
+      tries,
+    ).then((list) => {
+      if (alive) setDpu(list);
+    });
+    return () => {
+      alive = false;
+    };
   }, [scope, vlccKey]);
   const base = dpu.length ? dpu : saved;
   const [routeOf, setRouteOf] = useState<RouteOf>(new Map());
   const baseCount = base.length;
   useEffect(() => {
-    const mccid = session?.mccLoginId || GLOBALS.mccLoginId || session?.mccId || GLOBALS.mccid || '';
+    const mccid =
+      session?.mccLoginId ||
+      GLOBALS.mccLoginId ||
+      session?.mccId ||
+      GLOBALS.mccid ||
+      "";
     if (!mccid || !baseCount) return;
     let alive = true;
-    void loadRouteMap(mccid, GLOBALS.plantid || '', baseCount).then((m) => { if (alive) setRouteOf(m); });
-    return () => { alive = false; };
-    
+    void loadRouteMap(mccid, GLOBALS.plantid || "", baseCount).then((m) => {
+      if (alive) setRouteOf(m);
+    });
+    return () => {
+      alive = false;
+    };
   }, [scope, baseCount]);
-  return useMemo(() => (routeOf.size ? base.map((c) => { const r = routeOf.get(c.id); return r ? { ...c, routeId: r.id, routeName: r.name } : c; }) : base), [base, routeOf]);
+  return useMemo(
+    () =>
+      routeOf.size
+        ? base.map((c) => {
+            const r = routeOf.get(c.id);
+            return r ? { ...c, routeId: r.id, routeName: r.name } : c;
+          })
+        : base,
+    [base, routeOf],
+  );
 }
 
+export const plantKeyOf = (c: Center, fallback = ""): string =>
+  (c.routeId || c.routeName || c.id.slice(0, 3) || fallback).trim();
 
-export const plantKeyOf = (c: Center, fallback = ''): string => (c.routeId || c.routeName || c.id.slice(0, 3) || fallback).trim();
-
-export const centreLabel = (id: string, name?: string): string => (name && name.trim() && name.trim() !== id ? `${name.trim()} | ${id}` : id);
+export const centreLabel = (id: string, name?: string): string =>
+  name && name.trim() && name.trim() !== id ? `${name.trim()} | ${id}` : id;
 
 const toISO = (raw: string): string => {
-  const s = String(raw ?? '').trim();
+  const s = String(raw ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   const parsed = isoFromTrdate(s);
   if (parsed) return parsed;
   const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(s);
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  if (dmy)
+    return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
   const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? s : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return Number.isNaN(d.getTime())
+    ? s
+    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
-export const apiMilk = (milk?: MilkKind | 'both') => milk === 'cow' ? 'C' as const : milk === 'buffalo' ? 'B' as const : milk === 'mix' ? 'M' as const : 'ALL' as const;
-export const apiShift = (shift?: Shift | 'both') => shift === 'Morning' ? 'M' as const : shift === 'Evening' ? 'E' as const : 'Z' as const;
-const smartKind = (kind: string | null): MilkKind => kind === 'cow' || kind === 'buffalo' ? kind : 'mix';
-const smartShift = (shift: string | null): Shift => shift === 'Evening' ? 'Evening' : 'Morning';
+export const apiMilk = (milk?: MilkKind | "both") =>
+  milk === "cow"
+    ? ("C" as const)
+    : milk === "buffalo"
+      ? ("B" as const)
+      : milk === "mix"
+        ? ("M" as const)
+        : ("ALL" as const);
+export const apiShift = (shift?: Shift | "both") =>
+  shift === "Morning"
+    ? ("M" as const)
+    : shift === "Evening"
+      ? ("E" as const)
+      : ("Z" as const);
+const smartKind = (kind: string | null): MilkKind =>
+  kind === "cow" || kind === "buffalo" ? kind : "mix";
+const smartShift = (shift: string | null): Shift =>
+  shift === "Evening" ? "Evening" : "Morning";
 
 const KIND_RANK: Record<string, number> = { cow: 0, buffalo: 1, mix: 2 };
 
 const rowOrder = (r: CollectionEntry): string => {
-  const id = /^\d+$/.test(r.farmerId) ? String(Number(r.farmerId)).padStart(8, '0') : r.farmerId;
-  return `${r.date}|${r.shift === 'Morning' ? 0 : 1}|${KIND_RANK[r.kind] ?? 3}|${id}|${time24(r.time)}`;
+  const id = /^\d+$/.test(r.farmerId)
+    ? String(Number(r.farmerId)).padStart(8, "0")
+    : r.farmerId;
+  return `${r.date}|${r.shift === "Morning" ? 0 : 1}|${KIND_RANK[r.kind] ?? 3}|${id}|${time24(r.time)}`;
 };
 
-function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolean, hideOld = true): { q: QueryState<RawFarmerRow>; rows: CollectionEntry[] } {
+function useRawFarmerRows(
+  filter: LiveFilter,
+  keyPrefix: string,
+  enabled: boolean,
+  hideOld = true,
+): { q: QueryState<RawFarmerRow>; rows: CollectionEntry[] } {
   const session = getSession();
   const centers = useReportCenters();
-  const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : filter.vlccIds?.length ? filter.vlccIds : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
-  const idKey = ids.join(',');
- 
-  const queryKey = enabled && ids.length ? `${keyPrefix}:${filter.from}:${filter.to}:${filter.shift ?? 'both'}:${filter.milk ?? 'both'}:${idKey}` : null;
-  const q = useQuery<RawFarmerRow>(queryKey, (emit, signal) => fetchFarmerCollection({
-    from: filter.from,
-    to: filter.to,
-    shift: apiShift(filter.shift),
-    milk: apiMilk(filter.milk),
-    vlccIds: ids,
-  }, emit, signal), { hideOldWhileLoading: hideOld });
-  const names = useMemo(() => new Map(centers.map((c) => [c.id, c.name || c.label || c.id])), [centers]);
-  const plantOf = useMemo(() => new Map(centers.map((c) => [c.id, plantKeyOf(c)])), [centers]);
+  const ids =
+    filter.vlccId && filter.vlccId !== "all"
+      ? [filter.vlccId]
+      : filter.vlccIds?.length
+        ? filter.vlccIds
+        : centers.length
+          ? centers.map((c) => c.id)
+          : (session?.vlccIds ?? []);
+  const idKey = ids.join(",");
+
+  const queryKey =
+    enabled && ids.length
+      ? `${keyPrefix}:${filter.from}:${filter.to}:${filter.shift ?? "both"}:${filter.milk ?? "both"}:${idKey}`
+      : null;
+  const q = useQuery<RawFarmerRow>(
+    queryKey,
+    (emit, signal) =>
+      fetchFarmerCollection(
+        {
+          from: filter.from,
+          to: filter.to,
+          shift: apiShift(filter.shift),
+          milk: apiMilk(filter.milk),
+          vlccIds: ids,
+        },
+        emit,
+        signal,
+      ),
+    { hideOldWhileLoading: hideOld },
+  );
+  const names = useMemo(
+    () => new Map(centers.map((c) => [c.id, c.name || c.label || c.id])),
+    [centers],
+  );
+  const plantOf = useMemo(
+    () => new Map(centers.map((c) => [c.id, plantKeyOf(c)])),
+    [centers],
+  );
   const rows = useMemo(() => {
     const used = new Map<string, number>();
     // the same farmer / centre names repeat on every day and shift: format each distinct name only once
     const titled = new Map<string, string>();
     const title = (v: string): string => {
       let t = titled.get(v);
-      if (t === undefined) { t = titleCase(v); titled.set(v, t); }
+      if (t === undefined) {
+        t = titleCase(v);
+        titled.set(v, t);
+      }
       return t;
     };
     const list = mapFarmers(q.rows).map((r): CollectionEntry => {
       const date = toISO(r.date);
       const shift = smartShift(r.shift);
       const kind = smartKind(r.milk);
-     
+
       const base = `${r.vlccid}|${r.farmerId}|${date}|${shift}|${kind}|${r.sampleNo}|${r.time}|${r.liter}|${r.amount}`;
       const n = used.get(base) ?? 0;
       used.set(base, n + 1);
       return {
         id: n ? `${base}#${n}` : base,
         stationId: r.vlccid,
-        plant: plantOf.get(r.vlccid) || r.vlccid.slice(0, 3) || session?.mccId || '',
+        plant:
+          plantOf.get(r.vlccid) || r.vlccid.slice(0, 3) || session?.mccId || "",
         date,
-        time: r.time || '',
+        time: r.time || "",
         shift,
         farmerId: r.farmerId,
         farmer: title(r.farmerName),
@@ -232,27 +335,46 @@ function useRawFarmerRows(filter: LiveFilter, keyPrefix: string, enabled: boolea
 
 const NO_ROWS: never[] = [];
 
-
-export function useMilkFarmerEntries(filter: LiveFilter, enabled = true, hideOld = true): LiveReportState<CollectionEntry> {
-  const { q, rows } = useRawFarmerRows(filter, 'smartx-designed-farmer-report', enabled, hideOld);
+export function useMilkFarmerEntries(
+  filter: LiveFilter,
+  enabled = true,
+  hideOld = true,
+): LiveReportState<CollectionEntry> {
+  const { q, rows } = useRawFarmerRows(
+    filter,
+    "smartx-designed-farmer-report",
+    enabled,
+    hideOld,
+  );
   const session = getSession();
-  
+
   const { from, to, shift, milk, vlccId } = filter;
-  const filtered = useMemo(() => rows.filter((r) =>
-    r.date >= from && r.date <= to &&
-    (!shift || shift === 'both' || r.shift === shift) &&
-    (!milk || milk === 'both' || r.kind === milk) &&
-    (!vlccId || vlccId === 'all' || r.stationId === vlccId)
-  ), [rows, from, to, shift, milk, vlccId]);
+  const filtered = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          r.date >= from &&
+          r.date <= to &&
+          (!shift || shift === "both" || r.shift === shift) &&
+          (!milk || milk === "both" || r.kind === milk) &&
+          (!vlccId || vlccId === "all" || r.stationId === vlccId),
+      ),
+    [rows, from, to, shift, milk, vlccId],
+  );
   const shown = enabled && session?.vlccIds?.length ? filtered : NO_ROWS;
-  const busy = enabled && !!session?.vlccIds?.length && (q.status === 'loading' || q.fetching);
+  const busy =
+    enabled &&
+    !!session?.vlccIds?.length &&
+    (q.status === "loading" || q.fetching);
   return {
     rows: shown,
-    
+
     loading: busy && shown.length === 0,
     fetching: busy,
     done: q.done,
-    error: !session?.vlccIds?.length ? 'No centre IDs were returned by the login/session API.' : q.error?.message ?? null,
+    error: !session?.vlccIds?.length
+      ? "No centre IDs were returned by the login/session API."
+      : (q.error?.message ?? null),
     retry: q.retry,
     updatedAt: q.updatedAt,
     failed: enabled ? q.failed : 0,
@@ -274,38 +396,88 @@ export interface LiveVlccRow {
   milk: MilkKind;
   shift: Shift;
 }
-export function useMilkVlccEntries(filter: LiveFilter, enabled = true): LiveReportState<LiveVlccRow> {
+export function useMilkVlccEntries(
+  filter: LiveFilter,
+  enabled = true,
+): LiveReportState<LiveVlccRow> {
   const session = getSession();
   const centers = useReportCenters();
-  const ids = filter.vlccId && filter.vlccId !== 'all' ? [filter.vlccId] : filter.vlccIds?.length ? filter.vlccIds : centers.length ? centers.map((c) => c.id) : session?.vlccIds ?? [];
-  const idKey = ids.join(',');
-  const key = enabled && ids.length ? `smartx-designed-vlcc-report:${filter.from}:${filter.to}:${filter.shift ?? 'both'}:${filter.milk ?? 'both'}:${idKey}` : null;
-  const q = useQuery<RawVlccRow>(key, (emit) => fetchVlccCollection({
-    from: filter.from, to: filter.to, shift: apiShift(filter.shift), milk: apiMilk(filter.milk), vlccIds: ids,
-  }, emit), { hideOldWhileLoading: true });
-  const names = useMemo(() => new Map(centers.map((c) => [c.id, c.name || c.label || c.id])), [centers]);
-  const rows = useMemo(() => mapVlcc(q.rows).map((r): LiveVlccRow => ({
-    key: r.key,
-    vlccid: r.vlccid,
-    village: r.village || names.get(r.vlccid) || r.vlccid,
-    date: toISO(r.date),
-    liter: r.liter,
-    kg: r.kg,
-    fat: r.fat,
-    snf: r.snf,
-    rate: r.rate,
-    amount: r.amount,
-    milk: smartKind(r.milk),
-    shift: smartShift(r.shift),
-  })), [q.rows, names]);
-  const shown = enabled ? rows.filter((r) => r.date >= filter.from && r.date <= filter.to && (!filter.shift || filter.shift === 'both' || r.shift === filter.shift) && (!filter.milk || filter.milk === 'both' || r.milk === filter.milk) && (!filter.vlccId || filter.vlccId === 'all' || r.vlccid === filter.vlccId)) : [];
-  const busy = enabled && ids.length > 0 && (q.status === 'loading' || q.fetching);
+  const ids =
+    filter.vlccId && filter.vlccId !== "all"
+      ? [filter.vlccId]
+      : filter.vlccIds?.length
+        ? filter.vlccIds
+        : centers.length
+          ? centers.map((c) => c.id)
+          : (session?.vlccIds ?? []);
+  const idKey = ids.join(",");
+  const key =
+    enabled && ids.length
+      ? `smartx-designed-vlcc-report:${filter.from}:${filter.to}:${filter.shift ?? "both"}:${filter.milk ?? "both"}:${idKey}`
+      : null;
+  const q = useQuery<RawVlccRow>(
+    key,
+    (emit) =>
+      fetchVlccCollection(
+        {
+          from: filter.from,
+          to: filter.to,
+          shift: apiShift(filter.shift),
+          milk: apiMilk(filter.milk),
+          vlccIds: ids,
+        },
+        emit,
+      ),
+    { hideOldWhileLoading: true },
+  );
+  const names = useMemo(
+    () => new Map(centers.map((c) => [c.id, c.name || c.label || c.id])),
+    [centers],
+  );
+  const rows = useMemo(
+    () =>
+      mapVlcc(q.rows).map(
+        (r): LiveVlccRow => ({
+          key: r.key,
+          vlccid: r.vlccid,
+          village: r.village || names.get(r.vlccid) || r.vlccid,
+          date: toISO(r.date),
+          liter: r.liter,
+          kg: r.kg,
+          fat: r.fat,
+          snf: r.snf,
+          rate: r.rate,
+          amount: r.amount,
+          milk: smartKind(r.milk),
+          shift: smartShift(r.shift),
+        }),
+      ),
+    [q.rows, names],
+  );
+  const shown = enabled
+    ? rows.filter(
+        (r) =>
+          r.date >= filter.from &&
+          r.date <= filter.to &&
+          (!filter.shift ||
+            filter.shift === "both" ||
+            r.shift === filter.shift) &&
+          (!filter.milk || filter.milk === "both" || r.milk === filter.milk) &&
+          (!filter.vlccId ||
+            filter.vlccId === "all" ||
+            r.vlccid === filter.vlccId),
+      )
+    : [];
+  const busy =
+    enabled && ids.length > 0 && (q.status === "loading" || q.fetching);
   return {
     rows: shown,
     loading: busy && shown.length === 0,
     fetching: busy,
     done: q.done,
-    error: !session?.vlccIds?.length ? 'No centre IDs were returned by the login/session API.' : q.error?.message ?? null,
+    error: !session?.vlccIds?.length
+      ? "No centre IDs were returned by the login/session API."
+      : (q.error?.message ?? null),
     retry: q.retry,
     updatedAt: q.updatedAt,
     failed: enabled ? q.failed : 0,
@@ -313,73 +485,140 @@ export function useMilkVlccEntries(filter: LiveFilter, enabled = true): LiveRepo
   };
 }
 
-export interface CentreOpt { id: string; name: string; mccId: string; plantName: string; label: string; code?: string }
+export interface CentreOpt {
+  id: string;
+  name: string;
+  mccId: string;
+  plantName: string;
+  label: string;
+  code?: string;
+}
 
 export function useMilkCenterOptions(): CentreOpt[] {
   const centers = useReportCenters();
   const session = getSession();
   return useMemo(() => {
-    const mcc = session?.mccId || '';
+    const mcc = session?.mccId || "";
 
     const routeNames = new Map<string, string>();
     for (const c of centers) {
       const key = plantKeyOf(c, mcc);
       if (c.routeName && !routeNames.has(key)) routeNames.set(key, c.routeName);
     }
-    const plant = (m: string) => stripRoute(routeNames.get(m) || session?.mccName || m);
+    const plant = (m: string) =>
+      stripRoute(routeNames.get(m) || session?.mccName || m);
     const list = centers.length
-      ? centers.map((c) => ({ id: c.id, name: c.name || c.label || '', mccId: plantKeyOf(c, mcc), code: session?.stationByVlcc?.[c.id] || (c.stationId !== c.id ? c.stationId : undefined) || undefined }))
-      : (session?.vlccIds ?? []).map((id) => ({ id, name: session?.vlccNames?.[id] || '', mccId: id.slice(0, 3) || mcc, code: session?.stationByVlcc?.[id] || undefined }));
-    
+      ? centers.map((c) => ({
+          id: c.id,
+          name: c.name || c.label || "",
+          mccId: plantKeyOf(c, mcc),
+          code:
+            session?.stationByVlcc?.[c.id] ||
+            (c.stationId !== c.id ? c.stationId : undefined) ||
+            undefined,
+        }))
+      : (session?.vlccIds ?? []).map((id) => ({
+          id,
+          name: session?.vlccNames?.[id] || "",
+          mccId: id.slice(0, 3) || mcc,
+          code: session?.stationByVlcc?.[id] || undefined,
+        }));
+
     // Dropdown text = "Name | custom station id" (the custom id comes from the APIs: login CustomStationId / centre API customstationid).
     // The option VALUE stays the real centre id, so the data is fetched exactly as before. No custom id from the API -> the real id is shown.
     return list.map((c) => {
       const name = titleCase(c.name);
       const shown = c.code || c.id;
-      const label = !name || name.toUpperCase() === shown.toUpperCase() ? shown : `${name} | ${shown}`;
+      const label =
+        !name || name.toUpperCase() === shown.toUpperCase()
+          ? shown
+          : `${name} | ${shown}`;
       return { ...c, plantName: plant(c.mccId), label };
     });
-  }, [centers, session?.vlccIds, session?.vlccNames, session?.stationByVlcc, session?.mccId, session?.mccName]);
+  }, [
+    centers,
+    session?.vlccIds,
+    session?.vlccNames,
+    session?.stationByVlcc,
+    session?.mccId,
+    session?.mccName,
+  ]);
 }
 
-
-export function usePlantOptions(centres: CentreOpt[]): { value: string; label: string }[] {
+export function usePlantOptions(
+  centres: CentreOpt[],
+): { value: string; label: string }[] {
   return useMemo(() => {
     const seen = new Map<string, string>();
-    for (const c of centres) if (!seen.has(c.mccId)) seen.set(c.mccId, c.plantName);
-    return [...seen].map(([value, name]) => ({ value, label: titleCase(stripRoute(name || value)) }));
+    for (const c of centres)
+      if (!seen.has(c.mccId)) seen.set(c.mccId, c.plantName);
+    return [...seen].map(([value, name]) => ({
+      value,
+      label: titleCase(stripRoute(name || value)),
+    }));
   }, [centres]);
 }
 
-
 /** withAll = an "All" row in the plant list (and in the centre list too, unless withAllCentre is false: then the first centre of the plant is the default) */
-export function useReportScope(centres: CentreOpt[], plant: string, centre: string, withAll = false, withAllCentre = withAll) {
+export function useReportScope(
+  centres: CentreOpt[],
+  plant: string,
+  centre: string,
+  withAll = false,
+  withAllCentre = withAll,
+) {
   const realPlants = usePlantOptions(centres);
   const plantOptions = useMemo(
-    () => (withAll && realPlants.length ? [{ value: ALL, label: 'All' }, ...realPlants] : realPlants),
+    () =>
+      withAll && realPlants.length
+        ? [{ value: ALL, label: "All" }, ...realPlants]
+        : realPlants,
     [withAll, realPlants],
   );
-  const plantValue = plantOptions.some((o) => o.value === plant) ? plant : withAll && realPlants.length ? ALL : realPlants[0]?.value ?? '';
+  const plantValue = plantOptions.some((o) => o.value === plant)
+    ? plant
+    : withAll && realPlants.length
+      ? ALL
+      : (realPlants[0]?.value ?? "");
   const realCentres = useMemo(
-    () => centres.filter((c) => plantValue === ALL || c.mccId === plantValue).map((c) => ({ value: c.id, label: c.label })),
+    () =>
+      centres
+        .filter((c) => plantValue === ALL || c.mccId === plantValue)
+        .map((c) => ({ value: c.id, label: c.label })),
     [centres, plantValue],
   );
   const centreOptions = useMemo(
-    () => (withAllCentre && realCentres.length ? [{ value: ALL, label: 'All' }, ...realCentres] : realCentres),
+    () =>
+      withAllCentre && realCentres.length
+        ? [{ value: ALL, label: "All" }, ...realCentres]
+        : realCentres,
     [withAllCentre, realCentres],
   );
-  const centreValue = centreOptions.some((o) => o.value === centre) ? centre : withAllCentre && realCentres.length ? ALL : realCentres[0]?.value ?? '';
-  return { plantOptions, centreOptions, plant: plantValue, centre: centreValue };
+  const centreValue = centreOptions.some((o) => o.value === centre)
+    ? centre
+    : withAllCentre && realCentres.length
+      ? ALL
+      : (realCentres[0]?.value ?? "");
+  return {
+    plantOptions,
+    centreOptions,
+    plant: plantValue,
+    centre: centreValue,
+  };
 }
 
-export const ALL = 'all';
+export const ALL = "all";
 
-
-export function centreIdsFor(centres: CentreOpt[], plant: string, centre: string): string[] {
+export function centreIdsFor(
+  centres: CentreOpt[],
+  plant: string,
+  centre: string,
+): string[] {
   if (centre && centre !== ALL) return [centre];
-  return centres.filter((c) => !plant || plant === ALL || c.mccId === plant).map((c) => c.id);
+  return centres
+    .filter((c) => !plant || plant === ALL || c.mccId === plant)
+    .map((c) => c.id);
 }
-
 
 const farmerCache = new Map<string, Promise<MasterFarmerOption[]>>();
 const loadFarmers = (id: string): Promise<MasterFarmerOption[]> => {
@@ -387,32 +626,54 @@ const loadFarmers = (id: string): Promise<MasterFarmerOption[]> => {
   if (hit) return hit;
   const p = fetchDpuFarmerMaster(id).catch(() => [] as MasterFarmerOption[]);
   farmerCache.set(id, p);
-  void p.then((l) => { if (!l.length) farmerCache.delete(id); });
+  void p.then((l) => {
+    if (!l.length) farmerCache.delete(id);
+  });
   return p;
 };
 
-export const farmerKey = (vlccid: string, farmerId: string): string => `${vlccid}:${String(farmerId).trim().replace(/^0+(?=\d)/, '')}`;
+export const farmerKey = (vlccid: string, farmerId: string): string =>
+  `${vlccid}:${String(farmerId)
+    .trim()
+    .replace(/^0+(?=\d)/, "")}`;
 
-export function useFarmerMasterOptions(vlccIds: string[], names: Record<string, string>): { options: { value: string; label: string }[]; loading: boolean } {
+export function useFarmerMasterOptions(
+  vlccIds: string[],
+  names: Record<string, string>,
+): { options: { value: string; label: string }[]; loading: boolean } {
   const [list, setList] = useState<MasterFarmerOption[]>([]);
   const [loading, setLoading] = useState(false);
-  const key = vlccIds.join(',');
+  const key = vlccIds.join(",");
   useEffect(() => {
     let alive = true;
     setList([]);
-    if (!vlccIds.length) { setLoading(false); return; }
+    if (!vlccIds.length) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    void Promise.all(vlccIds.map(loadFarmers)).then((parts) => { if (alive) { setList(parts.flat()); setLoading(false); } });
-    return () => { alive = false; };
-    
+    void Promise.all(vlccIds.map(loadFarmers)).then((parts) => {
+      if (alive) {
+        setList(parts.flat());
+        setLoading(false);
+      }
+    });
+    return () => {
+      alive = false;
+    };
   }, [key]);
   const options = useMemo(() => {
     const multi = vlccIds.length > 1;
     const seen = new Set<string>();
     return list
-      .map((f) => ({ value: farmerKey(f.vlccid, f.farmerId), label: `${String(f.farmerId).padStart(4, '0')} | ${f.name || 'No name'}${multi ? ` (${names[f.vlccid] || f.vlccid})` : ''}` }))
+      .map((f) => ({
+        value: farmerKey(f.vlccid, f.farmerId),
+        label: `${String(f.farmerId).padStart(4, "0")} | ${f.name || "No name"}${multi ? ` (${names[f.vlccid] || f.vlccid})` : ""}`,
+      }))
       .filter((o) => (seen.has(o.value) ? false : (seen.add(o.value), true)))
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+      .sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, { numeric: true }),
+      );
   }, [list, names, vlccIds.length]);
   return { options, loading };
 }

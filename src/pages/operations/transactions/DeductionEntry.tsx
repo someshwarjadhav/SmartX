@@ -89,7 +89,6 @@ const DeductionEntry: React.FC = () => {
       })
       .catch((e) => {
         if (!alive) return;
-        console.error("[DeductionEntry] deduction types FAILED:", e);
         setTypes([]);
         setTypeCode("");
         setTypesError(msg(e, "The deduction types could not be loaded."));
@@ -124,7 +123,6 @@ const DeductionEntry: React.FC = () => {
       );
       setLoaded(true);
     } catch (e) {
-      console.error("[DeductionEntry] load FAILED:", e);
       if (mine !== ticket.current) return;
       setError(msg(e, "The farmers could not be loaded."));
     } finally {
@@ -193,7 +191,6 @@ const DeductionEntry: React.FC = () => {
       setSaving(false);
       await show(); // like the old portal: the list is loaded again after saving
     } catch (e) {
-      console.error("[DeductionEntry] SAVE FAILED:", e);
       toast(msg(e, "The deduction could not be saved."), "warn");
     } finally {
       setSaving(false);

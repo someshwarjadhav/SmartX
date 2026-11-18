@@ -32,35 +32,89 @@ export interface PayRow {
   payable: number;
 }
 
-const FIELDS: Record<
-  Exclude<keyof PayRow, "key" | "vlcId">,
-  string[]
-> = {
-  id: ["farmerid", "id", "codeno", "farmercode", "vlcid", "vlccid", "villageid", "code", "memberid"],
-  name: ["farmername", "name", "vlcname", "vlccname", "villagename", "membername"],
+const FIELDS: Record<Exclude<keyof PayRow, "key" | "vlcId">, string[]> = {
+  id: [
+    "farmerid",
+    "id",
+    "codeno",
+    "farmercode",
+    "vlcid",
+    "vlccid",
+    "villageid",
+    "code",
+    "memberid",
+  ],
+  name: [
+    "farmername",
+    "name",
+    "vlcname",
+    "vlccname",
+    "villagename",
+    "membername",
+  ],
   bankName: ["bankname", "bank", "banknm"],
-  accountNo: ["accountno", "accountnumber", "accno", "acno", "bankaccountno", "accountnum"],
+  accountNo: [
+    "accountno",
+    "accountnumber",
+    "accno",
+    "acno",
+    "bankaccountno",
+    "accountnum",
+  ],
   ifsc: ["ifsc", "ifsccode", "ifscno"],
   avgFat: ["avgfat", "averagefat", "fat", "afat"],
   avgSnf: ["avgsnf", "averagesnf", "snf", "asnf"],
   avgRate: ["avgrate", "averagerate", "rate", "arate"],
-  totalQty: ["totalqty", "totalquantity", "qty", "weight", "totalweight", "totalliter", "totalliters"],
+  totalQty: [
+    "totalqty",
+    "totalquantity",
+    "qty",
+    "weight",
+    "totalweight",
+    "totalliter",
+    "totalliters",
+  ],
   totalAmount: ["totalamount", "totalamt", "amount", "amt", "milkamount"],
-  totalIncentive: ["totalincentive", "incentive", "incentiveamount", "totalincentiveamount"],
-  deduction: ["deductionamount", "deduction", "totaldeduction", "dedamount", "deductionamt"],
-  payable: ["payableamount", "payable", "netpayable", "netamount", "netpayment", "payamount"],
+  totalIncentive: [
+    "totalincentive",
+    "incentive",
+    "incentiveamount",
+    "totalincentiveamount",
+  ],
+  deduction: [
+    "deductionamount",
+    "deduction",
+    "totaldeduction",
+    "dedamount",
+    "deductionamt",
+  ],
+  payable: [
+    "payableamount",
+    "payable",
+    "netpayable",
+    "netamount",
+    "netpayment",
+    "payamount",
+  ],
 };
 
 const lookup = (row: Obj, names: string[]): unknown => {
   const keys = Object.keys(row);
   for (const n of names) {
     const k = keys.find((x) => norm(x) === n);
-    if (k !== undefined && row[k] !== null && row[k] !== undefined && String(row[k]).trim() !== "") return row[k];
+    if (
+      k !== undefined &&
+      row[k] !== null &&
+      row[k] !== undefined &&
+      String(row[k]).trim() !== ""
+    )
+      return row[k];
   }
   return undefined;
 };
 
-const text = (v: unknown) => (v === undefined || v === null ? "" : String(v).trim());
+const text = (v: unknown) =>
+  v === undefined || v === null ? "" : String(v).trim();
 
 export function payRowsOf(json: unknown): Obj[] {
   if (typeof json === "string") {
@@ -92,10 +146,26 @@ export function payRowsOf(json: unknown): Obj[] {
  * cowqty / buffaloqty, cowcomm / buffcomm, cowtrans / bufftrans, cowdeposit / buffdeposit ...).
  */
 const PARTS = {
-  qty: [["cowqty", "cowliter", "cowltr"], ["buffaloqty", "buffqty", "buffliter", "buffaloliter"], ["mixqty", "mixliter"]],
-  incentive: [["cowcomm", "cowcommission", "cowincentive"], ["buffcomm", "buffcommission", "buffincentive", "buffalocomm"], ["mixcomm"]],
-  transport: [["cowtrans", "cowtransport"], ["bufftrans", "bufftransport", "buffalotrans"], ["mixtrans"]],
-  deposit: [["cowdeposit", "milkdeposit"], ["buffdeposit", "buffalodeposit"], ["mixdeposit"]],
+  qty: [
+    ["cowqty", "cowliter", "cowltr"],
+    ["buffaloqty", "buffqty", "buffliter", "buffaloliter"],
+    ["mixqty", "mixliter"],
+  ],
+  incentive: [
+    ["cowcomm", "cowcommission", "cowincentive"],
+    ["buffcomm", "buffcommission", "buffincentive", "buffalocomm"],
+    ["mixcomm"],
+  ],
+  transport: [
+    ["cowtrans", "cowtransport"],
+    ["bufftrans", "bufftransport", "buffalotrans"],
+    ["mixtrans"],
+  ],
+  deposit: [
+    ["cowdeposit", "milkdeposit"],
+    ["buffdeposit", "buffalodeposit"],
+    ["mixdeposit"],
+  ],
 };
 const SINGLE = {
   transport: ["transport", "transportamount", "totaltransport"],
@@ -112,7 +182,9 @@ const found = (row: Obj, names: string[]): number | undefined => {
 };
 /** sum of the parts that exist (undefined when none of them is in the reply) */
 const partsSum = (row: Obj, parts: string[][]): number | undefined => {
-  const vals = parts.map((p) => found(row, p)).filter((x): x is number => x !== undefined);
+  const vals = parts
+    .map((p) => found(row, p))
+    .filter((x): x is number => x !== undefined);
   return vals.length ? vals.reduce((a, b) => a + b, 0) : undefined;
 };
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -127,9 +199,14 @@ export function toPayRow(r: Obj, vlcId: string, index: number): PayRow {
   // quantity from the cow / buffalo parts (or amount / rate), incentive from the commission parts,
   // deduction from deposit + advance + cattle feed, payable = amount + incentive + transport - deductions.
   const qtySent = num(f("totalQty"));
-  const totalQty = qtySent || partsSum(r, PARTS.qty) || (avgRate ? r2(totalAmount / avgRate) : 0);
-  const incentive = num(f("totalIncentive")) || partsSum(r, PARTS.incentive) || 0;
-  const transport = partsSum(r, PARTS.transport) ?? found(r, SINGLE.transport) ?? 0;
+  const totalQty =
+    qtySent ||
+    partsSum(r, PARTS.qty) ||
+    (avgRate ? r2(totalAmount / avgRate) : 0);
+  const incentive =
+    num(f("totalIncentive")) || partsSum(r, PARTS.incentive) || 0;
+  const transport =
+    partsSum(r, PARTS.transport) ?? found(r, SINGLE.transport) ?? 0;
   const deposit = partsSum(r, PARTS.deposit) ?? found(r, SINGLE.deposit) ?? 0;
   const advance = found(r, SINGLE.advance) ?? 0;
   const cattleFeed = found(r, SINGLE.cattleFeed) ?? 0;
@@ -139,8 +216,15 @@ export function toPayRow(r: Obj, vlcId: string, index: number): PayRow {
   const fuzzyPayable = (() => {
     for (const [k, v] of Object.entries(r)) {
       const n = norm(k);
-      if ((n.includes("payable") || n.includes("netpay") || n === "netamt") && !n.includes("avg")) {
-        const x = Number(String(v ?? "").replace(/,/g, "").trim());
+      if (
+        (n.includes("payable") || n.includes("netpay") || n === "netamt") &&
+        !n.includes("avg")
+      ) {
+        const x = Number(
+          String(v ?? "")
+            .replace(/,/g, "")
+            .trim(),
+        );
         if (Number.isFinite(x) && x !== 0) return x;
       }
     }
@@ -173,7 +257,12 @@ export interface PayResult {
   total: number;
 }
 
-async function one(type: PayType, from: string, to: string, vlcId: string): Promise<PayRow[]> {
+async function one(
+  type: PayType,
+  from: string,
+  to: string,
+  vlcId: string,
+): Promise<PayRow[]> {
   const path = PAY_FARMER_PATH;
   void type;
   const q =
@@ -183,24 +272,38 @@ async function one(type: PayType, from: string, to: string, vlcId: string): Prom
   try {
     const json = await dpuGet(q, 0);
     const list = payRowsOf(json);
-    if (import.meta.env.DEV && list[0]) console.info("[payment summary] fields sent by MilkBillPaySummMA:", Object.keys(list[0]));
     return list.map((r, i) => toPayRow(r, vlcId, i));
   } catch (e) {
-    if (e instanceof ApiError && e.kind === "parse" && /empty/i.test(e.message)) return [];
+    if (e instanceof ApiError && e.kind === "parse" && /empty/i.test(e.message))
+      return [];
     throw e;
   }
 }
 
-const idk = (id: string): string => (/^\d+$/.test(id.trim()) ? String(Number(id.trim())) : id.trim().toLowerCase());
+const idk = (id: string): string =>
+  /^\d+$/.test(id.trim()) ? String(Number(id.trim())) : id.trim().toLowerCase();
 
-/**
- * Qty / incentive / deduction / payable that the payment summary left at 0 are taken from the farmer cash summary
- * (MilkBillPayCashMA) of the same VLC and dates, matched by farmer id - the same figures the Cash Payment Summary shows.
- */
-async function fillFromCash(rows: PayRow[], from: string, to: string, vlcIds: string[]): Promise<PayRow[]> {
+async function fillFromCash(
+  rows: PayRow[],
+  from: string,
+  to: string,
+  vlcIds: string[],
+): Promise<PayRow[]> {
   if (!rows.some((r) => !r.payable || !r.totalQty)) return rows;
-  const by = new Map<string, { qty?: number; inc?: number; ded?: number; pay?: number }>();
-  const settled = await Promise.allSettled(vlcIds.map((id) => getCashSummary({ type: "farmer", fromdate: from, todate: to, stationid: id })));
+  const by = new Map<
+    string,
+    { qty?: number; inc?: number; ded?: number; pay?: number }
+  >();
+  const settled = await Promise.allSettled(
+    vlcIds.map((id) =>
+      getCashSummary({
+        type: "farmer",
+        fromdate: from,
+        todate: to,
+        stationid: id,
+      }),
+    ),
+  );
   settled.forEach((res, i) => {
     if (res.status !== "fulfilled") return;
     for (const raw of res.value) {
@@ -208,26 +311,51 @@ async function fillFromCash(rows: PayRow[], from: string, to: string, vlcIds: st
       let id = "";
       for (const [k, v] of Object.entries(raw)) {
         const nk = norm(k);
-        if (!id && ["farmerid", "codeno", "farmercode"].includes(nk) && String(v ?? "").trim()) id = String(v).trim();
-        const x = Number(String(v ?? "").replace(/,/g, "").trim());
+        if (
+          !id &&
+          ["farmerid", "codeno", "farmercode"].includes(nk) &&
+          String(v ?? "").trim()
+        )
+          id = String(v).trim();
+        const x = Number(
+          String(v ?? "")
+            .replace(/,/g, "")
+            .trim(),
+        );
         if (String(v ?? "").trim() !== "" && Number.isFinite(x)) m.set(nk, x);
       }
       if (!id) continue;
-      const first = (names: string[]) => names.map((n) => m.get(n)).find((x) => x !== undefined);
+      const first = (names: string[]) =>
+        names.map((n) => m.get(n)).find((x) => x !== undefined);
       const sum = (names: string[]) => {
-        const v = names.map((n) => m.get(n)).filter((x): x is number => x !== undefined);
+        const v = names
+          .map((n) => m.get(n))
+          .filter((x): x is number => x !== undefined);
         return v.length ? v.reduce((a, b) => a + b, 0) : undefined;
       };
-      const qty = first(["qty", "totalqty", "totalliter", "liter", "ltr"]) ?? sum(["cowqty", "buffaloqty", "buffqty"]);
+      const qty =
+        first(["qty", "totalqty", "totalliter", "liter", "ltr"]) ??
+        sum(["cowqty", "buffaloqty", "buffqty"]);
       const inc = sum(["cowcomm", "buffcomm"]);
       const trans = sum(["cowtrans", "bufftrans"]) ?? 0;
       const dep = sum(["cowdeposit", "buffdeposit"]) ?? 0;
       const adv = m.get("advance") ?? 0;
       const cf = m.get("cattlefeed") ?? 0;
       const amount = first(["amount", "totalamount", "amt"]);
-      const sent = first(["payableamount", "payable", "netamount", "netpayable", "netamt"]);
+      const sent = first([
+        "payableamount",
+        "payable",
+        "netamount",
+        "netpayable",
+        "netamt",
+      ]);
       const ded = r2(dep + adv + cf);
-      const pay = sent !== undefined && sent !== 0 ? sent : amount !== undefined ? r2(amount + (inc ?? 0) + trans - ded) : undefined;
+      const pay =
+        sent !== undefined && sent !== 0
+          ? sent
+          : amount !== undefined
+            ? r2(amount + (inc ?? 0) + trans - ded)
+            : undefined;
       by.set(`${vlcIds[i]}|${idk(id)}`, { qty, inc, ded, pay });
     }
   });
@@ -252,7 +380,9 @@ export async function getPaymentSummary(
   vlcIds: string[],
 ): Promise<PayResult> {
   clearRequestMemo();
-  const settled = await Promise.allSettled(vlcIds.map((id) => one(type, from, to, id)));
+  const settled = await Promise.allSettled(
+    vlcIds.map((id) => one(type, from, to, id)),
+  );
   const rows: PayRow[] = [];
   const failed: PayResult["failed"] = [];
   settled.forEach((s, i) => {
@@ -260,9 +390,15 @@ export async function getPaymentSummary(
     else
       failed.push({
         vlcId: vlcIds[i],
-        message: s.reason instanceof Error ? s.reason.message : "The request failed.",
+        message:
+          s.reason instanceof Error ? s.reason.message : "The request failed.",
       });
   });
-  if (failed.length === vlcIds.length && vlcIds.length > 0) throw new ApiError(failed[0].message, "server");
-  return { rows: await fillFromCash(rows, from, to, vlcIds), failed, total: vlcIds.length };
+  if (failed.length === vlcIds.length && vlcIds.length > 0)
+    throw new ApiError(failed[0].message, "server");
+  return {
+    rows: await fillFromCash(rows, from, to, vlcIds),
+    failed,
+    total: vlcIds.length,
+  };
 }

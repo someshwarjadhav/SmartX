@@ -84,10 +84,6 @@ export async function getVlcs(
 
   const have = new Set(saved.map((s) => s.farmerId));
   const left = farmers.filter((f) => !have.has(f.farmerId));
-  console.log(
-    `[VLC Standard Deduction] LIST loaded -> ${left.length} not yet set (left table), ${saved.length} already saved (right table)`,
-    { query: qs, saved },
-  );
   return { farmers: left, saved };
 }
 
@@ -143,11 +139,6 @@ const toVlcPascalPayload = (s: VlcSave) => ({
 });
 
 export async function saveVlcCommission(s: VlcSave): Promise<string> {
-  console.group(
-    `[VLC Standard Deduction] SUBMIT  station ${s.stationId}, flag ${s.flag}, date ${s.effectiveDate}, ${s.rows.length} row(s)`,
-  );
-  console.table(s.rows);
-  console.groupEnd();
   const message = await dpuSaveShapes("VillageMasterCNEntry", VLC_SAVE_PATH, [
     toVlcPayload(s),
     { ...toVlcPayload(s), ...stationKeys(s.stationId) },
@@ -156,3 +147,4 @@ export async function saveVlcCommission(s: VlcSave): Promise<string> {
   ]);
   return message || "Saved";
 }
+

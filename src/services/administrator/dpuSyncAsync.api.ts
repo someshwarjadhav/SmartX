@@ -19,7 +19,6 @@ import {
 
 const BASE = `${DPU_HOST}/api/Login`;
 
-
 const LIST_URLS = [`${BASE}/FarmerMaster`];
 
 const UPDATE_URLS = [
@@ -38,9 +37,9 @@ const q = encodeURIComponent;
 export const SYNC_FIELDS = {
   farmerId: ["farmerid", "farmer", "farmercode", "memberid", "id"],
   farmerName: ["farmername", "name", "membername"],
-  
+
   sync: [
-    "farmerbuff", 
+    "farmerbuff",
     "buff",
     "bufflag",
     "isbuff",
@@ -60,12 +59,11 @@ export const SYNC_FIELDS = {
 };
 
 export interface SyncMember {
-
   id: string;
   name: string;
 
   synced: boolean;
- 
+
   flagKnown: boolean;
 }
 
@@ -80,16 +78,15 @@ function readSync(raw: Obj): { on: boolean; known: boolean } {
   const direct = pickValue(raw, SYNC_FIELDS.sync);
   if (direct !== undefined && direct !== null && direct !== "")
     return { on: isOn(direct), known: true };
-  
+
   const likeKey = Object.keys(raw).find((k) => /buff|sync/i.test(k));
   if (likeKey) return { on: isOn(raw[likeKey]), known: true };
- 
+
   const exists = Object.keys(raw).some((k) =>
     SYNC_FIELDS.sync.includes(norm(k)),
   );
   return { on: false, known: exists };
 }
-
 
 function toList(json: unknown): Obj[] {
   if (isObj(json)) {
@@ -108,7 +105,7 @@ function toList(json: unknown): Obj[] {
 }
 
 export async function getSyncMembers(villageId: string): Promise<SyncMember[]> {
-  clearRequestMemo(); 
+  clearRequestMemo();
   let text = "";
   for (let i = 0; i < LIST_URLS.length; i++) {
     const url = LIST_URLS[i]!;
@@ -117,21 +114,19 @@ export async function getSyncMembers(villageId: string): Promise<SyncMember[]> {
         url,
         {
           method: "POST",
-          
+
           headers: {
             "Content-Type": "application/json",
             ...(url.startsWith(BASE) ? authHeaders() : {}),
           },
           body: JSON.stringify({ VillageIds: villageId }),
-          cache: "no-store", 
+          cache: "no-store",
         },
         1,
         true,
       );
-      console.debug("[dpu-sync-async] list read from", url);
       break;
     } catch (e) {
-      console.warn("[dpu-sync-async] list failed on", url, e instanceof Error ? e.message : e);
       if (i === LIST_URLS.length - 1) throw e;
     }
   }
@@ -140,16 +135,7 @@ export async function getSyncMembers(villageId: string): Promise<SyncMember[]> {
 
   if (list.length > 0) {
     const first = list[0]!;
-    console.debug(
-      "[dpu-sync-async] first row from farmermaster (check the sync field name here):",
-      first,
-    );
     if (!readSync(first).known) {
-      console.warn(
-        "[dpu-sync-async] no Sync/Async column recognised. Fields in the reply:",
-        Object.keys(first),
-        "-> add the right one to SYNC_FIELDS.sync in dpuSyncAsync.api.ts",
-      );
     }
   }
 
@@ -166,7 +152,6 @@ export async function getSyncMembers(villageId: string): Promise<SyncMember[]> {
     .filter((m) => m.id);
 }
 
-
 export async function updateSyncMembers(
   villageId: string,
   farmerIds: string[],
@@ -182,7 +167,7 @@ export async function updateSyncMembers(
         urls[i]! + qs,
         {
           method: "GET",
-          
+
           headers: urls[i]!.startsWith(BASE) ? authHeaders() : {},
           cache: "no-store",
         },
@@ -192,8 +177,8 @@ export async function updateSyncMembers(
       workingUpdateUrl = urls[i]!;
       break;
     } catch (e) {
-      const notFound = e instanceof ApiError && /error (404|405)\b/.test(e.message);
-      console.warn(`[dpu-sync-async] update ${urls[i]} failed:`, e instanceof Error ? e.message : e);
+      const notFound =
+        e instanceof ApiError && /error (404|405)\b/.test(e.message);
       if (!notFound) throw e;
       if (i === urls.length - 1) {
         throw new ApiError(
@@ -209,7 +194,7 @@ export async function updateSyncMembers(
   try {
     json = openDpuReply(parseGatewayText(text), 0, true);
   } catch (e) {
-    if (e instanceof EmptyReplyError) return; 
+    if (e instanceof EmptyReplyError) return;
 
     const t = text.trim();
     if (t && !t.startsWith("<") && !/^(error|fail|exception)/i.test(t)) return;
@@ -224,7 +209,10 @@ export async function updateSyncMembers(
         "server",
       );
     }
-  } else if (typeof json === "string" && /^(error|fail|exception)/i.test(json.trim())) {
+  } else if (
+    typeof json === "string" &&
+    /^(error|fail|exception)/i.test(json.trim())
+  ) {
     throw new ApiError(json.trim(), "server");
   }
 }
