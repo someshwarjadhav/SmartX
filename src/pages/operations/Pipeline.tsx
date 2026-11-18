@@ -45,8 +45,8 @@ const STEPS: { icon: LucideIcon; title: string; text: string }[] = [
 ];
 
 const ENDPOINTS = [
-  { path: "/home/dashboardLinechart", use: "Dashboard: collection trend" },
-  { path: "/home/topMilkSupplier", use: "Dashboard: top suppliers" },
+  { path: "/api/Login/dashboardLinechart", use: "Dashboard: collection trend" },
+  { path: "/api/Login/topMilkSupplier", use: "Dashboard: top suppliers" },
   {
     path: "/api/Login/VlccCollection",
     use: "Dashboard grid, Collections: VLC collection",
@@ -55,7 +55,7 @@ const ENDPOINTS = [
     path: "/api/Login/FarmerCollection",
     use: "Collections, Farmers, Live, Centres, Rate chart, Billing, Quality",
   },
-  { path: "/home/FarmerMilkEntry", use: "Collections: Farmerwise collection" },
+  { path: "/api/Login/FarmerMilkEntry", use: "Collections: Farmerwise collection" },
   { path: "/api/Login/FarmerMaster", use: "Farmers: registered farmers" },
 ];
 

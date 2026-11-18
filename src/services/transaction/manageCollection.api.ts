@@ -1,15 +1,14 @@
 import { environment, REQUEST_TIMEOUT_MS } from "../config";
-import {
-  clearRequestMemo,
-  gatewayPost,
-  listOf,
-  parseGatewayText,
-} from "../http/client";
+import { clearRequestMemo, listOf, parseGatewayText } from "../http/client";
+import { dpuPostJson } from "../http/dpu";
+import { dpuSaveQuery } from "../http/dpuHelpers";
+import { DPU } from "../http/dpuEndpoints";
 import { ApiError } from "../http/errors";
+import { rowsOfReply } from "../farmer/farmer.api";
 
-export const MANAGE_LIST_PATH = "/home/farmercollection";
+export const MANAGE_LIST_PATH = DPU.farmerCollection;
 export const MANAGE_UPDATE_PATH = "/dairy/dairy/updatemilkentry";
-export const MANAGE_DELETE_PATH = "/dairy/dairy/FarmerCollectionDelete";
+export const MANAGE_DELETE_PATH = DPU.farmerCollectionDelete;
 
 export type CollectionRow = Record<string, unknown>;
 
@@ -21,17 +20,29 @@ export interface CollectionQuery {
   todate: string;
 }
 
-export const getCollection = (q: CollectionQuery): Promise<CollectionRow[]> =>
-  gatewayPost(MANAGE_LIST_PATH, {
-    id: q.vlccid,
-    shift: q.shift,
-    milktype: q.milktype,
-    fromdate: q.fromdate,
-    todate: q.todate,
-
-    stationid: q.vlccid,
-    mccid: q.vlccid.slice(0, 3),
-  }).then((json) => listOf<CollectionRow>(json));
+export async function getCollection(
+  q: CollectionQuery,
+): Promise<CollectionRow[]> {
+  const reply = await dpuPostJson(
+    MANAGE_LIST_PATH,
+    {
+      id: q.vlccid,
+      stationid: q.vlccid,
+      shift: q.shift,
+      milktype: q.milktype,
+      fromdate: q.fromdate,
+      todate: q.todate,
+    },
+    1,
+  );
+  try {
+    return rowsOfReply(reply) as CollectionRow[];
+  } catch (e) {
+    if (e instanceof ApiError && e.kind === "parse")
+      return listOf<CollectionRow>(reply);
+    throw e;
+  }
+}
 
 export const forgetCachedLists = () => clearRequestMemo();
 
@@ -138,21 +149,16 @@ export async function updateEntry(e: UpdateEntry): Promise<number> {
   return rate;
 }
 
-export const buildDeleteForm = (recordId: string): FormData => {
-  const form = new FormData();
-  form.append("id", recordId);
-  return form;
-};
-
 export async function deleteEntry(row: {
   recordId: string;
   vlccid: string;
   date: string;
 }): Promise<string> {
-  const text = await call(MANAGE_DELETE_PATH, {
-    method: "POST",
-    body: buildDeleteForm(row.recordId),
-  });
-  clearRequestMemo();
-  return readReply(text).message;
+  // DPU: DELETE /api/Login/FarmerCollectionDelete?id=<record id>
+  return dpuSaveQuery(
+    "FarmerCollectionDelete",
+    MANAGE_DELETE_PATH,
+    { id: row.recordId, recordid: row.recordId },
+    "DELETE",
+  );
 }

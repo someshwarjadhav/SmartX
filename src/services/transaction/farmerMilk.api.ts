@@ -1,19 +1,15 @@
-import {
-  clearRequestMemo,
-  gatewayGet,
-  gatewayPostJson,
-  listOf,
-} from "../http/client";
-import { dpuGet, dpuSaveAttempts, withNumbers } from "../http/dpu";
+import { clearRequestMemo, listOf } from "../http/client";
+import { dpuGet, dpuPostJson, dpuSaveAttempts, withNumbers } from "../http/dpu";
+import { DPU } from "../http/dpuEndpoints";
 import { encryptXorPayload } from "../../lib/portal/crypto";
 import { ApiError } from "../http/errors";
 import { mapMaster, type MasterFarmer } from "../farmer/farmerBook";
 import { isObj, norm, rowsFrom } from "../utils/loose";
 import type { RawLoose } from "../types/raw";
 
-export const FARMER_MASTER_PATH = "/home/farmermaster";
 // DPU API: https://dpu.shivinfotech.co.in/api/Login/<endpoint>
-export const FARMER_RATE_PATH = "/Login/getRate";
+export const FARMER_MASTER_PATH = DPU.farmerMaster;
+export const FARMER_RATE_PATH = DPU.getRate;
 export const FARMER_MILK_SAVE_PATH = "/Login/MilkCollection";
 
 export type RateRow = Record<string, unknown>;
@@ -36,7 +32,11 @@ async function cached<T>(
 export const getFarmers = (vlcid: string): Promise<MasterFarmer[]> =>
   cached(`farmers:${vlcid}`, 60, async () => {
     const rows = listOf<RawLoose>(
-      await gatewayPostJson(FARMER_MASTER_PATH, { VillageIds: vlcid }),
+      await dpuPostJson(
+        FARMER_MASTER_PATH,
+        { VillageIds: vlcid, id: vlcid, vlccid: vlcid, stationid: vlcid },
+        1,
+      ),
     );
     return mapMaster(rows)
       .filter((f) => f.farmerId)
@@ -44,12 +44,6 @@ export const getFarmers = (vlcid: string): Promise<MasterFarmer[]> =>
         a.farmerId.localeCompare(b.farmerId, undefined, { numeric: true }),
       );
   });
-
-// GET /api/Login/getRate?rateId=
-// The DPU getRate answers { success:false, message:"Expected end of string ... BytePositionInLine: 2033" } for a chart
-// longer than ~2033 characters (SQL Server splits long JSON text into 2033-character rows and the API reads only the
-// first one - a server-side bug). So when it fails, the old portal's getRate (the one that works) is used instead.
-export const FARMER_RATE_FALLBACK_PATH = "/dairy/dairy/getRate";
 
 const rateRows = (json: unknown): RateRow[] | undefined => {
   if (isObj(json) && (json.success ?? json.Success) === false) {
@@ -65,7 +59,10 @@ export const getRateChart = (rateId: string): Promise<RateRow[]> =>
     let why = "";
     try {
       const rows = rateRows(
-        await dpuGet(`${FARMER_RATE_PATH}?rateId=${encodeURIComponent(rateId)}`, 1),
+        await dpuGet(
+          `${FARMER_RATE_PATH}?rateId=${encodeURIComponent(rateId)}`,
+          1,
+        ),
       );
       if (rows) return rows;
       why = "the DPU getRate did not return the chart";
@@ -73,15 +70,10 @@ export const getRateChart = (rateId: string): Promise<RateRow[]> =>
       if (e instanceof ApiError && e.kind === "auth") throw e;
       why = e instanceof Error ? e.message : String(e);
     }
-    try {
-      const rows = rateRows(
-        await gatewayGet(`${FARMER_RATE_FALLBACK_PATH}?rateId=${encodeURIComponent(rateId)}`, 1),
-      );
-      if (rows) return rows;
-    } catch {
-      /* fall through to the error below */
-    }
-    throw new ApiError(`the server could not return the rate chart${why ? ` (${why})` : ""}.`, "server");
+    throw new ApiError(
+      `the server could not return the rate chart${why ? ` (${why})` : ""}.`,
+      "server",
+    );
   });
 
 const pickText = (r: RateRow, names: string[]): string => {
@@ -274,18 +266,37 @@ export const buildFarmerMilkPayload = (e: FarmerMilkEntry) => {
 // Body { "Payload": "<XOR + base64>" } (the server answers "not a valid Base-64 string" to AES text). Inside, the old
 // portal's form field is kept: id = the JSON text of the entry list.
 const FARMER_NUMBER_FIELDS = [
-  "sampleno", "qty", "fat", "snf", "water", "clr", "rtpl", "amount",
-  "qtyauto", "qltyauto", "kgltrconst", "ltrkgconst", "syncdirection", "usbflag", "paymentid",
+  "sampleno",
+  "qty",
+  "fat",
+  "snf",
+  "water",
+  "clr",
+  "rtpl",
+  "amount",
+  "qtyauto",
+  "qltyauto",
+  "kgltrconst",
+  "ltrkgconst",
+  "syncdirection",
+  "usbflag",
+  "paymentid",
 ];
 
 export async function postFarmerMilk(entry: FarmerMilkEntry): Promise<string> {
-  const rows = [buildFarmerMilkPayload(entry)] as Array<Record<string, unknown>>;
+  const rows = [buildFarmerMilkPayload(entry)] as Array<
+    Record<string, unknown>
+  >;
   const nums = withNumbers(rows, FARMER_NUMBER_FIELDS);
   const xor = (v: unknown) => ({ Payload: encryptXorPayload(v) });
   const path = FARMER_MILK_SAVE_PATH;
   const message = await dpuSaveAttempts("MilkCollection", [
     { label: "xor-id-text", path, body: xor({ id: JSON.stringify(rows) }) },
-    { label: "xor-id-text-numbers", path, body: xor({ id: JSON.stringify(nums) }) },
+    {
+      label: "xor-id-text-numbers",
+      path,
+      body: xor({ id: JSON.stringify(nums) }),
+    },
     { label: "xor-rows", path, body: xor(rows) },
     { label: "xor-id-array", path, body: xor({ id: rows }) },
     { label: "xor-data-text", path, body: xor({ data: JSON.stringify(rows) }) },

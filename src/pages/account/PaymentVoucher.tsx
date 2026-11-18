@@ -75,14 +75,18 @@ const PaymentVoucher: React.FC = () => {
   const farmerName = farmerPick ? farmerPick.label.split(' | ').slice(1).join(' | ') : '';
   const amountN = parseFloat(amount);
 
-  const loadList = useCallback(async () => {
-    if (!vlcId || !date) return;
+  /** Reads the day's vouchers into the table; returns how many rows came back (null = nothing was read). */
+  const loadList = useCallback(async (): Promise<number | null> => {
+    if (!vlcId || !date) return null;
     setLoading(true);
     try {
-      setRows(await getPaymentVouchers(vlcId, date));
+      const list = await getPaymentVouchers(vlcId, date);
+      setRows(list);
+      return list.length;
     } catch (e) {
       setRows([]);
       toast.show(messageOf(e, 'Could not load payment vouchers'));
+      return null;
     } finally {
       setLoading(false);
     }
@@ -107,6 +111,7 @@ const PaymentVoucher: React.FC = () => {
     if (Object.keys(found).length > 0) return;
 
     setSaving(true);
+    const before = rows.length;
     try {
       const reply = await savePaymentVoucher({
         vlcid: vlcId,
@@ -124,7 +129,12 @@ const PaymentVoucher: React.FC = () => {
       setAmount('');
       setNarration('');
       setFarmer('');
-      await loadList();
+      // the new voucher must show in the table below: if the server has not listed it yet, look again a few times
+      let count = await loadList();
+      for (let i = 0; i < 3 && count !== null && count <= before; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        count = await loadList();
+      }
     } catch (err) {
       toast.show(messageOf(err, 'Could not save the payment voucher'));
     } finally {

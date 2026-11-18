@@ -21,6 +21,9 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 
 const B64 = /^[A-Za-z0-9+/_-]{16,}={0,2}$/;
 const AES_PACKED = /^[A-Za-z0-9+/=]{8,}:[A-Za-z0-9+/=]{16,}$/;
+// A reply inside Data/Message can be tiny: an empty list "[]" is only "CAk=" (4 chars). Allowed for nested values only,
+// and the result is used only if it opens into JSON, so plain texts such as "Saved" are left alone.
+const B64_SHORT = /^[A-Za-z0-9+/_-]{2,}={0,2}$/;
 
 const looksJson = (t: string) => /^[[{]/.test(t.trim());
 
@@ -89,7 +92,8 @@ export function openDpuReply(v: unknown, depth = 0, salvage = false): unknown {
     let opened: unknown = v;
     try {
       if (AES_PACKED.test(t)) opened = decryptPayload(t);
-      else if (B64.test(t)) opened = decryptXorPayload(t);
+      else if (B64.test(t) || (depth > 0 && B64_SHORT.test(t)))
+        opened = decryptXorPayload(t);
     } catch {
       return v;
     }
@@ -259,7 +263,7 @@ export const dpuPostJson = (
     priority,
   );
 
-async function dpuWrite(
+export async function dpuWrite(
   path: string,
   init: RequestInit,
   priority: Priority,

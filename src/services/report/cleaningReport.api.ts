@@ -1,12 +1,14 @@
 /** Cleaning Report API (one request per VLC, merged). Eko Calibration / Eko Correction have their own files. */
 import { directGet, gatewayGet } from '../http/client';
+import { dpuGet } from '../http/dpu';
+import { DPU } from '../http/dpuEndpoints';
 import { ApiError } from '../http/errors';
 import { fanOut, needSession, waves, type Emit, type QueryData } from '../http/fanout';
 import { BASE_URL } from '../config';
 import type { ShiftCode } from '../types/raw';
 import { apiDate } from '../utils/date';
 
-export const CLEANING_REPORT_PATH = import.meta.env.VITE_CLEANING_REPORT_PATH || '/dairy/dairy/cleaningReport';
+export const CLEANING_REPORT_PATH = import.meta.env.VITE_CLEANING_REPORT_PATH || DPU.cleaningReport;
 
 const ALTERNATES: Record<string, string[]> = {};
 
@@ -72,6 +74,8 @@ const query = (path: string, id: string, from: string, to: string) =>
 
 async function ask(path: string, id: string, from: string, to: string): Promise<PortalRow[]> {
   const q = query(path, id, from, to);
+  // DPU API (https://dpu.shivinfotech.co.in/api/Login/<name>)
+  if (path.startsWith('/Login/')) return rowsOf(await dpuGet(q, 1));
   try {
     return rowsOf(await gatewayGet(q, 1));
   } catch (first) {
