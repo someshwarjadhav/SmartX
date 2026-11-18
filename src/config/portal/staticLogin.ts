@@ -1,5 +1,3 @@
-
-
 export interface StaticLoginEntry {
   username: string;
   passwordSha256: string;
@@ -182,6 +180,34 @@ export const NUMAX_LOGIN_RECORD: unknown | null = {
   ],
 };
 
+
+export const PORTAL_ADMIN_LOGIN_RECORD: unknown | null = {
+  Data: [
+    {
+      id: 236,
+      email: "portal.admin@gmail.com",
+      username: "ADMIN",
+      mccid: "811",
+      mccname: "STIPL Sangli Head Office",
+      mobile: "9794607864",
+      status: 1,
+      SessionID: "7060811,7060812,7060813,7060814",
+      CustomStationId: null,
+      LoginStatus: 0,
+      webLogin: 0,
+      PlantId: 29,
+      UserAccess: "3",
+      deviceName: null,
+      lastLogin: null,
+      Token: null,
+      DataEncryption: 0,
+      GST: null,
+      Address: null,
+      logo: null,
+    },
+  ],
+};
+
 // Only these accounts are allowed. Everyone else is denied.
 export const STATIC_LOGINS: StaticLoginEntry[] = [
   {
@@ -219,6 +245,12 @@ export const STATIC_LOGINS: StaticLoginEntry[] = [
     passwordSha256:
       "02f330dd8c09caa9ca631ef6980cc60721229d472eca28d39b6113309687cb55",
     record: NUMAX_LOGIN_RECORD,
+  },
+  {
+    username: "portal.admin@gmail.com",
+    passwordSha256:
+      "3a500e5b9d43f16c616710ab46edaecaba09aaa919d3161315c0f3f82739ec85",
+    record: PORTAL_ADMIN_LOGIN_RECORD,
   },
 ];
 
