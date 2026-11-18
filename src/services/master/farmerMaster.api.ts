@@ -1,6 +1,7 @@
-import { clearRequestMemo, listOf, parseGatewayText } from "../http/client";
+import { clearRequestMemo, gatewayText, listOf, parseGatewayText } from "../http/client";
 import {
   dpuGet,
+  dpuUrl,
   dpuReadAttempts,
   dpuSaveAttempts,
   type SaveAttempt,
@@ -11,7 +12,7 @@ import { isObj, pickLike, rowsFrom } from "../utils/loose";
 import { pickLoose } from "../farmer/farmerBook";
 import type { RawLoose } from "../types/raw";
 import type { FarmerInput } from "./farmerMaster.rules.ts";
-import { sendPath } from "../account/voucher.http";
+import { DPU } from "../http/dpuEndpoints";
 
 // DPU API: https://dpu.shivinfotech.co.in/api/Login/<endpoint>
 //   POST   FarmerMaster          list of farmers of the given villages
@@ -453,13 +454,13 @@ export async function updateFarmerStatus(all: StatusChange[]): Promise<string> {
   return last;
 }
 
-// Verify / Unverify one farmer:  /dairy/dairy/updatefarmerflag?villageid=<centre>&farmerid=<code>&flag=<1|0>
-// flag = 1 -> Verify, flag = 0 -> Unverify (the dairy's backend developer gave this one API for both). The call is not
-// cached (a second Verify / Unverify of the same farmer must reach the server again). GET is what the API example uses;
-// if the server answers "method not allowed" PUT and then POST are tried, and the working one is remembered.
-export const FARMER_FLAG_PATH = "/dairy/dairy/updatefarmerflag";
-const FLAG_METHODS = ["GET", "PUT", "POST"] as const;
-let flagMethod = 0;
+// Verify / Unverify one farmer:  https://dpu.shivinfotech.co.in/api/Login/updatefarmerflag?villageid=<centre>&farmerid=<code>&flag=<1|0>
+// flag = 1 -> Verify, flag = 0 -> Unverify. The DPU server answers "415 Unsupported Media Type" to a request that has no JSON
+// body, so (like updateFarmerStatus) the call is sent with Content-Type application/json and the usual { payload: XOR } body.
+// Layouts are tried one after the other (PUT first, then POST; the working one is remembered). If the server still refuses
+// every body layout, the old body-less GET is tried as the last resort. The call is never cached.
+export const FARMER_FLAG_PATH = DPU.updateFarmerFlag;
+const FLAG_NOT_ACCEPTED = /error (404|405)\b/i;
 
 export async function updateFarmerFlag(
   vlccid: string,
@@ -467,28 +468,39 @@ export async function updateFarmerFlag(
   verified: boolean,
   villageCode: string = vlccid,
 ): Promise<string> {
-  const path = `${FARMER_FLAG_PATH}?villageid=${q(String(villageCode))}&farmerid=${q(String(farmerId))}&flag=${verified ? 1 : 0}`;
+  const flag = verified ? 1 : 0;
+  const params = { villageid: String(villageCode), farmerid: String(farmerId), flag };
+  const path = `${FARMER_FLAG_PATH}?villageid=${q(params.villageid)}&farmerid=${q(params.farmerid)}&flag=${flag}`;
+  const attempts: SaveAttempt[] = [
+    { label: "xor-params", path, body: xor(params) },
+    { label: "xor-array", path, body: xor([params]) },
+    { label: "xor-params-pascal", path, body: xor(pascal(params)) },
+    { label: "xor-params-text", path, body: xor({ ...params, flag: String(flag) }) },
+    { label: "empty-json", path, body: {} },
+  ];
   let lastError: unknown;
-  for (let n = 0; n < FLAG_METHODS.length; n++) {
-    const i = (flagMethod + n) % FLAG_METHODS.length;
-    const method = FLAG_METHODS[i]!;
+  for (const method of ["PUT", "POST"] as const) {
     try {
-      const text = await sendPath(path, () => ({ method }));
-      if (/^\s*\{\s*"error"\s*:/i.test(text))
-        throw new ApiError("The server could not update the verify status.", "server");
-      const message = checkReply(text, "Could not update the verify status", true);
-      flagMethod = i;
+      const message = await dpuSaveAttempts(`updatefarmerflag-${method}`, attempts, method, FLAG_NOT_ACCEPTED);
       rememberVerified(vlccid, farmerId, verified);
       clearRequestMemo();
       return message;
     } catch (e) {
       lastError = e;
-      const wrongMethod =
-        e instanceof ApiError && e.kind === "server" && /error (404|405|415)\b/.test(e.message);
-      if (!wrongMethod) throw e;
+      if (!(e instanceof ApiError && e.kind === "server")) throw e;
     }
   }
-  throw lastError;
+  try {
+    const text = await gatewayText(dpuUrl(path), { method: "GET" }, 0, true);
+    if (/^\s*\{\s*"error"\s*:/i.test(text))
+      throw new ApiError("The server could not update the verify status.", "server");
+    const message = checkReply(text, "Could not update the verify status", true);
+    rememberVerified(vlccid, farmerId, verified);
+    clearRequestMemo();
+    return message;
+  } catch {
+    throw lastError;
+  }
 }
 
 // DELETE /api/Login/DeleteFarmer?farmerid=&vlccid=
