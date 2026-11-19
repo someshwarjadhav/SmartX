@@ -1,5 +1,4 @@
 
-
 export interface GlobalData {
   plantid: string | null;
   sessionid: string | null;

@@ -121,7 +121,7 @@ export const NAV_MODULES: NavModule[] = [
         "Farmer collection",
         "/base/farmer-collection-report",
         "farmer-collection-report",
-        "/collections",
+        "/reports/farmer-collection-report",
       ),
       form(
         "Farmerwise Collection",
