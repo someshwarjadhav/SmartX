@@ -1,13 +1,18 @@
 import type * as React from 'react';
 import { useState } from 'react';
-import { KeyRound, Lock, Unlock } from 'lucide-react';
+import AES from 'crypto-js/aes';
+import Base64 from 'crypto-js/enc-base64';
+import Utf8 from 'crypto-js/enc-utf8';
+import { lib } from 'crypto-js/core';
+import { Check, Copy, KeyRound, Lock, Trash2, Unlock } from 'lucide-react';
 import { Card, CardHeader } from '../../../components/operations/ui/Card';
 import { Button } from '../../../components/operations/ui/Button';
 import { Field, Input } from '../../../components/operations/ui/Fields';
 import { Textarea } from '../../../components/ui/Fields';
 import { CardTitle, ReportPage, Reveal } from '../../../components/operations/ReportKit';
 
-const encryptText = (text: string, key: string): string => {
+
+const xorEncrypt = (text: string, key: string): string => {
   const k = new TextEncoder().encode(key);
   const bytes = new TextEncoder().encode(text);
   let bin = '';
@@ -18,30 +23,100 @@ const encryptText = (text: string, key: string): string => {
 
 const READABLE = /^[\t\n\r\x20-\x7E\u00A0-\u024F\u0900-\u097F]*$/;
 
-
-const decryptText = (text: string, key: string): string | null => {
+const xorDecrypt = (text: string, key: string): string | null => {
   try {
     const k = new TextEncoder().encode(key);
-    const bin = atob(text.trim());
+   
+    let clean = text.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    while (clean.length % 4) clean += '=';
+    const bin = atob(clean);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i) ^ k[i % k.length]!;
     const plain = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return plain !== '' && READABLE.test(plain) ? plain : null; 
+    return plain !== '' && READABLE.test(plain) ? plain : null;
   } catch {
     return null;
   }
 };
 
+
+const AES_KEY_LENGTHS = [16, 24, 32];
+
+const aesKeyError = (key: string): string | null =>
+  AES_KEY_LENGTHS.includes(new TextEncoder().encode(key).length)
+    ? null
+    : 'AES key must be exactly 16, 24 or 32 characters long.';
+
+const aesEncrypt = (text: string, key: string): string => {
+  const iv = lib.WordArray.random(16);
+  const encrypted = AES.encrypt(text, Utf8.parse(key), { iv });
+  return `${encrypted.ciphertext.toString(Base64)}:${iv.toString(Base64)}`;
+};
+
+const aesDecrypt = (packed: string, key: string): string | null => {
+  try {
+    const [cipherB64, ivB64] = packed.replace(/\s+/g, '').replace(/^"|"$/g, '').split(':');
+    if (!cipherB64 || !ivB64) return null;
+    const plain = AES.decrypt(
+      { ciphertext: Base64.parse(cipherB64) } as unknown as string,
+      Utf8.parse(key),
+      { iv: Base64.parse(ivB64) },
+    ).toString(Utf8);
+    return plain !== '' ? plain : null;
+  } catch {
+    return null;
+  }
+};
+
+
 const EncryptionDecryption: React.FC = () => {
   const [secretKey, setSecretKey] = useState('');
   const [text, setText] = useState('');
   const [result, setResult] = useState('');
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
 
+  const show = (value: string, err = '') => {
+    setResult(value);
+    setError(err);
+    setCopied(false);
+  };
 
-  const encrypt = () => setResult(decryptText(text, secretKey) !== null ? '' : encryptText(text, secretKey));
+  const xorEnc = () => show(xorEncrypt(text, secretKey));
 
-  
-  const decrypt = () => setResult(decryptText(text, secretKey) ?? '');
+  const xorDec = () => {
+    const plain = xorDecrypt(text, secretKey);
+    if (plain === null) show('', 'XOR decrypt failed. Check that the key is correct and the text is XOR + base64.');
+    else show(plain);
+  };
+
+  const aesEnc = () => {
+    const bad = aesKeyError(secretKey);
+    if (bad) return show('', bad);
+    show(aesEncrypt(text, secretKey));
+  };
+
+  const aesDec = () => {
+    const bad = aesKeyError(secretKey);
+    if (bad) return show('', bad);
+    const plain = aesDecrypt(text, secretKey);
+    if (plain === null) show('', 'AES decrypt failed. Check that the key is correct and the text looks like "cipher:iv".');
+    else show(plain);
+  };
+
+  const copyResult = async () => {
+    try {
+      await navigator.clipboard.writeText(result);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+    }
+  };
+
+  const clearAll = () => {
+    setText('');
+    show('');
+  };
 
   const disabled = text.trim() === '' || secretKey.trim() === '';
 
@@ -86,12 +161,50 @@ const EncryptionDecryption: React.FC = () => {
               </Field>
             </div>
 
+            {error && (
+              <p role="alert" className="text-sm text-danger">
+                {error}
+              </p>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-line p-4">
+                <p className="mb-3 text-sm font-semibold text-ink">XOR (base64)</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button icon={<Lock size={16} />} disabled={disabled} onClick={xorEnc}>
+                    XOR Encrypt
+                  </Button>
+                  <Button variant="outline" icon={<Unlock size={16} />} disabled={disabled} onClick={xorDec}>
+                    XOR Decrypt
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-line p-4">
+                <p className="mb-3 text-sm font-semibold text-ink">AES-CBC (cipher:iv)</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button icon={<Lock size={16} />} disabled={disabled} onClick={aesEnc}>
+                    AES Encrypt
+                  </Button>
+                  <Button variant="outline" icon={<Unlock size={16} />} disabled={disabled} onClick={aesDec}>
+                    AES Decrypt
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-3">
-              <Button icon={<Lock size={16} />} disabled={disabled} onClick={encrypt}>
-                Encrypt
+              <Button
+                variant="soft"
+                size="sm"
+                icon={copied ? <Check size={15} /> : <Copy size={15} />}
+                disabled={result === ''}
+                onClick={copyResult}
+              >
+                {copied ? 'Copied' : 'Copy result'}
               </Button>
-              <Button variant="outline" icon={<Unlock size={16} />} disabled={disabled} onClick={decrypt}>
-                Decrypt
+              <Button variant="ghost" size="sm" icon={<Trash2 size={15} />} onClick={clearAll}>
+                Clear
               </Button>
             </div>
           </div>
