@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ChevronRight,
   CircleUserRound,
+  Cloud,
   LifeBuoy,
   LogOut,
   Menu,
@@ -117,6 +118,7 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
   const { pathname } = useLocation();
   const groups = useNavGroups();
   const current = findNavIn(groups, pathname);
+  const onStoragePlan = pathname === "/storage-plan";
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useOutside(menuRef, () => setMenu(false), menu);
@@ -138,9 +140,9 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
         >
           <span
             className="min-w-0 max-w-[45%] shrink-0 truncate text-mute"
-            title={current?.group.title ?? "SmartX"}
+            title={onStoragePlan ? "SmartX" : (current?.group.title ?? "SmartX")}
           >
-            {current?.group.title ?? "SmartX"}
+            {onStoragePlan ? "SmartX" : (current?.group.title ?? "SmartX")}
           </span>
           <ChevronRight
             size={14}
@@ -149,9 +151,9 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
           />
           <span
             className="min-w-0 truncate font-semibold"
-            title={current?.item.label ?? "Not found"}
+            title={onStoragePlan ? "Storage Plan" : (current?.item.label ?? "Not found")}
           >
-            {current?.item.label ?? "Not found"}
+            {onStoragePlan ? "Storage Plan" : (current?.item.label ?? "Not found")}
           </span>
         </nav>
 
@@ -167,6 +169,15 @@ export const Navbar: React.FC<Props> = ({ onMenu, onSearch }) => {
         </button>
 
         <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
+          <Link
+            to="/storage-plan"
+            aria-label="Storage Plan"
+            title="Storage Plan: cloud storage renewal"
+            className="group relative inline-flex h-8 shrink-0 items-center gap-1.5 overflow-hidden rounded-lg bg-gradient-to-r from-brand to-glow px-2.5 text-xs font-bold text-brand-ink shadow-card transition hover:brightness-105 sm:h-10 sm:rounded-xl sm:px-3.5 sm:text-sm"
+          >
+            <Cloud size={16} aria-hidden className="transition group-hover:-translate-y-0.5 group-hover:scale-110" />
+            <span className="hidden min-[420px]:inline">Storage Plan</span>
+          </Link>
           <DateTimeChip />
           <ShiftBadge />
           <ModeToggle />

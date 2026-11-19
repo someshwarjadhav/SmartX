@@ -53,6 +53,7 @@ const ROUTE_ICON: Record<string, LucideIcon> = {
   "/": LayoutDashboard,
   "/live": Radio,
   "/collections": Users,
+  "/reports/farmer-collection-report": Users,
   "/reports/farmerwise": UserRound,
   "/reports/vlcc": Store,
   "/reports/unionwise": FileBarChart,

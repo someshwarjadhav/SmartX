@@ -14,6 +14,7 @@ const AppShell = lazy(() => import('../components/layout/AppShell'));
 const Dashboard = lazy(() => import('../pages/dashboard/Dashboard'));
 const Settings = lazy(() => import('../pages/settings/Settings'));
 const FarmerCollection = lazy(() => import('../pages/collection/FarmerCollection'));
+const FarmerCollectionReport = lazy(() => import('../pages/collection/FarmerCollectionReport'));
 const FarmerwiseCollection = lazy(() => import('../pages/collection/FarmerwiseCollection'));
 const UnionwiseCollection = lazy(() => import('../pages/collection/UnionwiseCollection'));
 const VlccCollectionReport = lazy(() => import('../pages/collection/VlccCollectionReport'));
@@ -22,6 +23,7 @@ const VarianceReport = lazy(() => import('../pages/collection/VarianceReport'));
 const CdaReport = lazy(() => import('../pages/collection/CdaReport'));
 const FarmerMaster = lazy(() => import('../pages/masters/FarmerMaster'));
 const Contact = lazy(() => import('../pages/contact/Contact'));
+const StoragePlan = lazy(() => import('../pages/storage/StoragePlan'));
 const NotFound = lazy(() => import('../pages/system/NotFound'));
 const LiveCollection = lazy(() => import('../pages/operations/LiveCollection'));
 const Farmers = lazy(() => import('../pages/operations/Farmers'));
@@ -65,8 +67,10 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/settings': Settings,
   '/portal/profile': Settings,
   '/contact': Contact,
+  '/storage-plan': StoragePlan,
   '/live': LiveCollection,
   '/collections': FarmerCollection,
+  '/reports/farmer-collection-report': FarmerCollectionReport,
   '/reports/farmerwise': FarmerwiseCollection,
   '/reports/vlcc': VlccCollectionReport,
   '/reports/unionwise': UnionwiseCollection,
