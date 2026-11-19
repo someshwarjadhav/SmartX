@@ -4,10 +4,11 @@ import {
   hasEncryptionKey,
 } from "../../lib/portal/crypto";
 import { DPU_HOST } from "../http/dpuEndpoints";
-import {
-  resolveStaticLogin,
-  staticLoginActive,
-} from "../../config/portal/staticLogin";
+// STATIC LOGIN (disabled): uncomment these lines (and the block in loginApi) to use static login again
+// import {
+//   resolveStaticLogin,
+//   staticLoginActive,
+// } from "../../config/portal/staticLogin";
 import { ApiError } from "../http/errors";
 
 export interface LoginProfile {
@@ -31,7 +32,7 @@ export interface LoginProfile {
 type Obj = Record<string, unknown>;
 
 // Login now goes to the DPU host: https://dpu.shivinfotech.co.in/userlogin
-const LOGIN_URL = `${DPU_HOST}/userlogin`;
+const LOGIN_URL = `${DPU_HOST}/api/login/userlogin`;
 const TIMEOUT_MS = 20_000;
 
 const isObj = (v: unknown): v is Obj =>
@@ -372,14 +373,15 @@ export async function loginApi(
   username: string,
   password: string,
 ): Promise<LoginResult> {
-  const found = await resolveStaticLogin(username, password);
-  if (found.kind === "match") {
-    const profile = mapLoginResponse(found.record, username);
-    return { profile, record: sanitizeLoginRecord(found.record) };
-  }
-  if (found.kind === "denied" && staticLoginActive()) {
-    throw new ApiError("Incorrect username or password.");
-  }
+  // STATIC LOGIN (disabled): login now always goes to the DPU API (https://dpu.shivinfotech.co.in/userlogin)
+  // const found = await resolveStaticLogin(username, password);
+  // if (found.kind === "match") {
+  //   const profile = mapLoginResponse(found.record, username);
+  //   return { profile, record: sanitizeLoginRecord(found.record) };
+  // }
+  // if (found.kind === "denied" && staticLoginActive()) {
+  //   throw new ApiError("Incorrect username or password.");
+  // }
 
   if (!hasEncryptionKey()) {
     throw new ApiError(
