@@ -3,7 +3,7 @@ import {
   encryptPayload,
   hasEncryptionKey,
 } from "../../lib/portal/crypto";
-import { BASE_URL as CONFIG_BASE_URL } from "../config";
+import { DPU_HOST } from "../http/dpuEndpoints";
 import {
   resolveStaticLogin,
   staticLoginActive,
@@ -30,8 +30,8 @@ export interface LoginProfile {
 
 type Obj = Record<string, unknown>;
 
-const BASE_URL = CONFIG_BASE_URL || "https://smartx.shivinfotech.co.in";
-const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH || "/home/userlogin";
+// Login now goes to the DPU host: https://dpu.shivinfotech.co.in/userlogin
+const LOGIN_URL = `${DPU_HOST}/userlogin`;
 const TIMEOUT_MS = 20_000;
 
 const isObj = (v: unknown): v is Obj =>
@@ -315,13 +315,13 @@ function unwrap(json: unknown): unknown {
 }
 
 async function postJson(
-  path: string,
+  url: string,
   body: unknown,
 ): Promise<{ ok: boolean; status: number; json: unknown }> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${BASE_URL}${path}`, {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -398,7 +398,7 @@ export async function loginApi(
     );
   }
 
-  const { ok, status, json } = await postJson(LOGIN_PATH, { payload });
+  const { ok, status, json } = await postJson(LOGIN_URL, { payload });
 
   let decoded: unknown;
   try {
