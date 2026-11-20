@@ -301,7 +301,7 @@ export async function getDeductions(q: ListQuery): Promise<DeductionRow[]> {
   return shown;
 }
 
-/* ------------------------------------------------------------------ save */
+
 
 export interface SaveInput {
   vlcid: string;
@@ -312,13 +312,7 @@ export interface SaveInput {
   rows: Array<{ row: DeductionRow; deduction: number }>;
 }
 
-/**
- * Same object the old portal posted (as the form field "data"):
- *  { StationId, DeductionType, FromDate, ToDate,
- *    Details: [{ Farmerid, FarmerName, deductionamount, remainingamount, billamount }] }
- * The DPU endpoint wants it inside { Payload: "<XOR + base64>" }. Several wrappers are tried (a refusal moves to the
- * next one, any other error stops) because the exact wrapper is only visible in Swagger.
- */
+
 export function saveLayouts(
   s: SaveInput,
   path: string = SAVE_PATH,
@@ -334,9 +328,13 @@ export function saveLayouts(
         billamount: numeric ? money(row.billAmount) : two(row.billAmount),
       };
     });
+
+  const dedType = Number.isFinite(Number(s.reftype))
+    ? Number(s.reftype)
+    : s.reftype;
   const portal = {
     StationId: s.vlcid,
-    DeductionType: s.reftype,
+    DeductionType: dedType,
     FromDate: s.from,
     ToDate: s.to,
     Details: details(false),
@@ -347,6 +345,41 @@ export function saveLayouts(
     label: "xor-numeric",
     path,
     body: { Payload: encryptXorPayload(numeric) },
+  });
+
+  const dmy = (iso: string): string => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+  };
+  const station = getSession()?.stationByVlcc?.[s.vlcid];
+  const variants: Array<[string, Obj]> = [
+    ["xor-dmy", { ...portal, FromDate: dmy(s.from), ToDate: dmy(s.to) }],
+    [
+      "xor-dmy-numeric",
+      { ...numeric, FromDate: dmy(s.from), ToDate: dmy(s.to) },
+    ],
+  ];
+  if (station && station !== s.vlcid) {
+    variants.push(
+      ["xor-station", { ...portal, StationId: station }],
+      [
+        "xor-station-dmy",
+        {
+          ...portal,
+          StationId: station,
+          FromDate: dmy(s.from),
+          ToDate: dmy(s.to),
+        },
+      ],
+    );
+  }
+  for (const [label, obj] of variants)
+    attempts.push({ label, path, body: { Payload: encryptXorPayload(obj) } });
+
+  attempts.push({
+    label: "xor-array",
+    path,
+    body: { Payload: encryptXorPayload([portal]) },
   });
   return attempts;
 }

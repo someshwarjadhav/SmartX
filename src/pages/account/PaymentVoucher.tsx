@@ -348,11 +348,11 @@ const PaymentVoucher: React.FC = () => {
 
       <ConfirmDialog open={!!toDelete} title="Delete this voucher?" busy={deleting} onConfirm={() => void confirmDelete()} onCancel={() => setToDelete(null)}>
         {toDelete && (
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-mute">Id</dt>
             <dd className="tnum font-semibold">{dash(toDelete.id)}</dd>
             <dt className="text-mute">Farmer</dt>
-            <dd className="font-semibold">{dash([toDelete.farmerId, toDelete.farmerName].filter(Boolean).join(' | '))}</dd>
+            <dd className="min-w-0 font-semibold break-words">{dash([toDelete.farmerId, toDelete.farmerName].filter(Boolean).join(' | '))}</dd>
             <dt className="text-mute">Amount</dt>
             <dd className="tnum font-semibold">{money(toDelete.amount)}</dd>
           </dl>
