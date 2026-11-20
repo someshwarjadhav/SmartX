@@ -1,7 +1,15 @@
-import { STORAGE_PLAN, fyLabel } from '../../config/storagePlan';
+import {
+  CUSTOM_ADDONS,
+  PLAN_INCLUDED,
+  PLAN_TIERS,
+  STORAGE_PLAN,
+  customSurchargePct,
+  fyLabel,
+  planPrices,
+  type PlanId,
+} from '../../config/storagePlan';
 import { getSession } from '../session';
 
-/* ---------------- price quote ---------------- */
 
 export interface QuoteLine {
   id: string;
@@ -9,12 +17,23 @@ export interface QuoteLine {
   note: string;
   rate: number;
   qty: number;
+  /** what `qty` counts: shows as "Rs rate x qty unit" */
+  unit: 'Station ID' | 'plan' | 'item';
   amount: number;
 }
 
 export interface Quote {
   lines: QuoteLine[];
   total: number;
+}
+
+export interface QuoteOptions {
+  /** the software plan chosen; null/undefined = only renewing cloud storage */
+  planId?: PlanId | null;
+  /** ids from CUSTOM_ADDONS */
+  customIds?: string[];
+  /** custom work quoted separately (Rs) */
+  customAmount?: number;
 }
 
 export const retentionYears = () =>
@@ -24,19 +43,44 @@ export const retentionYears = () =>
     perStation: r.perStation,
   }));
 
-/** Renewal x stations + every kept year x stations. */
-export function quoteFor(stations: number, keepYears: number[]): Quote {
+
+export function customSubtotal(customIds: string[] = [], customAmount = 0): number {
+  const ticked = CUSTOM_ADDONS.filter((a) => customIds.includes(a.id)).reduce((a, x) => a + x.price, 0);
+  return ticked + Math.max(0, Math.round(customAmount) || 0);
+}
+
+
+export function quoteFor(stations: number, keepYears: number[], opts: QuoteOptions = {}): Quote {
   const n = Math.max(0, stations);
   const lines: QuoteLine[] = [];
   if (n > 0) {
-    lines.push({
-      id: 'renewal',
-      label: `Annual renewal ${fyLabel(STORAGE_PLAN.renewalYear)}`,
-      note: 'Cloud storage for the new year',
-      rate: STORAGE_PLAN.renewalPerStation,
-      qty: n,
-      amount: STORAGE_PLAN.renewalPerStation * n,
-    });
+    const tierIdx = PLAN_TIERS.findIndex((t) => t.id === opts.planId);
+    const tier = tierIdx >= 0 ? PLAN_TIERS[tierIdx] : undefined;
+    if (tier) {
+      const price = planPrices()[tierIdx] ?? 0;
+      lines.push({
+        id: 'plan',
+        label: `${tier.name} plan`,
+        note: `${tier.tagline} · ${PLAN_INCLUDED.stations} Station IDs + ${PLAN_INCLUDED.users} Users included`,
+        rate: price,
+        qty: 1,
+        unit: 'plan',
+        amount: price,
+      });
+    }
+    const free = tier ? PLAN_INCLUDED.stations : 0;
+    const billable = Math.max(0, n - free);
+    if (billable > 0) {
+      lines.push({
+        id: 'renewal',
+        label: `Annual renewal ${fyLabel(STORAGE_PLAN.renewalYear)}`,
+        note: tier ? `Station IDs above the ${free} included` : 'Cloud storage for the new year',
+        rate: STORAGE_PLAN.renewalPerStation,
+        qty: billable,
+        unit: 'Station ID',
+        amount: STORAGE_PLAN.renewalPerStation * billable,
+      });
+    }
     for (const r of retentionYears()) {
       if (!keepYears.includes(r.year)) continue;
       lines.push({
@@ -45,16 +89,38 @@ export function quoteFor(stations: number, keepYears: number[]): Quote {
         note: 'Previous year data retained',
         rate: r.perStation,
         qty: n,
+        unit: 'Station ID',
         amount: r.perStation * n,
+      });
+    }
+    const ids = opts.customIds ?? [];
+    for (const a of CUSTOM_ADDONS) {
+      if (!ids.includes(a.id)) continue;
+      lines.push({ id: `custom-${a.id}`, label: a.label, note: 'Customisation', rate: a.price, qty: 1, unit: 'item', amount: a.price });
+    }
+    const work = Math.max(0, Math.round(opts.customAmount ?? 0) || 0);
+    if (work > 0) {
+      lines.push({ id: 'custom-work', label: 'Custom work (as quoted)', note: 'Your own requirement', rate: work, qty: 1, unit: 'item', amount: work });
+    }
+    const sub = customSubtotal(ids, work);
+    const pct = customSurchargePct(sub);
+    if (pct > 0) {
+      const amount = Math.round((sub * pct) / 100);
+      lines.push({
+        id: 'custom-surcharge',
+        label: `Customisation charge +${pct}%`,
+        note: `On ₹${sub.toLocaleString('en-IN')} of customisation`,
+        rate: amount,
+        qty: 1,
+        unit: 'item',
+        amount,
       });
     }
   }
   return { lines, total: lines.reduce((a, l) => a + l.amount, 0) };
 }
 
-/* ---------------- rolling deletion ---------------- */
 
-/** Data created on `iso` (yyyy-MM-dd) is removed exactly one year later (29 Feb -> 28 Feb). */
 export function deletionDate(iso: string): string {
   const [y = 0, m = 1, d = 1] = iso.slice(0, 10).split('-').map(Number);
   const target = y + STORAGE_PLAN.deleteAfterYears;
@@ -84,6 +150,14 @@ export function cutoffDate(today = new Date()): string {
 export interface StoragePreference {
   stationIds: string[];
   keepYears: number[];
+  /** software plan chosen (absent / null = only storage renewal) */
+  planId?: PlanId | null;
+  /** ticked customisations (ids of CUSTOM_ADDONS) */
+  customIds?: string[];
+  /** what the customer wants customised, in his words */
+  customNote?: string;
+  /** custom work quoted separately (Rs) */
+  customAmount?: number;
   /** the customer wants a downloadable backup of the data that will be deleted */
   backup: boolean;
   total: number;
@@ -124,4 +198,26 @@ export async function clearPreference(): Promise<void> {
   } catch {
     /* ignore */
   }
+}
+
+/* ---------------- plan expiry (drives the "plan expired" popup) ---------------- */
+
+export interface ActivePlan {
+  planId: PlanId | null;
+  expiresOn: string;
+}
+
+
+export async function loadActivePlan(): Promise<ActivePlan | null> {
+  const d = STORAGE_PLAN.expiryDate as string;
+  return d ? { planId: null, expiresOn: d } : null;
+}
+
+export type PlanState = 'ok' | 'soon' | 'expired';
+
+export function planState(expiresOn: string, today = new Date()): { state: PlanState; days: number } {
+  const days = daysUntil(expiresOn, today);
+  if (days < 0) return { state: 'expired', days };
+  if (days <= STORAGE_PLAN.warnDaysBefore) return { state: 'soon', days };
+  return { state: 'ok', days };
 }

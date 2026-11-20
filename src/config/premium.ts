@@ -1,14 +1,14 @@
 /**
  * Premium (cloud storage) plan: the prices and years live here, so next year only this file changes.
  * Rule of the notice sent to customers:
- *   - Annual renewal ............ Rs 1000 per Station ID (for `renewalYear`)
+ *   - Annual renewal ............ Rs 1250 per Station ID (for `renewalYear`)
  *   - Keep previous year data ... Rs 750 per Station ID per year (last year), Rs 450 (the year before)
  *   - Not kept .................. deleted exactly one year after the data was created (rolling deletion)
  */
 export const PREMIUM_PLAN = {
   /** financial year the renewal is for: 2026 = 2026-27 */
   renewalYear: 2026,
-  renewalPerStation: 1000,
+  renewalPerStation: 1250,
   /** years of old data that can be kept: `back` = how many years before renewalYear */
   retention: [
     { back: 1, perStation: 750 },

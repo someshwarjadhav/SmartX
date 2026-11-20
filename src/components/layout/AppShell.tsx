@@ -8,6 +8,7 @@ import { PageLoader } from '../ui/PageLoader';
 import { CommandPalette } from './CommandPalette';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
+import { PlanExpiryPopup } from '../storage/PlanExpiryPopup';
 
 const COLLAPSE_KEY = 'smartx-collapsed';
 
@@ -94,6 +95,7 @@ const AppShell: React.FC = () => {
       </div>
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
+      <PlanExpiryPopup />
     </div>
   );
 };
