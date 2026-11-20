@@ -44,6 +44,8 @@ const PaymentVoucher = lazy(() => import('../pages/account/PaymentVoucher'));
 const VlcMaster = lazy(() => import('../pages/operations/masters/VlcMaster'));
 const RateMaster = lazy(() => import('../pages/operations/masters/RateMaster'));
 const RateStatus = lazy(() => import('../pages/operations/masters/RateStatus'));
+const DeductionMaster = lazy(() => import('../pages/operations/masters/DeductionMaster'));
+const DeductionPriority = lazy(() => import('../pages/operations/billing/DeductionPriority'));
 const VlcMilkEntry = lazy(() => import('../pages/operations/transactions/VlcMilkEntry'));
 const FarmerMilkEntry = lazy(() => import('../pages/operations/transactions/FarmerMilkEntry'));
 const ManageCollection = lazy(() => import('../pages/operations/transactions/ManageCollection'));
@@ -93,10 +95,12 @@ const PAGES: Record<string, React.LazyExoticComponent<React.ComponentType>> = {
   '/master/farmer-master': FarmerMaster,
   '/master/excel-rate-upload': RateMaster,
   '/master/rate-status': RateStatus,
+  '/master/deduction-master': DeductionMaster,
   '/billing': Billing,
   '/billing/farmer-bill': FarmerBill,
   '/billing/bank-payment-summary': BankPaymentSummary,
   '/billing/cash-payment-summary': CashPaymentSummary,
+  '/billing/deduction-priority': DeductionPriority,
   '/billing/standard-deduction': StandardDeduction,
   '/billing/vlc-standard-deduction': VlcStandardDeduction,
   '/billing/cattlefeed-farmer-bill': CattleFeedFarmerBill,

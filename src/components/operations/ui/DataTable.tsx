@@ -34,11 +34,11 @@ interface Props<T> {
   rowClassName?: (r: T) => string | undefined;
 }
 
-export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SIZE, onRowClick, empty, footerRow, rowClassName }: Props<T>) {
+export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SIZE, pageSizes = PAGE_SIZE_OPTIONS, onRowClick, empty, footerRow, rowClassName }: Props<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
-  const [size, setSize] = useState(PAGE_SIZE_OPTIONS.includes(pageSize) ? pageSize : DEFAULT_PAGE_SIZE);
+  const [size, setSize] = useState(pageSizes.includes(pageSize) ? pageSize : pageSizes[0] ?? DEFAULT_PAGE_SIZE);
 
   useEffect(() => setPage(0), [rows.length, size]);
 
@@ -66,7 +66,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SI
 
   return (
     <div>
-      {rows.length > 0 && <TableTopBar total={sorted.length} page={cur + 1} size={size} onSize={setSize} />}
+      {rows.length > 0 && <TableTopBar total={sorted.length} page={cur + 1} size={size} onSize={setSize} sizes={pageSizes} />}
       <div className="overflow-x-auto">
         <table className="clip-cells w-full border-separate border-spacing-0 text-[13px]" onMouseOver={clipTitle}>
           <thead>
@@ -107,7 +107,7 @@ export function DataTable<T>({ columns, rows, rowKey, pageSize = DEFAULT_PAGE_SI
         </table>
       </div>
       {rows.length === 0 && (empty ?? <EmptyState title="No records for these filters" hint="Widen the date range or pick another centre." />)}
-      {rows.length > 0 && <PageBar total={sorted.length} page={cur + 1} size={size} onPage={(p) => setPage(p - 1)} />}
+      {rows.length > 0 && <PageBar total={sorted.length} page={cur + 1} size={size} onPage={(p) => setPage(p - 1)} sizes={pageSizes} />}
     </div>
   );
 }

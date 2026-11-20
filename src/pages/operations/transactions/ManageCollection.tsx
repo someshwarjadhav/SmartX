@@ -502,6 +502,7 @@ const ManageCollection: React.FC = () => {
         <Button
           size="sm"
           variant="danger"
+          className="!bg-danger/10 !text-danger !shadow-none hover:!bg-danger/20"
           aria-label="Delete entry"
           icon={<Trash2 size={14} />}
           disabled={!!editId || busyId === idOf(r)}

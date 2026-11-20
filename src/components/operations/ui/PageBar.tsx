@@ -11,6 +11,8 @@ interface Props {
   size: number;
   onPage: (page: number) => void;
   onSize?: (size: number) => void;
+  /** Page sizes offered in the picker (default 100 / 200 / 300). */
+  sizes?: number[];
   className?: string;
 }
 
@@ -30,7 +32,7 @@ const btn =
   "grid h-9 min-w-9 place-items-center rounded-lg border px-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40";
 
 /** SmartX-style footer shared by every API table: Showing x–y of N, numbered pages, 100/200/300 rows. */
-export const PageBar: React.FC<Props> = ({ total, page, size, onPage, onSize, className }) => {
+export const PageBar: React.FC<Props> = ({ total, page, size, onPage, onSize, sizes = PAGE_SIZE_OPTIONS, className }) => {
   const count = Math.max(1, Math.ceil(total / size));
   const cur = Math.min(Math.max(1, page), count);
   const from = total === 0 ? 0 : (cur - 1) * size + 1;
@@ -71,7 +73,7 @@ export const PageBar: React.FC<Props> = ({ total, page, size, onPage, onSize, cl
           <span className="whitespace-nowrap">Rows per page</span>
           <div className="w-24">
             <Select value={size} onChange={(e) => onSize(Number(e.target.value))} className="h-9">
-              {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+              {sizes.map((n) => <option key={n} value={n}>{n}</option>)}
             </Select>
           </div>
         </label>
