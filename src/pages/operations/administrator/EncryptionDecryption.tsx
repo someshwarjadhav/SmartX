@@ -172,10 +172,10 @@ const EncryptionDecryption: React.FC = () => {
                 <p className="mb-3 text-sm font-semibold text-ink">XOR (base64)</p>
                 <div className="flex flex-wrap items-center gap-3">
                   <Button icon={<Lock size={16} />} disabled={disabled} onClick={xorEnc}>
-                    XOR Encrypt
+                    DPU Encrypt
                   </Button>
                   <Button variant="outline" icon={<Unlock size={16} />} disabled={disabled} onClick={xorDec}>
-                    XOR Decrypt
+                    DPU Decrypt
                   </Button>
                 </div>
               </div>
@@ -184,10 +184,10 @@ const EncryptionDecryption: React.FC = () => {
                 <p className="mb-3 text-sm font-semibold text-ink">AES-CBC (cipher:iv)</p>
                 <div className="flex flex-wrap items-center gap-3">
                   <Button icon={<Lock size={16} />} disabled={disabled} onClick={aesEnc}>
-                    AES Encrypt
+                    Application Encrypt
                   </Button>
                   <Button variant="outline" icon={<Unlock size={16} />} disabled={disabled} onClick={aesDec}>
-                    AES Decrypt
+                    Application Decrypt
                   </Button>
                 </div>
               </div>

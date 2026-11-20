@@ -1,5 +1,6 @@
 import type * as React from "react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Eye,
@@ -17,6 +18,7 @@ import { ModeToggle } from "../../components/layout/ModeToggle";
 import { Button } from "../../components/ui/Button";
 import { Field, Input } from "../../components/ui/Fields";
 import { DEV_EMAIL, DEV_PASSWORD } from "../../services/config";
+import { RegisterForm } from "./RegisterForm";
 
 const FACTS = [
   {
@@ -38,11 +40,28 @@ const FACTS = [
 
 const Login: React.FC = () => {
   const { login } = useAuth();
-  const [email, setEmail] = useState(DEV_EMAIL);
-  const [password, setPassword] = useState(DEV_PASSWORD);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const mode: "login" | "register" = location.pathname === "/register" ? "register" : "login";
+  const flash = location.state as { notice?: string; email?: string } | null;
+  const [notice, setNotice] = useState(flash?.notice ?? "");
+  const [email, setEmail] = useState(flash?.email ?? DEV_EMAIL);
+  const [password, setPassword] = useState(flash?.email ? "" : DEV_PASSWORD);
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+ 
+  useEffect(() => {
+    const f = location.state as { notice?: string; email?: string } | null;
+    if (!f?.notice) return;
+    setNotice(f.notice);
+    if (f.email) {
+      setEmail(f.email);
+      setPassword("");
+    }
+  }, [location.state]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -85,6 +104,15 @@ const Login: React.FC = () => {
           <ModeToggle className="ml-auto" />
         </div>
 
+        {mode === "register" ? (
+          <RegisterForm
+            onBackToLogin={() => navigate("/login")}
+            onRegistered={(registeredEmail, message) => {
+              setError("");
+              navigate("/login", { state: { notice: message, email: registeredEmail } });
+            }}
+          />
+        ) : (
         <motion.form
           onSubmit={submit}
           noValidate
@@ -144,6 +172,15 @@ const Login: React.FC = () => {
               </div>
             </Field>
 
+            {notice && !error && (
+              <p
+                role="status"
+                className="rounded-xl bg-ok/10 px-3 py-2.5 text-sm font-medium text-ok"
+              >
+                {notice}
+              </p>
+            )}
+
             {error && (
               <p
                 role="alert"
@@ -157,12 +194,28 @@ const Login: React.FC = () => {
               Sign in
             </Button>
 
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              disabled={busy}
+              onClick={() => {
+                setError("");
+                setNotice("");
+                navigate("/register");
+              }}
+              className="w-full"
+            >
+              Register now
+            </Button>
+
             <p className="rounded-xl bg-soft px-3.5 py-3 text-xs leading-relaxed text-mute">
               Sign in with your MilkShell portal account. Your credentials are
               checked by the connected portal API.
             </p>
           </div>
         </motion.form>
+        )}
 
         <p className="text-center text-xs text-mute sm:text-left">
           © {new Date().getFullYear()} SmartX · Need help?{" "}

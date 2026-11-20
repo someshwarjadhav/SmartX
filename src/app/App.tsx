@@ -123,7 +123,6 @@ const ScrollToTop: React.FC = () => {
   return null;
 };
 
-// Accounts listed in config/portal/landingRoutes.ts open their own page instead of the dashboard.
 const HomeRoute: React.FC = () => {
   const { user } = useAuth();
   const landing = landingRouteFor(user?.email);
@@ -181,6 +180,7 @@ const App: React.FC = () => {
       <Suspense fallback={<PageLoader full />}>
         <Routes>
           <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+          <Route path="/register" element={user ? <Navigate to="/" replace /> : <Login />} />
           <Route element={<Protected />}>
             <Route element={<AppShell />}>
               <Route element={<RouteGate />}>
