@@ -1,6 +1,15 @@
 import type * as React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Eye, Pencil, RotateCcw, Save, Trash2, Users, X } from "lucide-react";
+import {
+  Check,
+  Eye,
+  Pencil,
+  RotateCcw,
+  Save,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
@@ -12,7 +21,6 @@ import { Modal } from "../../../components/operations/ui/Modal";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import { ErrorBlock } from "../../../components/operations/Widget";
 
-
 const BIG = "!h-20 !text-center !text-2xl !font-semibold sm:!text-3xl";
 import {
   CardTitle,
@@ -20,7 +28,10 @@ import {
   ReportPage,
   Reveal,
 } from "../../../components/operations/ReportKit";
-import { exportExcel, type ExportCol } from "../../../assets/excel/portalExport";
+import {
+  exportExcel,
+  type ExportCol,
+} from "../../../assets/excel/portalExport";
 import { useToast } from "../../../context/ToastContext";
 import { fmtDate, nf, todayISO } from "../../../lib/portal/format";
 import {
@@ -72,7 +83,6 @@ const clrFrom = (snf: number, fat: number) => r1((snf - 0.21 * fat - 0.36) * 4);
 const farmerLabel = (f: MasterFarmer) =>
   f.name ? `${f.farmerId} - ${f.name}` : f.farmerId;
 
-
 const KG_PER_LITRE = 1.03;
 const two = (n: number) => n.toFixed(2);
 
@@ -100,8 +110,18 @@ const milkName = (code: string) =>
   MILKS.find((m) => m.Id === code)?.Name ?? "Mix";
 
 const MONTHS = [
-  "jan", "feb", "mar", "apr", "may", "jun",
-  "jul", "aug", "sep", "oct", "nov", "dec",
+  "jan",
+  "feb",
+  "mar",
+  "apr",
+  "may",
+  "jun",
+  "jul",
+  "aug",
+  "sep",
+  "oct",
+  "nov",
+  "dec",
 ];
 const toIsoDate = (s: string): string => {
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
@@ -131,10 +151,24 @@ const TEXT_COLS: Array<{
   { key: "snf", header: "Snf", align: "right", get: (r) => val(r, "snf") },
   { key: "clr", header: "Clr", align: "right", get: (r) => val(r, "clr") },
   { key: "milk", header: "Milk Type", get: (r) => val(r, "milktype") },
- 
-  { key: "station", header: "Station Id", get: (r) => vlccCode(val(r, "vlccid")) },
-  { key: "rate", header: "Rate", align: "right", get: (r) => val(r, "rtpl", "rate") },
-  { key: "amount", header: "Amount", align: "right", get: (r) => val(r, "amount") },
+
+  {
+    key: "station",
+    header: "Station Id",
+    get: (r) => vlccCode(val(r, "vlccid")),
+  },
+  {
+    key: "rate",
+    header: "Rate",
+    align: "right",
+    get: (r) => val(r, "rtpl", "rate"),
+  },
+  {
+    key: "amount",
+    header: "Amount",
+    align: "right",
+    get: (r) => val(r, "amount"),
+  },
 ];
 
 interface Draft {
@@ -142,7 +176,7 @@ interface Draft {
   fat: string;
   snf: string;
   clr: string;
-  milk: string; 
+  milk: string;
 }
 
 const CellInput: React.FC<{
@@ -164,7 +198,6 @@ const CellInput: React.FC<{
     className="h-9 w-24 min-w-[6rem] px-2.5 text-right text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
   />
 );
-
 
 interface Pending {
   vlc: string;
@@ -191,7 +224,7 @@ const matches = (p: Pending, r: CollectionRow) =>
   near(p.snf, val(r, "snf"));
 
 interface Applied {
-  vlc: string; 
+  vlc: string;
   ids: string[];
   shift: string;
   milk: string;
@@ -205,7 +238,7 @@ const FarmerMilkEntry: React.FC = () => {
   const allIds = centers.length ? centers.map((c) => c.id) : sessionIds;
   const ids = allIds;
 
-  const [vlc, setVlc] = useState(ALL); 
+  const [vlc, setVlc] = useState(ALL);
   const [shift, setShift] = useState("M");
   const [milk, setMilk] = useState("C");
   const [date, setDate] = useState(todayISO());
@@ -224,7 +257,6 @@ const FarmerMilkEntry: React.FC = () => {
   const [rateRows, setRateRows] = useState<RateRow[] | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
 
-  
   const [applied, setApplied] = useState<Applied | null>(null);
   const [rows, setRows] = useState<CollectionRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -271,7 +303,7 @@ const FarmerMilkEntry: React.FC = () => {
     setRateError(null);
     if (!entryVlc) return;
     let alive = true;
-    getRateChart(entryVlc)
+    getRateChart(entryVlc, milk, date)
       .then((r) => {
         if (!alive) return;
         setRateRows(r);
@@ -284,7 +316,7 @@ const FarmerMilkEntry: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [entryVlc]);
+  }, [entryVlc, milk, date]);
 
   const farmer = useMemo(() => {
     const t = farmerText.trim().toLowerCase();
@@ -325,8 +357,6 @@ const FarmerMilkEntry: React.FC = () => {
     clrN !== null &&
     rateN !== null &&
     amountN !== null;
-
-  
 
   const load = useCallback(
     async (silent = false) => {
@@ -372,7 +402,9 @@ const FarmerMilkEntry: React.FC = () => {
         });
         setRows(merged);
         if (failed > 0)
-          setNote(`${failed} of ${results.length} centres could not be loaded.`);
+          setNote(
+            `${failed} of ${results.length} centres could not be loaded.`,
+          );
       } catch (e) {
         if (me !== stamp.current) return;
         setRows([]);
@@ -392,7 +424,6 @@ const FarmerMilkEntry: React.FC = () => {
     void load();
   }, [load]);
 
- 
   useEffect(() => {
     setPending((p) =>
       p.some((x) => rows.some((r) => matches(x, r)))
@@ -403,7 +434,7 @@ const FarmerMilkEntry: React.FC = () => {
 
   const show = () => {
     if (!vlc || !date) return;
-    forgetCachedLists(); 
+    forgetCachedLists();
     setEditId(null);
     setDraft(null);
     setApplied({
@@ -415,8 +446,6 @@ const FarmerMilkEntry: React.FC = () => {
     });
     setNeedle("");
   };
-
- 
 
   const clearForm = () => {
     setFarmerText("");
@@ -513,8 +542,6 @@ const FarmerMilkEntry: React.FC = () => {
     }
   };
 
- 
-
   const shown = useMemo(
     () => [
       ...rows,
@@ -545,7 +572,6 @@ const FarmerMilkEntry: React.FC = () => {
       : shown;
   }, [shown, needle]);
 
-  
   const startEdit = (r: CollectionRow) => {
     setEditId(idOf(r));
     setDraft({
@@ -774,15 +800,12 @@ const FarmerMilkEntry: React.FC = () => {
     };
 
     return [...text, edit, del];
-   
   }, [draft, editId, busyId]);
 
   const exportCols: ExportCol<CollectionRow>[] = useMemo(
     () => TEXT_COLS.map((c) => ({ header: c.header, value: (r) => c.get(r) })),
     [],
   );
-
- 
 
   const rateHint = rateError
     ? `Rate chart: ${rateError}`
@@ -819,7 +842,8 @@ const FarmerMilkEntry: React.FC = () => {
               handleEnterNext(e, {
                 skip: (el) =>
                   el.getAttribute("list") === "farmer-milk-farmers" && !farmer,
-                onLast: (root) => (valid ? void submit() : focusFirstEmpty(root)),
+                onLast: (root) =>
+                  valid ? void submit() : focusFirstEmpty(root),
               })
             }
           >
@@ -867,7 +891,10 @@ const FarmerMilkEntry: React.FC = () => {
                 </datalist>
               </Field>
               <Field label="Shift">
-                <Select value={shift} onChange={(e) => setShift(e.target.value)}>
+                <Select
+                  value={shift}
+                  onChange={(e) => setShift(e.target.value)}
+                >
                   {SHIFTS.map((s) => (
                     <option key={s.Id} value={s.Id}>
                       {s.Name}
@@ -1063,7 +1090,9 @@ const FarmerMilkEntry: React.FC = () => {
               {val(toDelete, "trdate", "date") || "—"}
             </dd>
             <dt className="text-mute">Farmer Id</dt>
-            <dd className="font-semibold">{val(toDelete, "farmerid") || "—"}</dd>
+            <dd className="font-semibold">
+              {val(toDelete, "farmerid") || "—"}
+            </dd>
             <dt className="text-mute">Liter</dt>
             <dd className="font-semibold">{val(toDelete, "qty") || "—"}</dd>
             <dt className="text-mute">Fat / Snf</dt>

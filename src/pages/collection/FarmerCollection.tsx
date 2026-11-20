@@ -1000,7 +1000,12 @@ const FarmerCollection: React.FC = () => {
         value={{ ...draft, plant: scope.plant, centre: scope.centre }}
         plantOptions={scope.plantOptions}
         centreOptions={scope.centreOptions}
-        onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+        onChange={(patch) => {
+          setDraft((d) => ({ ...d, ...patch }));
+          if (submitted && ("shift" in patch || "kind" in patch)) {
+            setApplied((a) => ({ ...a, ...patch }));
+          }
+        }}
         onSubmit={submit}
         error={error}
         loading={fetching}
