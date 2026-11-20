@@ -1,4 +1,5 @@
 import {
+  ADVANCE_MODULES,
   CUSTOM_ADDONS,
   PLAN_INCLUDED,
   PLAN_TIERS,
@@ -10,6 +11,7 @@ import {
 } from '../../config/storagePlan';
 import { getSession } from '../session';
 
+/* ---------------- price quote ---------------- */
 
 export interface QuoteLine {
   id: string;
@@ -34,6 +36,8 @@ export interface QuoteOptions {
   customIds?: string[];
   /** custom work quoted separately (Rs) */
   customAmount?: number;
+  /** Advance modules ticked (ids of ADVANCE_MODULES); counted only with the Advance plan */
+  moduleIds?: string[];
 }
 
 export const retentionYears = () =>
@@ -43,13 +47,17 @@ export const retentionYears = () =>
     perStation: r.perStation,
   }));
 
-
+/** Total of the ticked customisations plus any custom work, before the complexity surcharge. */
 export function customSubtotal(customIds: string[] = [], customAmount = 0): number {
   const ticked = CUSTOM_ADDONS.filter((a) => customIds.includes(a.id)).reduce((a, x) => a + x.price, 0);
   return ticked + Math.max(0, Math.round(customAmount) || 0);
 }
 
-
+/**
+ * Plan x 1 (it already includes 5 Station IDs + 5 Users) + renewal for the Station IDs above the included ones
+ * + every kept year x stations + customisations (with the bigger-customisation surcharge).
+ * Without a plan, every Station ID pays the renewal.
+ */
 export function quoteFor(stations: number, keepYears: number[], opts: QuoteOptions = {}): Quote {
   const n = Math.max(0, stations);
   const lines: QuoteLine[] = [];
@@ -93,6 +101,13 @@ export function quoteFor(stations: number, keepYears: number[], opts: QuoteOptio
         amount: r.perStation * n,
       });
     }
+    if (tier?.id === 'advance') {
+      for (const m of ADVANCE_MODULES) {
+        if (!(opts.moduleIds ?? []).includes(m.id)) continue;
+        const price = m.price ?? 0;
+        lines.push({ id: `module-${m.id}`, label: m.label, note: 'Advance module (your choice)', rate: price, qty: 1, unit: 'item', amount: price });
+      }
+    }
     const ids = opts.customIds ?? [];
     for (const a of CUSTOM_ADDONS) {
       if (!ids.includes(a.id)) continue;
@@ -120,7 +135,9 @@ export function quoteFor(stations: number, keepYears: number[], opts: QuoteOptio
   return { lines, total: lines.reduce((a, l) => a + l.amount, 0) };
 }
 
+/* ---------------- rolling deletion ---------------- */
 
+/** Data created on `iso` (yyyy-MM-dd) is removed exactly one year later (29 Feb -> 28 Feb). */
 export function deletionDate(iso: string): string {
   const [y = 0, m = 1, d = 1] = iso.slice(0, 10).split('-').map(Number);
   const target = y + STORAGE_PLAN.deleteAfterYears;
@@ -154,6 +171,8 @@ export interface StoragePreference {
   planId?: PlanId | null;
   /** ticked customisations (ids of CUSTOM_ADDONS) */
   customIds?: string[];
+  /** Advance modules ticked (ids of ADVANCE_MODULES) */
+  moduleIds?: string[];
   /** what the customer wants customised, in his words */
   customNote?: string;
   /** custom work quoted separately (Rs) */
@@ -204,10 +223,14 @@ export async function clearPreference(): Promise<void> {
 
 export interface ActivePlan {
   planId: PlanId | null;
+  /** last day the plan works, yyyy-MM-dd */
   expiresOn: string;
 }
 
-
+/**
+ * TODO(backend): when the server sends the paid plan of a login, return it here (GET /home/storageplan -> planId,
+ * expiresOn) and the popup uses it. Until then the one shared date `STORAGE_PLAN.expiryDate` is used; '' = no popup.
+ */
 export async function loadActivePlan(): Promise<ActivePlan | null> {
   const d = STORAGE_PLAN.expiryDate as string;
   return d ? { planId: null, expiresOn: d } : null;

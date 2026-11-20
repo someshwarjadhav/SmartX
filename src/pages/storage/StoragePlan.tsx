@@ -14,6 +14,7 @@ import {
   HardDrive,
   Layers,
   Minus,
+  Plus,
   Sparkles,
   ShieldCheck,
   SlidersHorizontal,
@@ -30,6 +31,7 @@ import { Button } from '../../components/ui/Button';
 import { cn } from '../../lib/cn';
 import { fmtDate, nf, toISO } from '../../lib/format';
 import {
+  ADVANCE_MODULES,
   CUSTOM_ADDONS,
   CUSTOM_SLABS,
   PLAN_FEATURES,
@@ -133,6 +135,7 @@ const StoragePlan: React.FC = () => {
   const [keep, setKeep] = useState<number[]>([]);
   const [planId, setPlanId] = useState<PlanId | null>(null);
   const [customIds, setCustomIds] = useState<string[]>([]);
+  const [moduleIds, setModuleIds] = useState<string[]>([]);
   const [customNote, setCustomNote] = useState('');
   const [customAmount, setCustomAmount] = useState(0);
   const [backup, setBackup] = useState(false);
@@ -149,6 +152,7 @@ const StoragePlan: React.FC = () => {
       setKeep(p.keepYears);
       setPlanId(p.planId ?? null);
       setCustomIds(p.customIds ?? []);
+      setModuleIds(p.moduleIds ?? []);
       setCustomNote(p.customNote ?? '');
       setCustomAmount(p.customAmount ?? 0);
       setBackup(p.backup);
@@ -171,9 +175,12 @@ const StoragePlan: React.FC = () => {
   const toggleCustom = (id: string) =>
     setCustomIds((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
 
+  const toggleModule = (id: string) =>
+    setModuleIds((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
+
   const quote = useMemo(
-    () => quoteFor(selected.length, keep, { planId, customIds, customAmount }),
-    [selected.length, keep, planId, customIds, customAmount],
+    () => quoteFor(selected.length, keep, { planId, customIds, customAmount, moduleIds }),
+    [selected.length, keep, planId, customIds, customAmount, moduleIds],
   );
   const tierIdx = PLAN_TIERS.findIndex((t) => t.id === planId);
   const tier = tierIdx >= 0 ? PLAN_TIERS[tierIdx] : undefined;
@@ -193,6 +200,7 @@ const StoragePlan: React.FC = () => {
         keepYears: keep,
         planId,
         customIds,
+        moduleIds: planId === 'advance' ? moduleIds : [],
         customNote: customNote.trim(),
         customAmount,
         backup,
@@ -214,6 +222,7 @@ const StoragePlan: React.FC = () => {
     setKeep([]);
     setPlanId(null);
     setCustomIds([]);
+    setModuleIds([]);
     setCustomNote('');
     setCustomAmount(0);
     setBackup(false);
@@ -356,12 +365,30 @@ const StoragePlan: React.FC = () => {
                       Everything in {PLAN_TIERS[i - 1]?.name}
                     </li>
                   )}
-                  {(i === 0 ? mine : fresh).map((f) => (
+                  {(i === 0 ? mine : fresh.filter((f) => !f.module)).map((f) => (
                     <li key={f.id} className="flex items-start gap-2">
                       <Check size={15} className="mt-0.5 shrink-0 text-ok" aria-hidden />
                       <span>{f.label}</span>
                     </li>
                   ))}
+                  {t.id === 'advance' && (
+                    <>
+                      <li className="flex items-start gap-2 font-semibold">
+                        <SlidersHorizontal size={15} className="mt-0.5 shrink-0 text-brand" aria-hidden />
+                        Choose only the modules you need:
+                      </li>
+                      {ADVANCE_MODULES.map((m) => (
+                        <li key={m.id} className="flex items-start gap-2 pl-0.5">
+                          <Plus size={15} className="mt-0.5 shrink-0 text-brand" aria-hidden />
+                          <span>{m.label}</span>
+                        </li>
+                      ))}
+                      <li className="flex items-start gap-2 font-semibold">
+                        <Check size={15} className="mt-0.5 shrink-0 text-ok" aria-hidden />
+                        Customisable as you require
+                      </li>
+                    </>
+                  )}
                 </ul>
                 <span
                   className={cn(
@@ -401,7 +428,7 @@ const StoragePlan: React.FC = () => {
                   </td>
                 ))}
               </tr>
-              {(['Collection', 'Billing', 'Deductions & Accounts', 'Advance & Control'] as const).map((g) => (
+              {(['Collection', 'Billing', 'Deductions & Accounts', 'Advance & Control', 'Advance modules'] as const).map((g) => (
                 <Fragment key={g}>
                   <tr className="bg-soft/60">
                     <td colSpan={PLAN_TIERS.length + 1} className="px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-mute">
@@ -413,7 +440,9 @@ const StoragePlan: React.FC = () => {
                       <td className="px-3 py-2">{f.label}</td>
                       {PLAN_TIERS.map((t, i) => (
                         <td key={t.id} className="px-3 py-2 text-center">
-                          {f.from <= i ? (
+                          {f.module && f.from <= i ? (
+                            <span className="text-xs font-bold text-brand">Your choice</span>
+                          ) : f.from <= i ? (
                             <Check size={16} className="mx-auto text-ok" aria-label="Included" />
                           ) : (
                             <Minus size={16} className="mx-auto text-mute/50" aria-label="Not included" />
@@ -584,7 +613,40 @@ const StoragePlan: React.FC = () => {
               sub="Tick what you need or describe it. The more you customise, the higher the rate."
               free
             />
-            <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+            {tier?.id === 'advance' ? (
+              <div className="mt-4 rounded-xl border border-brand/40 bg-brand/5 p-3.5">
+                <p className="text-sm font-semibold">Advance modules: tick only what you need</p>
+                <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {ADVANCE_MODULES.map((m) => {
+                    const on = moduleIds.includes(m.id);
+                    return (
+                      <li key={m.id}>
+                        <label
+                          className={cn(
+                            'flex cursor-pointer items-start gap-3 rounded-xl border bg-panel p-3 text-sm transition',
+                            on ? 'border-brand/60' : 'border-line hover:border-brand/40',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={() => toggleModule(m.id)}
+                            className="mt-0.5 h-[18px] w-[18px] shrink-0 cursor-pointer accent-brand"
+                          />
+                          <span className="min-w-0 flex-1 font-semibold">{m.label}</span>
+                          <span className="tnum shrink-0 font-semibold">{inr(m.price ?? 0)}</span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : (
+              <p className="mt-4 rounded-xl bg-soft px-3.5 py-2.5 text-xs text-mute">
+                Want to pick your own extra modules (priority support & data backup)? Choose the <b>Advance</b> plan above.
+              </p>
+            )}
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {CUSTOM_ADDONS.map((a) => {
                 const on = customIds.includes(a.id);
                 return (

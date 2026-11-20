@@ -44,11 +44,11 @@ export const fyLabel = (y: number): string => `${y}-${String(y + 1).slice(-2)}`;
 export const PLAN_INCLUDED = { stations: 5, users: 5 } as const;
 
 /** First registration price of the lowest plan (Rs). */
-export const PLAN_BASE_PRICE = 10000;
+export const PLAN_BASE_PRICE = 5000;
 
 /**
  * Step-wise hike: each plan costs this many % more than the plan before it.
- *   Regular 10,000  ->  Pro +60% = 16,000  ->  Pro+ +40% = 22,400  ->  Advance +40% = 31,360
+ *   Regular 5,000  ->  Pro +60% = 8,000  ->  Pro+ +40% = 11,200  ->  Advance +40% = 15,680
  * Change a number here and every price on the page follows.
  */
 export const PLAN_HIKES = [0, 60, 40, 40] as const;
@@ -59,9 +59,15 @@ export interface PlanFeature {
   id: string;
   label: string;
   /** which group of the software it belongs to */
-  group: 'Collection' | 'Billing' | 'Deductions & Accounts' | 'Advance & Control';
+  group: 'Collection' | 'Billing' | 'Deductions & Accounts' | 'Advance & Control' | 'Advance modules';
   /** first plan (index in PLAN_TIERS) that has it; every higher plan has it too */
   from: 0 | 1 | 2 | 3;
+  /**
+   * Advance-only modules: NOT included automatically. The customer ticks the ones he needs (only with the Advance
+   * plan) and `price` is added to the quote.
+   */
+  module?: boolean;
+  price?: number;
 }
 
 export const PLAN_FEATURES: readonly PlanFeature[] = [
@@ -69,21 +75,23 @@ export const PLAN_FEATURES: readonly PlanFeature[] = [
   { id: 'dashboard', label: 'Dashboard & live collection', group: 'Collection', from: 0 },
   { id: 'collection-reports', label: 'Collection reports (farmer, VLC, union, variance)', group: 'Collection', from: 0 },
   { id: 'collection-export', label: 'Excel / PDF / CSV export of collection', group: 'Collection', from: 0 },
-  /* Pro: + billing */
+  /* Pro: + billing and rate chart */
   { id: 'farmer-bill', label: 'Farmer bill & bill print', group: 'Billing', from: 1 },
   { id: 'payment-summary', label: 'Bank & cash payment summary', group: 'Billing', from: 1 },
-  { id: 'vlc-bill', label: 'VLC milk bill & cattle feed bill', group: 'Billing', from: 1 },
-  /* Pro+: + deductions & accounts */
-  { id: 'deductions', label: 'Standard, VLC & entry-wise deductions', group: 'Deductions & Accounts', from: 2 },
+  { id: 'vlc-bill', label: 'VLC milk bill', group: 'Billing', from: 1 },
+  { id: 'rates', label: 'Rate chart, Excel rate upload & rate status', group: 'Billing', from: 1 },
+  /* Pro+: + cattle feed bill, auto collection, deductions, accounts & manual entries */
+  { id: 'cattle-feed-bill', label: 'Cattle feed bill', group: 'Billing', from: 2 },
+  { id: 'auto-collection', label: 'Auto collection (VLC & Farmer)', group: 'Collection', from: 2 },
+  { id: 'deductions', label: 'Standard, VLC & entry-wise deductions (Cattle feed & recovery)', group: 'Deductions & Accounts', from: 2 },
   { id: 'vouchers', label: 'Payment & receipt vouchers, account ledger', group: 'Deductions & Accounts', from: 2 },
-  { id: 'rates', label: 'Rate chart, Excel rate upload & rate status', group: 'Deductions & Accounts', from: 2 },
-  /* Advance: everything */
-  { id: 'advance', label: 'Farmer advance & recovery', group: 'Advance & Control', from: 3 },
-  { id: 'entries', label: 'Manual milk entry, sale entry & manage collection', group: 'Advance & Control', from: 3 },
-  { id: 'eko', label: 'EKO calibration & correction reports', group: 'Advance & Control', from: 3 },
-  { id: 'admin', label: 'User access, bill unfreeze & DPU sync', group: 'Advance & Control', from: 3 },
-  { id: 'support', label: 'Priority support & data backup', group: 'Advance & Control', from: 3 },
+  { id: 'entries', label: 'Manual milk entry, sale entry & manage collection', group: 'Advance & Control', from: 2 },
+  /* Advance: everything in Pro+ and the customer picks the extra modules he needs */
+  { id: 'support', label: 'Priority support & data backup', group: 'Advance modules', from: 3, module: true, price: 4000 },
 ];
+
+/** the Advance-only modules the customer can pick */
+export const ADVANCE_MODULES = PLAN_FEATURES.filter((f) => f.module);
 
 export interface PlanTier {
   id: PlanId;
@@ -98,19 +106,19 @@ export interface PlanTier {
 
 export const PLAN_TIERS: readonly PlanTier[] = [
   { id: 'regular', name: 'Regular', tagline: 'Collection only', adds: 'Collection dashboard & reports' },
-  { id: 'pro', name: 'Pro', tagline: 'Collection + Billing', adds: 'Farmer bill, payment summaries, VLC bill' },
+  { id: 'pro', name: 'Pro', tagline: 'Collection + Billing + Rate chart', adds: 'Farmer bill, payment summaries, VLC bill, rate chart' },
   {
     id: 'proplus',
     name: 'Pro+',
-    tagline: 'Collection + Billing + Deductions',
-    adds: 'Deductions, vouchers, accounts & rate tools',
+    tagline: 'Auto collection, Cattle feed bill, Deductions',
+    adds: 'cattle feed bill, auto collection, deductions, vouchers & manual entries',
     ribbon: 'Most popular',
   },
   {
     id: 'advance',
     name: 'Advance',
-    tagline: 'Everything, nothing left out',
-    adds: 'Advance, manual entries, EKO, admin & priority support',
+    tagline: 'Pro+ and you choose the rest',
+    adds: 'extra modules of your choice (priority support & data backup)',
     ribbon: 'Best value',
   },
 ];
