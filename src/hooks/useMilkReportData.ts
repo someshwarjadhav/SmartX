@@ -253,7 +253,7 @@ function useRawFarmerRows(
 
   const queryKey =
     enabled && ids.length
-      ? `${keyPrefix}:${filter.from}:${filter.to}:${filter.shift ?? "both"}:${filter.milk ?? "both"}:${idKey}`
+      ? `${keyPrefix}:${filter.from}:${filter.to}:${idKey}`
       : null;
   const q = useQuery<RawFarmerRow>(
     queryKey,
@@ -262,8 +262,8 @@ function useRawFarmerRows(
         {
           from: filter.from,
           to: filter.to,
-          shift: apiShift(filter.shift),
-          milk: apiMilk(filter.milk),
+          shift: "Z",
+          milk: "ALL",
           vlccIds: ids,
         },
         emit,
@@ -413,7 +413,7 @@ export function useMilkVlccEntries(
   const idKey = ids.join(",");
   const key =
     enabled && ids.length
-      ? `smartx-designed-vlcc-report:${filter.from}:${filter.to}:${filter.shift ?? "both"}:${filter.milk ?? "both"}:${idKey}`
+      ? `smartx-designed-vlcc-report:${filter.from}:${filter.to}:${idKey}`
       : null;
   const q = useQuery<RawVlccRow>(
     key,
@@ -422,8 +422,8 @@ export function useMilkVlccEntries(
         {
           from: filter.from,
           to: filter.to,
-          shift: apiShift(filter.shift),
-          milk: apiMilk(filter.milk),
+          shift: "Z",
+          milk: "ALL",
           vlccIds: ids,
         },
         emit,

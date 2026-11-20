@@ -6,6 +6,12 @@ import { ApiError } from "../http/errors";
 import { mapMaster, type MasterFarmer } from "../farmer/farmerBook";
 import { isObj, norm, rowsFrom } from "../utils/loose";
 import type { RawLoose } from "../types/raw";
+import {
+  getSavedRateList,
+  showRate,
+  toIsoDate,
+  type RateGrid,
+} from "../master/rate.api.ts";
 
 // DPU API: https://dpu.shivinfotech.co.in/api/Login/<endpoint>
 export const FARMER_MASTER_PATH = DPU.farmerMaster;
@@ -54,27 +60,96 @@ const rateRows = (json: unknown): RateRow[] | undefined => {
   return rowsFrom(json);
 };
 
-export const getRateChart = (rateId: string): Promise<RateRow[]> =>
-  cached(`rate:${rateId}`, 60, async () => {
-    let why = "";
+export function gridToRateRows(grid: RateGrid, milkType?: string): RateRow[] {
+  const rows: RateRow[] = [];
+  for (const r of grid.rows) {
+    grid.snfs.forEach((snf, i) => {
+      const rate = r.rates[i];
+      if (rate !== null && rate !== undefined) {
+        rows.push({
+          fat: r.fat,
+          snf: snf,
+          rate: rate,
+          ...(milkType ? { milktype: milkType } : {}),
+        });
+      }
+    });
+  }
+  return rows;
+}
+
+export const getRateChart = (
+  rateId: string,
+  milkType?: string,
+  date?: string,
+): Promise<RateRow[]> => {
+  const m = (milkType || "").toUpperCase();
+  const d = date || "";
+  const cacheKey = `rate:${rateId}:${m}:${d}`;
+  return cached(cacheKey, 60, async () => {
+    let dpuRows: RateRow[] | undefined;
+    let dpuWhy = "";
+    // 1. First, try the legacy DPU getRate endpoint
     try {
-      const rows = rateRows(
+      dpuRows = rateRows(
         await dpuGet(
           `${FARMER_RATE_PATH}?rateId=${encodeURIComponent(rateId)}`,
           1,
         ),
       );
-      if (rows) return rows;
-      why = "the DPU getRate did not return the chart";
+      if (dpuRows && dpuRows.length > 0) return dpuRows;
+      if (!dpuRows) dpuWhy = "the DPU getRate did not return the chart";
     } catch (e) {
       if (e instanceof ApiError && e.kind === "auth") throw e;
-      why = e instanceof Error ? e.message : String(e);
+      dpuWhy = e instanceof Error ? e.message : String(e);
     }
+
+    // 2. Fallback: load rate chart uploaded through Rate Master (ShowRateWeb / getSavedRateList)
+    try {
+      const savedList = await getSavedRateList(rateId, "1");
+      if (savedList && savedList.length > 0) {
+        const matches = m
+          ? savedList.filter((s) => s.milkType.toUpperCase() === m)
+          : savedList;
+        const candidates = matches.length > 0 ? matches : savedList;
+
+        const isoTarget = d ? toIsoDate(d) : "";
+        const sorted = [...candidates].sort((a, b) => {
+          const da = toIsoDate(a.date);
+          const db = toIsoDate(b.date);
+          return db.localeCompare(da);
+        });
+
+        const chosen =
+          (isoTarget
+            ? sorted.find((s) => toIsoDate(s.date) <= isoTarget)
+            : undefined) ?? sorted[0];
+
+        if (chosen) {
+          const grid = await showRate(
+            rateId,
+            toIsoDate(chosen.date),
+            chosen.milkType,
+            chosen.rangeType,
+          );
+          if (grid && grid.rows && grid.rows.length > 0) {
+            const rows = gridToRateRows(grid, chosen.milkType);
+            if (rows.length > 0) return rows;
+          }
+        }
+      }
+    } catch {
+      // Proceed to standard error handling below
+    }
+
+    if (dpuRows && dpuRows.length === 0) return [];
+
     throw new ApiError(
-      `the server could not return the rate chart${why ? ` (${why})` : ""}.`,
+      `the server could not return the rate chart${dpuWhy ? ` (${dpuWhy})` : ""}.`,
       "server",
     );
   });
+};
 
 const pickText = (r: RateRow, names: string[]): string => {
   const keys = Object.keys(r);
@@ -158,11 +233,27 @@ function lookupFlat(
   p: { fat: number; snf: number; clr: number; milk: string },
 ): number | null {
   for (const r of rows) {
-    const fatV = pickText(r, ["fat", "fatpercent", "fatper"]);
+    const fatV = pickText(r, [
+      "fat",
+      "fatpercent",
+      "fatper",
+      "startfat",
+      "fatstart",
+      "fatvalue",
+      "fatrange",
+    ]);
     if (!fatV || !near(p.fat, fatV)) continue;
     if (!sameMilk(p.milk, pickText(r, ["milktype", "milk"]))) continue;
 
-    const snfV = pickText(r, ["snf", "snfpercent", "snfper"]);
+    const snfV = pickText(r, [
+      "snf",
+      "snfpercent",
+      "snfper",
+      "endsnf",
+      "snfstart",
+      "snfvalue",
+      "snfrange",
+    ]);
     const clrV = pickText(r, ["clr"]);
     const rateV = pickText(r, [
       "rate",
@@ -170,6 +261,11 @@ function lookupFlat(
       "rateperltr",
       "rateperliter",
       "rates",
+      "srate",
+      "ratevalue",
+      "amount",
+      "price",
+      "value",
     ]);
 
     if (snfV || clrV) {
