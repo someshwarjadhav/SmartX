@@ -17,6 +17,10 @@ import {
   type ReportConfig,
 } from "./report/report.api.ts";
 import { setSession } from "./session";
+import {
+  clearPlantSettings,
+  restorePlantSettings,
+} from "./settings/plantSettings.api.ts";
 import type { Center } from "./mappers/center.mapper.ts";
 
 interface SessionData {
@@ -218,10 +222,12 @@ export function restoreSession(): LoginProfile | null {
     rawData = null;
   }
   applySession(profile);
+  restorePlantSettings(profile.plantId);
   return profile;
 }
 
 export function clearSessionData() {
+  clearPlantSettings();
   data = EMPTY;
   loaded = false;
   rawData = null;
