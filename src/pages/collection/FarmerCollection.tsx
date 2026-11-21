@@ -60,6 +60,7 @@ import {
   exportBansiPdf,
   exportBansiReport,
   exportBansiSheet,
+  isAthareUser,
   isBansiUser,
 } from "../../assets/excel/bansiExcel";
 import { BansiCollectionTable } from "../../components/ui/BansiCollectionTable";
@@ -756,7 +757,7 @@ const FarmerCollection: React.FC = () => {
     [live.rows, applied, plantIds],
   );
 
-  // Static condition: the Bansi login (user id 307) sees the Farmer Collection in the Excel layout (VSP Name blocks + bold totals)
+  // Excel version 3 (Bansi, from the plant settings API) sees the Farmer Collection in the Excel layout (VSP Name blocks + bold totals)
   const bansiUser = isBansiUser();
   const centreNames = useMemo(
     () => new Map(centres.map((c) => [c.id, titleCase(c.name || c.id)])),
@@ -865,41 +866,40 @@ const FarmerCollection: React.FC = () => {
     };
   };
 
-  // Every login gets the plain STIPL sheet (no Total row); the Bansi login gets the Bansi sheet instead (see `actions` below)
+  // ONE "Excel Export" button. The sheet depends on the plant excel version (plant settings API):
+  //   version 1 (PlantId 0 / any other plant) -> normal Excel  (NEW_ORDER: Station Id first, no Total row)
+  //   version 2 (Athare)                       -> Athare Excel (OLD_ORDER: Date first, "farmercollection.xlsx", Sheet1)
+  //   version 3 (Bansi)                        -> Bansi Excel  (see bansiExcelActions below)
   const fileScope =
     applied.centre === "all" || !applied.centre ? "All" : applied.centre;
-  // Old Excel = Date first layout (22 columns, no Total row), New Excel = Station Id first layout (also no Total row, same as STIPL)
-  const baseActions: ExportAction[] = reportActions({
-    build: buildTable,
-    count: rows.length,
-    unit: "entries",
-    toast: toast.show,
-    stiplExcel: {
-      // Old Excel = farmercollection.xlsx layout, New Excel = 101010.xlsx layout; data only like the STIPL portal (NO Total row), except for the Bansi login which keeps the Total row.
-      // File name = VLC ("All" when All is selected) - Old / New - from - to
-      // Old Excel downloads as "farmercollection.xlsx" (sheet "Sheet1", no date in the name) - same as the old SmartX portal
-      old: () =>
-        sheetTable(OLD_ORDER, rows, "farmercollection", "num2", false, true),
-      new: () =>
-        sheetTable(
+  const versionExcel = (): ExportTable =>
+    isAthareUser()
+      ? sheetTable(OLD_ORDER, rows, "farmercollection", "num2", false, true)
+      : sheetTable(
           NEW_ORDER,
           rows,
           `${fileScope}-New-${applied.from}-${applied.to}`,
           "num2",
           false,
-        ),
-    },
+        );
+  const baseActions: ExportAction[] = reportActions({
+    build: buildTable,
+    count: rows.length,
+    unit: "entries",
+    toast: toast.show,
+    versionExcel,
   });
-  // Bansi login (user id 307): "New Excel Export" with only Morning or only Evening gives the "Farmer Collection Report" Excel.
-  // Old Excel Export and Morning + Evening together keep the Bansi sheet as before. Every other login keeps the normal Old / New Excel unchanged.
+  // Version 3 (Bansi): the same single Excel button gives the Bansi sheet.
+  //   only Morning or only Evening -> "Farmer Collection Report" sheet (date wise, bold Total row)
+  //   Morning + Evening together   -> the Bansi sheet (VSP Name blocks + centre totals)
+  // Version 1 and 2 keep the normal / Athare Excel from `versionExcel` above, untouched.
   const bansiExcelActions: ExportAction[] = baseActions.map((a) =>
-    (a.id === "excel" || a.id === "old") && bansiSheet
+    a.id === "excel" && bansiSheet
       ? {
           ...a,
           run: async () => {
             try {
-              if (a.id === "excel" && applied.shift !== "both") {
-                // New Excel Export + only Morning or only Evening: the "Farmer Collection Report" sheet (date wise, bold Total row)
+              if (applied.shift !== "both") {
                 await exportBansiReport(rows, {
                   from: applied.from,
                   to: applied.to,
@@ -910,18 +910,9 @@ const FarmerCollection: React.FC = () => {
                   codeOf: (id) => centreCodes.get(id) ?? "",
                 });
               } else {
-                // everything else (Old Excel, or Morning + Evening together): the Bansi sheet exactly as before
-                // Old = "farmercollection.xlsx" (no date, sheet Sheet1); New keeps the Bansi name, so the two never collide as "(1)" copies
-                await exportBansiSheet(
-                  bansiSheet,
-                  fileScope,
-                  a.id === "old" ? "farmercollection" : undefined,
-                );
+                await exportBansiSheet(bansiSheet, fileScope);
               }
-              toast.show(
-                `Exported ${rows.length} entries as ${a.id === "old" ? "Old" : "New"} Excel`,
-                "ok",
-              );
+              toast.show(`Exported ${rows.length} entries as Excel`, "ok");
             } catch {
               toast.show(MSG.exportFailed, "error");
             }

@@ -2,6 +2,7 @@ import type { CollectionEntry } from '../../data/farmerCollection';
 import { excelFileName, exactExcelFileName } from './fileName';
 import { GLOBALS } from '../../lib/portal/global';
 import { getSession } from '../../services/session';
+import { getExcelVersion } from '../../services/settings/plantSettings.api';
 import { exportPDF, loadXlsx, type ColType, type ExportTable } from './exporters';
 
 /**
@@ -25,7 +26,21 @@ export const BANSI_LOGIN_EMAILS: string[] = ['bansidairynagpur@gmail.com'];
  *   - user id 307 (live STIPL server) is Bansi's own id
  *   - user id 259 / MCC 183 (DPU server) is shared with copies of the Bansi record, so the login e-mail must be Bansi's
  */
-export const isBansiUser = (): boolean => {
+/**
+ * Excel version is decided by the plant settings API (/api/Login/settings, row of the logged-in PlantId,
+ * else the PlantId 0 row = version 1):
+ *   1 = normal Excel (every other plant)
+ *   2 = Athare Excel (only the Farmer Collection report has it)
+ *   3 = Bansi Excel layout
+ * The old hard-coded user-id check is kept below as `isBansiUserLegacy` (not used any more).
+ */
+export const EXCEL_NORMAL = 1;
+export const EXCEL_ATHARE = 2;
+export const EXCEL_BANSI = 3;
+export const isAthareUser = (): boolean => getExcelVersion() === EXCEL_ATHARE;
+export const isBansiUser = (): boolean => getExcelVersion() === EXCEL_BANSI;
+
+export const isBansiUserLegacy = (): boolean => {
   const userId = String(GLOBALS.userid ?? '').trim();
   if (userId === '307') return true;
   const sharedRecord = BANSI_USER_IDS.includes(userId) || BANSI_MCC_LOGIN_IDS.includes(String(GLOBALS.mccLoginId ?? '').trim());

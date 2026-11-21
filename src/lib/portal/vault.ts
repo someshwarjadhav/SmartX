@@ -4,6 +4,7 @@ export const LOGIN_KEY = "smartX-login";
 export const DATA_KEY = "smartX-session-data";
 
 export const MENU_KEY = "smartX-menu";
+export const PLANT_KEY = "smartX-plant-settings";
 
 const LEGACY_KEYS = ["smartX-user"];
 
@@ -27,7 +28,7 @@ export function vaultLoad<T>(key: string): T | null {
 }
 
 export function vaultClear(): void {
-  for (const k of [LOGIN_KEY, DATA_KEY, MENU_KEY, ...LEGACY_KEYS]) {
+  for (const k of [LOGIN_KEY, DATA_KEY, MENU_KEY, PLANT_KEY, ...LEGACY_KEYS]) {
     try {
       sessionStorage.removeItem(k);
     } catch {}

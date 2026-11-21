@@ -21,6 +21,11 @@ import {
 import { vaultDropLegacy } from "../lib/portal/vault";
 import { setSession } from "../services/session";
 import { clearSmartxCache } from "../hooks/useQuery";
+import {
+  clearPlantSettings,
+  isPlantSettingsLoaded,
+  loadPlantSettings,
+} from "../services/settings/plantSettings.api";
 export interface User extends LoginProfile {
   name: string;
   email: string;
@@ -91,6 +96,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         setSession(profile);
         await loadSessionData(profile);
         applySession(profile);
+        // plant wise settings: /api/Login/settings -> row of this PlantId (else PlantId 0) -> excel version
+        await loadPlantSettings(
+          profile.plantId,
+          profile.centerStationId || profile.stationId || profile.vlccIds?.[0],
+        );
         const next: User = {
           ...profile,
           name: profile.name || email.split("@")[0] || "User",
@@ -132,8 +142,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     clearSessionData();
     setSession(null);
     clearSmartxCache();
+    clearPlantSettings();
     setUser(null);
   }, []);
+  // Page reload while logged in: the saved answer is restored in restoreSession(); if none was saved, fetch it again
+  useEffect(() => {
+    if (!user || isPlantSettingsLoaded()) return;
+    let alive = true;
+    void loadPlantSettings(
+      user.plantId,
+      user.centerStationId || user.stationId || user.vlccIds?.[0],
+    ).then(() => {
+      if (alive) setUser((u) => (u ? { ...u } : u)); // re-render so pages see the excel version
+    });
+    return () => {
+      alive = false;
+    };
+  }, [user]);
   const lastActivityRef = useRef<number>(Date.now());
   const loggedIn = !!user;
   useEffect(() => {
