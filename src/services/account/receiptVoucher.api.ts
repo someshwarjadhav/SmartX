@@ -97,11 +97,12 @@ export async function saveReceiptVoucher(
   const fields = {
     StationId: stationOf(v.vlcid),
     FarmerId: String(v.farmerId),
-    FarmerMasterCode: toNumber(v.farmerCode || v.farmerId),
+    // The backend class has ONLY string properties: a JSON number cannot be bound and ends in "Please check data."
+    FarmerMasterCode: String(toNumber(v.farmerCode || v.farmerId)),
     EntryDate: apiDate(v.date),
-    Amount: toNumber(v.amount),
+    Amount: String(toNumber(v.amount)),
     DeductionType: "0",
-    PaymentMode: modeNumber(v.paymentMode, v.ledgerType),
+    PaymentMode: String(modeNumber(v.paymentMode, v.ledgerType)),
     Flag: FLAG,
     TransactionFlag: TRANSACTION_FLAG,
     Narration: v.narration.trim() || "0",

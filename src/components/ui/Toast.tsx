@@ -1,5 +1,6 @@
 import type * as React from 'react';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, Check, Info, X } from 'lucide-react';
 
@@ -37,7 +38,9 @@ export const Toast: React.FC<Props> = ({ message, onClose }) => {
     return () => clearTimeout(t);
   }, [item, tone, onClose]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div className="pointer-events-none fixed bottom-4 right-4 z-[90] flex flex-col gap-2 max-sm:inset-x-3 max-sm:right-3 safe-bottom" aria-live="polite">
       <AnimatePresence>
         {item && (
@@ -61,6 +64,7 @@ export const Toast: React.FC<Props> = ({ message, onClose }) => {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </div>,
+    document.body,
   );
 };

@@ -311,6 +311,29 @@ export function gatewayPostJson(
   return p;
 }
 
+function readableError(text: string): string {
+  const t = text.trim();
+  if (/^\s*\{/.test(t)) {
+    try {
+      const j = JSON.parse(t) as Record<string, unknown>;
+      const parts: string[] = [];
+      const title = j.title ?? j.Title ?? j.message ?? j.Message;
+      if (typeof title === "string" && title) parts.push(title);
+      const errs = j.errors ?? j.Errors;
+      if (errs && typeof errs === "object") {
+        for (const [k, v] of Object.entries(errs as Record<string, unknown>))
+          parts.push(`${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`);
+      }
+      const detail = j.detail ?? j.Detail;
+      if (typeof detail === "string" && detail) parts.push(detail);
+      if (parts.length) return parts.join(" | ").slice(0, 500);
+    } catch {
+      /* not JSON: fall through */
+    }
+  }
+  return t.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
 export interface TextOptions {
   /** abort = the request is dropped (queued ones never leave the browser) */
   signal?: AbortSignal;
@@ -350,11 +373,7 @@ export async function gatewayText(
       );
     const text = await res.text();
     if (!res.ok) {
-      const body = text
-        .replace(/<[^>]*>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 200);
+      const body = readableError(text);
       throw new ApiError(
         `The server answered with error ${res.status}${body ? `: ${body}` : "."}`,
         "server",

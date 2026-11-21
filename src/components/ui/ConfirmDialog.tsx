@@ -1,5 +1,6 @@
 import type * as React from 'react';
 import { useEffect, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from './Button';
 
 interface Props {
@@ -23,18 +24,23 @@ export const ConfirmDialog: React.FC<Props> = ({
 
   useEffect(() => {
     if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy) onCancel();
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [open, busy, onCancel]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[80] grid place-items-center bg-deep/55 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-deep/55 p-4 backdrop-blur-sm"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !busy) onCancel();
@@ -44,11 +50,11 @@ export const ConfirmDialog: React.FC<Props> = ({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-md rounded-2xl border border-line bg-panel p-5 shadow-pop"
+        className="my-auto w-full max-w-md rounded-2xl border border-line bg-panel p-5 shadow-pop"
       >
         <h2 id={titleId} className="font-display text-lg font-bold">{title}</h2>
         <div className="mt-4 text-sm">{children}</div>
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
           <Button variant="outline" disabled={busy} onClick={onCancel}>
             Cancel
           </Button>
@@ -57,6 +63,7 @@ export const ConfirmDialog: React.FC<Props> = ({
           </Button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 };
