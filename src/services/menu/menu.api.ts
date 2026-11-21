@@ -249,6 +249,8 @@ const ROUTES: Array<{ to: string; aliases: string[] }> = [
   { to: "/master/farmer-master", aliases: ["farmermaster"] },
   { to: "/master/excel-rate-upload", aliases: ["excelrateupload", "ratemaster"] },
   { to: "/master/rate-status", aliases: ["ratestatus"] },
+  { to: "/master/deduction-master", aliases: ["deductionmaster", "headmaster"] },
+  { to: "/billing/deduction-priority", aliases: ["deductionpriority"] },
   { to: "/settings/mobile-app", aliases: ["mobileappsettings"] },
   { to: "/settings/eko-milk-settings", aliases: ["ekomilksettings"] },
   { to: "/settings/dpu-settings", aliases: ["dpusettings"] },

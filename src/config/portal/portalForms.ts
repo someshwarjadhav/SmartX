@@ -218,7 +218,12 @@ export const NAV_MODULES: NavModule[] = [
       form("Linked Accounts", "/master/code-master", "code-master"),
       form("Route Supervisor", "/master/route-supervisor", "route-supervisor"),
       form("Bill Cycle Master", "/master/billcycle-master", "billcycle-master"),
-      form("Head Master", "/master/deduction-master", "deduction-master"),
+      form(
+        "Head Master",
+        "/master/deduction-master",
+        "deduction-master",
+        "/master/deduction-master",
+      ),
       form(
         "Subcategory Master",
         "/master/subcategory-master",
@@ -331,6 +336,7 @@ export const NAV_MODULES: NavModule[] = [
         "Deduction Priority",
         "/billing/deduction-priority",
         "deduction-priority",
+        "/billing/deduction-priority",
       ),
       form(
         "Standard Deduction",
