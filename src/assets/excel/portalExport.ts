@@ -1,5 +1,6 @@
 import { toCsv } from '../../lib/csv';
 import { excelFileName } from './fileName';
+import { loadXlsx, oneExcelAtATime } from './exporters';
 
 export interface ExportCol<T = unknown> {
   header: string;
@@ -40,23 +41,88 @@ const cellValue = (v: string | number): string | number => {
 };
 
 
-export async function exportExcel<T>(name: string, cols: ExportCol<T>[], rows: T[]) {
-  const XLSX = await import('xlsx');
+/**
+ * Total row for a plain list: columns are picked by their heading.
+ *   Sum               Qty / Liter / Kg / Amount / Incentive / Deduction / Payable ... (any other money or quantity column)
+ *   Weighted average  Fat / Snf / Clr / Water (weighted by the Liter / Qty column)
+ *   Amount / Qty      Rate
+ *   No total          ids, codes, mobile, account no, IFSC, dates, shift ... and any column that is not all numbers
+ * Returns undefined when nothing can be totalled (then no Total row is written).
+ */
+const SKIP_TOTAL = /\b(id|code|sr|sno|s\.no|no|number|mobile|phone|contact|account|acc|ifsc|pin|aadhaar|aadhar|rank|priority|year|month|days?|date|time|shift|sample|branch|reg|temp|temperature|reading|ph|density)\b/i;
+const AVG_TOTAL = /^(avg\.?\s*|average\s*)?(fat|snf|clr|water|degree)\b/i;
+const RATE_TOTAL = /\b(rate|price)\b/i;
+const QTY_HEAD = /^(total\s*)?(qty|quantity|liters?|litres?|ltr)\b/i;
+const AMOUNT_HEAD = /^(total\s*)?amount$/i;
+
+function autoTotals(head: string[], body: Array<Array<string | number>>): Array<string | number> | undefined {
+  if (body.length === 0) return undefined;
+  const numeric = head.map((_, i) => body.every((r) => r[i] === '' || r[i] === undefined || typeof r[i] === 'number') && body.some((r) => typeof r[i] === 'number'));
+  const col = (i: number): number[] => body.map((r) => Number(r[i]) || 0);
+  const sum = (i: number): number => col(i).reduce((a, b) => a + b, 0);
+  const round = (n: number): number => Math.round(n * 100) / 100;
+  const qty = head.findIndex((h, i) => numeric[i] && QTY_HEAD.test(h.trim()));
+  const amount = head.findIndex((h, i) => numeric[i] && AMOUNT_HEAD.test(h.trim()));
+  let any = false;
+  const out: Array<string | number> = head.map((h, i) => {
+    const t = h.trim();
+    if (!numeric[i] || SKIP_TOTAL.test(t)) return '';
+    if (AVG_TOTAL.test(t)) {
+      const w = qty >= 0 ? sum(qty) : 0;
+      if (qty < 0 || i === qty) return '';
+      any = true;
+      const v = col(i);
+      const wt = col(qty);
+      return w ? round(v.reduce((a, x, j) => a + x * (wt[j] ?? 0), 0) / w) : 0;
+    }
+    if (RATE_TOTAL.test(t)) {
+      if (qty < 0 || amount < 0) return '';
+      any = true;
+      const d = sum(qty);
+      return d ? round(sum(amount) / d) : 0;
+    }
+    any = true;
+    return round(sum(i));
+  });
+  if (!any) return undefined;
+  const label = out.findIndex((v) => v === '');
+  out[label >= 0 ? label : 0] = 'Total';
+  return out;
+}
+
+export interface ExcelOptions {
+  /** false = no Total row (lists where a total makes no sense, e.g. calibration readings) */
+  total?: boolean;
+}
+
+export function exportExcel<T>(name: string, cols: ExportCol<T>[], rows: T[], options: ExcelOptions = {}): Promise<void> {
+  return oneExcelAtATime(async () => {
+  const XLSX = await loadXlsx();
   const head = cols.map((c) => c.header);
   const body = rows.map((r) => cols.map((c) => cellValue(c.value(r))));
-  // only the column headings and the data rows - no title / generated / footer lines
-  const aoa: Array<Array<string | number>> = [head, ...body];
+  // header row + data rows + one bold Total row (no title / generated / footer lines)
+  const totals = options.total === false ? undefined : autoTotals(head, body);
+  const aoa: Array<Array<string | number>> = [head, ...body, ...(totals ? [totals] : [])];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
+  if (totals) {
+    // bold Total row (needs xlsx-js-style; without it the row is simply not bold)
+    totals.forEach((_, ci) => {
+      const addr = XLSX.utils.encode_cell({ r: aoa.length - 1, c: ci });
+      const cell = ws[addr] ?? (ws[addr] = { t: 's', v: '' });
+      (cell as unknown as { s?: unknown }).s = { font: { bold: true } };
+    });
+  }
   // every column as wide as its longest value / heading, so names and amounts are never cut off
   const textOf = (v: string | number | undefined): string => (typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: 4 }) : String(v ?? ''));
   ws['!cols'] = head.map((h, i) => {
     let longest = String(h).length + 3;
-    for (const r of body) longest = Math.max(longest, textOf(r[i]).length);
+    for (const r of totals ? [...body, totals] : body) longest = Math.max(longest, textOf(r[i]).length);
     return { wch: Math.min(70, Math.max(9, longest + 2)) };
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ') || 'Report');
   XLSX.writeFile(wb, excelFileName(name), { compression: true });
+  });
 }
 
 

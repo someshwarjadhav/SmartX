@@ -95,7 +95,6 @@ const SaleEntry: React.FC = () => {
   const listTicket = useRef(0);
 
   const [saving, setSaving] = useState(false);
-  const saveLock = useRef(false); // blocks a second save while one is in flight
   const [toDelete, setToDelete] = useState<SaleRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -172,12 +171,12 @@ const SaleEntry: React.FC = () => {
 
   // stock of the chosen item
   useEffect(() => {
-    if (!itemId || !date || !vlcId) {
+    if (!itemId || !date) {
       setStock("");
       return;
     }
     let alive = true;
-    getStock(plantId, itemId, date, date, vlcId)
+    getStock(plantId, itemId, date, date)
       .then((s) => alive && setStock(s))
       .catch(() => {
         if (alive) setStock("");
@@ -185,7 +184,7 @@ const SaleEntry: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [plantId, itemId, date, vlcId]);
+  }, [plantId, itemId, date]);
 
   const pickItem = (id: string) => {
     setItemId(id);
@@ -233,10 +232,9 @@ const SaleEntry: React.FC = () => {
     !!vlcId && !!party && !!itemId && n(qty) > 0 && rate.trim() !== "";
 
   const submit = async () => {
-    if (saving || saveLock.current) return;
+    if (saving) return;
     const why = problem();
     if (why) return toast(why, "warn");
-    saveLock.current = true;
     setSaving(true);
     try {
       const reply = await saveSale({
@@ -251,18 +249,15 @@ const SaleEntry: React.FC = () => {
         plantId,
       });
       toast(reply || "Record saved");
-      // clear the entry fields so the next entry starts empty
       setQty("");
-      setRate("");
       setPaid("0");
-      void getStock(plantId, itemId, date, date, vlcId)
+      void getStock(plantId, itemId, date, date)
         .then(setStock)
         .catch(() => undefined);
       void show();
     } catch (e) {
       toast(msg(e, "The entry could not be saved."), "warn");
     } finally {
-      saveLock.current = false;
       setSaving(false);
     }
   };
@@ -276,7 +271,7 @@ const SaleEntry: React.FC = () => {
       setRows((all) => all.filter((r) => r.key !== row.key));
       toast("Entry deleted");
       setToDelete(null);
-      void getStock(plantId, itemId, date, date, vlcId)
+      void getStock(plantId, itemId, date, date)
         .then(setStock)
         .catch(() => undefined);
     } catch (e) {

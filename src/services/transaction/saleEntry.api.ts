@@ -132,7 +132,6 @@ async function read(what: string, path: string): Promise<unknown> {
   return reply;
 }
 
-
 const itemNames = new Map<string, string>();
 
 export async function getItems(plantId: string): Promise<ItemOption[]> {

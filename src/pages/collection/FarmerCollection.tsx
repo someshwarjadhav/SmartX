@@ -60,7 +60,7 @@ import {
   exportBansiPdf,
   exportBansiReport,
   exportBansiSheet,
-  isAthareUser,
+  excelLayout,
   isBansiUser,
 } from "../../assets/excel/bansiExcel";
 import { BansiCollectionTable } from "../../components/ui/BansiCollectionTable";
@@ -636,6 +636,8 @@ function sheetTable(
   return {
     filename,
     ...(exactFileName ? { exactFileName: true } : {}),
+    // Athare sheet = plain data only; every other Excel gets the Total row
+    ...(withTotal ? {} : { noTotals: true }),
     title: "Farmer collection",
     columns: cols.map((c, i) => ({
       header: c.header,
@@ -867,20 +869,20 @@ const FarmerCollection: React.FC = () => {
   };
 
   // ONE "Excel Export" button. The sheet depends on the plant excel version (plant settings API):
-  //   version 1 (PlantId 0 / any other plant) -> normal Excel  (NEW_ORDER: Station Id first, no Total row)
-  //   version 2 (Athare)                       -> Athare Excel (OLD_ORDER: Date first, "farmercollection.xlsx", Sheet1)
+  //   version 1 (PlantId 0 / any other plant) -> normal Excel  (NEW_ORDER: Station Id first, WITH the Total row)
+  //   version 2 (Athare)                       -> Athare Excel (OLD_ORDER: Date first, "farmercollection.xlsx", Sheet1, no Total row)
   //   version 3 (Bansi)                        -> Bansi Excel  (see bansiExcelActions below)
   const fileScope =
     applied.centre === "all" || !applied.centre ? "All" : applied.centre;
   const versionExcel = (): ExportTable =>
-    isAthareUser()
+    excelLayout() === "athare"
       ? sheetTable(OLD_ORDER, rows, "farmercollection", "num2", false, true)
       : sheetTable(
           NEW_ORDER,
           rows,
           `${fileScope}-New-${applied.from}-${applied.to}`,
           "num2",
-          false,
+          true,
         );
   const baseActions: ExportAction[] = reportActions({
     build: buildTable,

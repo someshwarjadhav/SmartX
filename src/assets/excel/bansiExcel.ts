@@ -3,7 +3,7 @@ import { excelFileName, exactExcelFileName } from './fileName';
 import { GLOBALS } from '../../lib/portal/global';
 import { getSession } from '../../services/session';
 import { getExcelVersion } from '../../services/settings/plantSettings.api';
-import { exportPDF, loadXlsx, type ColType, type ExportTable } from './exporters';
+import { exportPDF, loadXlsx, oneExcelAtATime, type ColType, type ExportTable } from './exporters';
 
 /**
  * Bansi's Farmer Collection sheet (All 11-10-26_20-10-26.xlsx):
@@ -38,6 +38,12 @@ export const EXCEL_NORMAL = 1;
 export const EXCEL_ATHARE = 2;
 export const EXCEL_BANSI = 3;
 export const isAthareUser = (): boolean => getExcelVersion() === EXCEL_ATHARE;
+/** the 3 cases of the version logic in one place: 3 = bansi, 2 = athare, anything else (1 / PlantId 0) = normal */
+export type ExcelLayout = 'normal' | 'athare' | 'bansi';
+export const excelLayout = (): ExcelLayout => {
+  const v = getExcelVersion();
+  return v === EXCEL_BANSI ? 'bansi' : v === EXCEL_ATHARE ? 'athare' : 'normal';
+};
 export const isBansiUser = (): boolean => getExcelVersion() === EXCEL_BANSI;
 
 export const isBansiUserLegacy = (): boolean => {
@@ -168,7 +174,10 @@ export const bansiFileName = (scope: string, from: string, to: string): string =
 const COL_WIDTHS = [6, 36, 11, 11, 11, 13, 7, 7, 9, 13, 13, 8, 16, 11, 11];
 
 /** `exactName` (Old Excel Export): file saved as exactly that name, sheet called Sheet1, no date in the name */
-export async function exportBansiSheet(sheet: BansiSheet, fileScope: string, exactName?: string): Promise<void> {
+export function exportBansiSheet(sheet: BansiSheet, fileScope: string, exactName?: string): Promise<void> {
+  return oneExcelAtATime(() => writeBansiSheet(sheet, fileScope, exactName));
+}
+async function writeBansiSheet(sheet: BansiSheet, fileScope: string, exactName?: string): Promise<void> {
   const XLSX = await loadXlsx();
   const NCOL = BANSI_HEAD.length;
   const pad = (row: Array<string | number>): Array<string | number> => [...row, ...Array.from({ length: Math.max(0, NCOL - row.length) }, () => '')];
@@ -272,7 +281,10 @@ export const bansiReportFileName = (o: BansiReportOptions): string => {
   return `${day} ${shift}`;
 };
 
-export async function exportBansiReport(rows: CollectionEntry[], o: BansiReportOptions): Promise<void> {
+export function exportBansiReport(rows: CollectionEntry[], o: BansiReportOptions): Promise<void> {
+  return oneExcelAtATime(() => writeBansiReport(rows, o));
+}
+async function writeBansiReport(rows: CollectionEntry[], o: BansiReportOptions): Promise<void> {
   const XLSX = await loadXlsx();
 
   // station order = centre code order (1, 2, 3 ...), same as the Bansi sheet
