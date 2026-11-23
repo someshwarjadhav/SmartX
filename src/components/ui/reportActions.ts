@@ -13,15 +13,15 @@ interface Options {
   unit?: string;
   toast: (message: string, tone?: ToastTone) => void;
   /**
-   * Adds the "Old Excel Export" + "New Excel Export" pair (Farmer Collection).
-   * Both are STIPL-style sheets (header on row 1, total row with SUM formulas), each with its own column layout.
+   * Farmer Collection: ONE "Excel Export" button whose sheet is chosen by the caller from the plant excel version
+   * (1 = normal, 2 = Athare layout, 3 = Bansi layout - see FarmerCollection.tsx). Returns the STIPL-style sheet to download.
    */
-  stiplExcel?: { old: () => ExportTable; new: () => ExportTable };
+  versionExcel?: () => ExportTable;
   /** leave a button out */
   without?: Array<'excel' | 'pdf' | 'print' | 'csv'>;
 }
 
-export function reportActions({ build, count, unit = 'rows', toast, stiplExcel, without = [] }: Options): ExportAction[] {
+export function reportActions({ build, count, unit = 'rows', toast, versionExcel, without = [] }: Options): ExportAction[] {
   const go = (done: string, run: (t: ExportTable) => void | Promise<void>, builder: () => ExportTable = build) => async () => {
     try {
       await run(builder());
@@ -32,12 +32,9 @@ export function reportActions({ build, count, unit = 'rows', toast, stiplExcel, 
   };
 
   const all: Array<ExportAction & { key: 'excel' | 'pdf' | 'print' | 'csv' }> = [
-    ...(stiplExcel
-      ? [
-          { key: 'excel' as const, id: 'old', label: 'Old Excel Export', icon: FileSpreadsheet, variant: 'primary' as const, run: go('Exported {n} as Old Excel', exportPlainExcel, stiplExcel.old) },
-          { key: 'excel' as const, id: 'excel', label: 'New Excel Export', icon: FileSpreadsheet, variant: 'primary' as const, run: go('Exported {n} as New Excel', exportPlainExcel, stiplExcel.new) },
-        ]
-      : [{ key: 'excel' as const, id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary' as const, run: go('Exported {n} as Excel', exportExcel) }]),
+    versionExcel
+      ? { key: 'excel' as const, id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary' as const, run: go('Exported {n} as Excel', exportPlainExcel, versionExcel) }
+      : { key: 'excel' as const, id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary' as const, run: go('Exported {n} as Excel', exportExcel) },
     { key: 'pdf', id: 'pdf', label: 'PDF Export', icon: FileText, variant: 'danger', run: go('Exported {n} as PDF', exportPDF) },
     { key: 'print', id: 'print', label: 'Print', icon: Printer, variant: 'outline', run: go('Print preview opened for {n}', printTable) },
     { key: 'csv', id: 'csv', label: 'CSV Export', icon: Table2, variant: 'success', run: go('Exported {n} as CSV', exportCSV) },
