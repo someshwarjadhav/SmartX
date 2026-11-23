@@ -47,4 +47,8 @@ export const DPU = {
   milkBillProcessMA: '/Login/MilkBillProcessMA',
   getMilkBillFreeze: '/Login/GetMilkBillFreeze',
   milkBillPaySummMA: '/Login/MilkBillPaySummMA',
+
+  getSalesPurchase: '/Login/GetSalesPurchase',
+salePurchaseSave: '/Login/SalePurchaseSave',
+deleteSalesPurchase: '/Login/DeleteSalesPurchase',
 } as const;
