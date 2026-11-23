@@ -17,12 +17,12 @@ interface Props {
 }
 
 export const ExportBar: React.FC<Props> = ({ actions, disabled }) => {
-  // every button keeps its own "running" flag: pressing one never greys out or blocks the others
+  // only ONE export runs at a time: while one is being made the other buttons wait, so no second file opens
   const [running, setRunning] = useState<ReadonlySet<string>>(() => new Set());
   const lock = useRef<Set<string>>(new Set());
 
   const run = async (action: ExportAction) => {
-    if (lock.current.has(action.id)) return; // double click on the SAME button only
+    if (lock.current.size > 0) return; // any export already running (same or another button)
     lock.current.add(action.id);
     setRunning(new Set(lock.current));
     try {
@@ -47,7 +47,7 @@ export const ExportBar: React.FC<Props> = ({ actions, disabled }) => {
             variant={a.variant}
             icon={<Icon size={15} aria-hidden />}
             loading={running.has(a.id)}
-            disabled={disabled}
+            disabled={disabled || (running.size > 0 && !running.has(a.id))}
             onClick={() => void run(a)}
           >
             {a.label}

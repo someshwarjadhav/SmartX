@@ -11,11 +11,13 @@ import { apiDate } from "../utils/date";
 import { isObj, pickValue, type Obj } from "../utils/loose";
 import { num } from "../utils/parse";
 import { getCashSummary } from "./cashPaymentSummary.api";
-import {
-  getDeductionTypes,
-  getDeductions,
-} from "../transaction/deductionEntry.api";
 
+/**
+ * Farmer Bill on the DPU API (https://dpu.shivinfotech.co.in/api):
+ *   GET  /Login/MilkBillProcessma?id=0&fromdate=<date>&todate=<date>&stationid=<vlc id>   -> bill JSON per farmer
+ *   POST /Login/getMilkBillFreeze   (body = BillFreeze)                                  -> freeze the bill
+ * Same calls as the old portal (/home/MilkBillProcessma and /dairy/dairy/getMilkBillFreeze), only the path moved to /Login.
+ */
 export const FARMER_BILL_PATH = "/Login/MilkBillProcessma";
 export const BILL_FREEZE_PATH = "/Login/getMilkBillFreeze";
 
@@ -30,12 +32,13 @@ export interface BillFreeze {
 }
 
 const NO_RECORD = /no\s*(record|data)|not\s*found/i;
-
+/** Server-side file-permission failure of the DPU host (it cannot write its bill cache file). */
 const SERVER_FILE_ERROR = /access to the path|is denied|permission/i;
 
 const billQuery = (from: string, to: string, stationId: string) =>
   `id=0&fromdate=${encodeURIComponent(apiDate(from))}&todate=${encodeURIComponent(apiDate(to))}&stationid=${encodeURIComponent(stationId)}`;
 
+/** Looks at a DPU reply: returns the bill JSON, or throws when the server sent a message instead of a bill. */
 function checkReply(reply: unknown): unknown {
   if (typeof reply === "string") {
     const text = reply.trim();
@@ -94,51 +97,11 @@ const asObj = (v: unknown): Obj | null => {
   }
   return isObj(x) ? x : null;
 };
-const normKey = (k: string): string =>
-  k.toLowerCase().replace(/[^a-z0-9]/g, "");
-/** The bill reply's "deduction" list: rows { farmerid, reftype, DeductionAmt, HeadName } (Advance, Cattle Feed ...). */
-function isDeductionRows(v: unknown): v is Obj[] {
-  if (!Array.isArray(v)) return false;
-  const first = v.find(isObj);
-  if (!first) return false;
-  const keys = Object.keys(first).map(normKey);
-  return (
-    keys.includes("headname") &&
-    (keys.includes("deductionamt") || keys.includes("deductionamount"))
-  );
-}
-/** Same bill head + amount of the same farmer = the same row (a window may repeat the period's deduction). */
-const deductionRowKey = (r: Obj): string =>
-  Object.keys(r)
-    .map(normKey)
-    .sort()
-    .map((k) => {
-      const orig = Object.keys(r).find((x) => normKey(x) === k) as string;
-      return `${k}=${String(r[orig])}`;
-    })
-    .join("|");
-/** Joins deduction rows of several windows without counting the same row twice. */
-function joinDeductionRows(a: unknown, b: Obj[]): Obj[] {
-  const out: Obj[] = Array.isArray(a) ? (a.filter(isObj) as Obj[]) : [];
-  const seen = new Set(out.map(deductionRowKey));
-  for (const r of b) {
-    if (!isObj(r)) continue;
-    const k = deductionRowKey(r);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(r);
-  }
-  return out;
-}
-/** A farmer's object without its "deduction" rows (those are read once, after the windows are joined). */
-function withoutDeductionRows(o: Obj): Obj {
-  const rest: Obj = {};
-  for (const [k, v] of Object.entries(o)) if (!isDeductionRows(v)) rest[k] = v;
-  return rest;
-}
 const SUM_KEYS =
   /^(incentive|totalincentive|transport|totaltransport|milkdeposit|deposit|advance|currentadvance|cattlefeed)$/;
 
+/** Bills of the same farmer from several windows become one bill: daily milk lists are joined, Incentive / Transport / Deposit added up. */
+/** Figures that are added up when a farmer's bill is joined from several windows (name used in the joined bill -> BillExtras field). */
 const ADD_UP: Array<[keyof BillExtras, string]> = [
   ["incentive", "Incentive"],
   ["transport", "Transport"],
@@ -175,10 +138,7 @@ function mergeBills(parts: Obj[], from: string, to: string): Obj {
       };
       acc.set(id, a);
       a.parts += 1;
-      const found = scanExtras(withoutDeductionRows(val)) as Record<
-        string,
-        number | undefined
-      >;
+      const found = scanExtras(val) as Record<string, number | undefined>;
       for (const [field] of [...ADD_UP, ...ADD_UP_ALL]) {
         const v = found[field];
         if (v === undefined) continue;
@@ -199,8 +159,7 @@ function mergeBills(parts: Obj[], from: string, to: string): Obj {
       const into = out[have] as Obj;
       for (const [f, v] of Object.entries(val)) {
         const nf = f.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (isDeductionRows(v)) into[f] = joinDeductionRows(into[f], v);
-        else if (Array.isArray(v) && (/milk$/.test(nf) || looksLikeMilkRows(v)))
+        if (Array.isArray(v) && (/milk$/.test(nf) || looksLikeMilkRows(v)))
           into[f] = [
             ...(Array.isArray(into[f]) ? (into[f] as unknown[]) : []),
             ...v,
@@ -228,16 +187,6 @@ function mergeBills(parts: Obj[], from: string, to: string): Obj {
         if ((a.n.get(field) ?? 0) === a.parts)
           extra[name] = Math.round((a.sum.get(field) as number) * 100) / 100;
     }
-    // Advance / Cattle Feed ... from the joined "deduction" rows (each row once)
-    const fromRows = scanExtras(
-      Object.fromEntries(
-        Object.entries(rest).filter(([, v]) => isDeductionRows(v)),
-      ),
-    );
-    if (fromRows.advance !== undefined && extra.CurrentAdvance === undefined)
-      extra.CurrentAdvance = fromRows.advance;
-    if (fromRows.cattleFeed !== undefined && extra.CattleFeed === undefined)
-      extra.CattleFeed = fromRows.cattleFeed;
     out[k] = { ...extra, ...rest };
   }
   return out;
@@ -327,6 +276,10 @@ export interface BillProgress {
   raw: unknown;
 }
 
+/**
+ * One window. When the server does not answer it, the window is cut in two and each half is asked again (down to single days);
+ * a single day that still fails (after one more try) is added to `missing` - never hidden as "no record".
+ */
 async function fetchSpan(
   start: string,
   end: string,
@@ -398,112 +351,6 @@ function dayRanges(days: string[]): string[] {
   return out;
 }
 
-type BillHeads = Awaited<ReturnType<typeof getDeductionTypes>>;
-const headCache = new Map<string, BillHeads>();
-const HEADS_KEY = (station: string) => `smartx.billHeads.${station}`;
-const HEADS_TTL_MS = 24 * 60 * 60_000;
-/** Bill heads found earlier: this session, else the browser's copy (a day old at most). */
-function keptHeads(station: string): BillHeads {
-  const mem = headCache.get(station);
-  if (mem?.length) return mem;
-  try {
-    const raw = localStorage.getItem(HEADS_KEY(station));
-    const saved = raw
-      ? (JSON.parse(raw) as { at: number; types: BillHeads })
-      : null;
-    if (saved && Date.now() - saved.at < HEADS_TTL_MS && saved.types?.length) {
-      headCache.set(station, saved.types);
-      return saved.types;
-    }
-  } catch {
-    /* no browser storage: the heads are asked again */
-  }
-  return [];
-}
-function keepHeads(station: string, types: BillHeads): void {
-  headCache.set(station, types);
-  try {
-    localStorage.setItem(
-      HEADS_KEY(station),
-      JSON.stringify({ at: Date.now(), types }),
-    );
-  } catch {
-    /* ignore */
-  }
-}
-async function fetchHeadDeductions(
-  from: string,
-  to: string,
-  stationId: string,
-): Promise<Map<string, Obj[]>> {
-  const out = new Map<string, Obj[]>();
-  let types = keptHeads(stationId);
-  try {
-    // getBillHead tries several station ids (some answer 400) - once found, the heads are kept for the session
-    if (!types.length) {
-      types = await getDeductionTypes(stationId);
-      if (types.length) keepHeads(stationId, types);
-    }
-  } catch {
-    return out;
-  }
-  for (const t of types) {
-    try {
-      const rows = await getDeductions({
-        vlcid: stationId,
-        reftype: t.code,
-        from: apiDate(from),
-        to: apiDate(to),
-      });
-      for (const r of rows) {
-        if (!(r.deduction > 0)) continue;
-        const id = idKey(r.farmerId);
-        const list = out.get(id) ?? [];
-        list.push({
-          farmerid: r.farmerId,
-          reftype: t.code,
-          DeductionAmt: r.deduction.toFixed(2),
-          HeadName: t.name,
-        });
-        out.set(id, list);
-      }
-    } catch {
-      /* this head cannot be read: skipped */
-    }
-  }
-  return out;
-}
-
-/** Puts the deduction rows into each farmer's bill that has none of its own. Returns how many farmers got rows. */
-function injectDeductions(bills: Obj, rows: Map<string, Obj[]>): number {
-  let n = 0;
-  for (const [key, raw] of Object.entries(bills)) {
-    const farmer = isObj(raw) ? raw : asObj(raw);
-    if (!farmer) continue;
-    if (Object.values(farmer).some((v) => isDeductionRows(v))) continue;
-    const mine = rows.get(idKey(billHeading(key).id || key));
-    if (!mine?.length) continue;
-    bills[key] = { ...farmer, deduction: mine };
-    n += 1;
-  }
-  return n;
-}
-
-/** A bill reply plus the deductions Deduction Entry holds for the period. */
-async function withHeadDeductions(
-  raw: unknown,
-  from: string,
-  to: string,
-  stationId: string,
-): Promise<unknown> {
-  const bills = asObj(raw);
-  if (!bills || !Object.keys(bills).length) return raw;
-  const rows = await fetchHeadDeductions(from, to, stationId);
-  if (!rows.size) return raw;
-  const copy: Obj = { ...bills };
-  return injectDeductions(copy, rows) ? copy : raw;
-}
-
 async function billInWindows(
   from: string,
   to: string,
@@ -548,10 +395,6 @@ async function billInWindows(
     return {};
   }
   const all = mergeBills(parts, from, to);
-  if (!cancelled?.()) {
-    const rows = await fetchHeadDeductions(from, to, stationId);
-    if (rows.size) injectDeductions(all, rows);
-  }
   merged.add(all);
   if (missing.length) partial.set(all, dayRanges(missing));
   return all;
@@ -569,12 +412,7 @@ export async function getPrintTableData(
   if (dayCount(from, to) > WINDOW_DAYS)
     return billInWindows(from, to, stationId, onProgress, cancelled);
   try {
-    return await withHeadDeductions(
-      await billOnce(from, to, stationId),
-      from,
-      to,
-      stationId,
-    );
+    return await billOnce(from, to, stationId);
   } catch (e) {
     if (!(e instanceof ApiError) || !TIMEOUT.test(e.message)) throw e;
     if (from >= to) throw e; // a single day the server cannot answer: an error, not "no record"
@@ -980,17 +818,9 @@ const NAME_FIELDS = [
   "name",
   "type",
 ];
-const AMOUNT_FIELDS = [
-  "amount",
-  "amt",
-  "value",
-  "total",
-  "totalamount",
-  // the bill reply's "deduction" rows: { farmerid, reftype, DeductionAmt, HeadName }
-  "deductionamt",
-  "deductionamount",
-];
+const AMOUNT_FIELDS = ["amount", "amt", "value", "total", "totalamount"];
 
+/** Scalars of the farmer's object (the daily milk lists are skipped). A list of { head name, amount } rows becomes name -> amount. */
 function flatten(o: Obj, out: Map<string, number>, depth = 0): void {
   if (depth > 3) return;
   for (const [k, v] of Object.entries(o)) {

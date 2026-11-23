@@ -1,7 +1,6 @@
 import type { VlcRecord } from "../../services/master/vlcMaster.api.ts";
 import { excelFileName } from './fileName';
-
-const loadXlsx = () => import("xlsx");
+import { loadXlsx } from './exporters';
 
 export const VLC_EXCEL_COLUMNS = [
   "Village Id",

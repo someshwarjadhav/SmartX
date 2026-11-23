@@ -9,6 +9,7 @@ import { CommandPalette } from './CommandPalette';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { PlanExpiryPopup } from '../storage/PlanExpiryPopup';
+import { preloadXlsx } from '../../assets/excel/exporters';
 
 const COLLAPSE_KEY = 'smartx-collapsed';
 
@@ -35,6 +36,13 @@ const AppShell: React.FC = () => {
   }, [collapsed]);
 
   useEffect(() => setDrawer(false), [pathname]);
+
+  // load the Excel library in the background once, so the first Excel click does not have to wait for it
+  useEffect(() => {
+    const idle = (window as unknown as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+    if (idle) idle(preloadXlsx);
+    else window.setTimeout(preloadXlsx, 1500);
+  }, []);
 
   useEffect(() => {
     const page = findNavIn(groups, pathname)?.item.label;
