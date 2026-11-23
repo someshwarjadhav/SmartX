@@ -1,5 +1,6 @@
 import { toCsv } from '../../lib/csv';
 import { excelFileName, exactExcelFileName } from './fileName';
+import { brandImgHtml, getBrandLogo, loadLogoPixels } from '../../lib/brandLogo';
 
 /** 'id' = a whole number written as it is (farmer id, branch id ...): a real number, no thousands comma */
 export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money' | 'num2' | 'general' | 'id';
@@ -463,6 +464,7 @@ export async function exportPDF(t: ExportTable): Promise<void> {
   const mod = autoTableMod as unknown as { default: unknown; autoTable?: unknown };
   const autoTable = (typeof mod.default === 'function' ? mod.default : (mod.default as { default?: unknown } | undefined)?.default ?? mod.autoTable) as typeof autoTableMod.default;
   const p = reportPalette();
+  const logo = await loadLogoPixels(getBrandLogo());
   const cols = t.columns.length;
   // wide reports (e.g. Variance, 19 columns) get a bigger sheet so the text stays readable
   const doc = new jsPDF({ orientation: cols > 6 ? 'landscape' : 'portrait', unit: 'pt', format: cols > 14 ? 'a3' : 'a4' });
@@ -470,18 +472,23 @@ export async function exportPDF(t: ExportTable): Promise<void> {
   const h = doc.internal.pageSize.getHeight();
   const M = 36;
 
+  // own logo of the dairy (Numax / NutryMist): LEFT side, the title moves to its right
+  const logoK = logo ? Math.min(130 / logo.w, 48 / logo.h) : 0;
+  const logoW = logo ? logo.w * logoK : 0;
+  const tx = logo ? M + logoW + 14 : M;
   const head = (): void => {
     doc.setFillColor(...p.brand);
     doc.rect(0, 0, w, 8, 'F');
+    if (logo) doc.addImage(logo.data, logo.format, M, 14, logoW, logo.h * logoK);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.setTextColor(...p.text);
-    doc.text(t.title, M, 40);
+    doc.text(t.title, tx, 40);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9.5);
     doc.setTextColor(...p.mute);
-    if (t.subtitle) doc.text(t.subtitle, M, 56);
-    doc.text(`SmartX  |  Generated ${stamp()}`, M, t.subtitle ? 70 : 56);
+    if (t.subtitle) doc.text(t.subtitle, tx, 56);
+    doc.text(`SmartX  |  Generated ${stamp()}`, tx, t.subtitle ? 70 : 56);
     doc.setDrawColor(...p.brand);
     doc.setLineWidth(1.2);
     doc.line(M, t.subtitle ? 78 : 64, w - M, t.subtitle ? 78 : 64);
@@ -573,6 +580,10 @@ export async function exportPDF(t: ExportTable): Promise<void> {
       if (d.pageNumber > 1) {
         doc.setFillColor(...p.brand);
         doc.rect(0, 0, w, 6, 'F');
+        if (logo) {
+          const k = Math.min(90 / logo.w, 24 / logo.h);
+          doc.addImage(logo.data, logo.format, M, 10, logo.w * k, logo.h * k);
+        }
       }
     },
   });
@@ -661,7 +672,7 @@ export function printTable(t: ExportTable): void {
   const landscape = t.columns.length > 6;
   printHTML(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.title)}</title><style>${printCss(p, landscape, t.columns.length > 10)}</style></head><body>
     <div class="bar"></div>
-    <div class="top"><div><h1>${esc(t.title)}</h1><p class="meta">${t.subtitle ? `${esc(t.subtitle)}` : ''}</p></div><div style="text-align:right"><div class="brand">SmartX</div><p class="meta">Generated ${esc(stamp())}</p></div></div>
+    <div class="top"><div style="display:flex;align-items:center;gap:14px">${brandImgHtml(getBrandLogo(), 44)}<div><h1>${esc(t.title)}</h1><p class="meta">${t.subtitle ? `${esc(t.subtitle)}` : ''}</p></div></div><div style="text-align:right"><div class="brand">SmartX</div><p class="meta">Generated ${esc(stamp())}</p></div></div>
     <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>
     <div class="foot"><span>SmartX</span><span>${t.rows.length} rows</span></div></body></html>`);
 }

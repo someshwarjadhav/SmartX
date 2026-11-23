@@ -1,6 +1,7 @@
 import { toCsv } from '../../lib/csv';
 import { excelFileName } from './fileName';
 import { loadXlsx, oneExcelAtATime } from './exporters';
+import { brandImgHtml, getBrandLogo, printWhenImagesReady } from '../../lib/brandLogo';
 
 export interface ExportCol<T = unknown> {
   header: string;
@@ -180,14 +181,15 @@ function pdfBody<T>(title: string, cols: ExportCol<T>[], rows: T[], o: PdfOption
   const chips = (o.meta ?? []).filter(([, v]) => v).map(([k, v]) => `<span class="chip"><b>${htmlEsc(k)}</b>${htmlEsc(v)}</span>`).join('');
   const cards = (o.summary ?? []).map((s) => `<div class="card ${s.tone ?? ''}"><p>${htmlEsc(s.label)}</p><strong>${htmlEsc(s.value)}</strong></div>`).join('');
   const generated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  const brand = getBrandLogo();
 
   return `
     <header class="top">
-      <div class="logo" aria-hidden="true">
+      ${brand ? `<div class="logo own">${brandImgHtml(brand, 46)}</div>` : `<div class="logo" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2.5c3.4 4.3 6 7.4 6 10.9A6 6 0 0 1 6 13.4C6 9.9 8.6 6.8 12 2.5Z" fill="#fff"/><path d="M9.9 11.4l4.2 4.2M14.1 11.4l-4.2 4.2" stroke="#2563eb" stroke-width="1.9" fill="none" stroke-linecap="round"/></svg>
-      </div>
+      </div>`}
       <div class="ttl">
-        <p class="eyebrow">SMARTX · DAIRY PORTAL</p>
+        <p class="eyebrow">${brand ? htmlEsc(brand.name.toUpperCase()) : 'SMARTX · DAIRY PORTAL'}</p>
         <h1>${htmlEsc(title)}</h1>
         ${o.subtitle ? `<p class="sub">${htmlEsc(o.subtitle)}</p>` : ''}
       </div>
@@ -215,6 +217,7 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
         body { margin: 0; padding: 28px; color: var(--deep); background: #fff; font: 12px/1.45 Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .top { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 18px 22px; color: #fff; border-radius: 16px; border-bottom: 5px solid var(--brand); background: linear-gradient(120deg, #0b1a3d 0%, #1b3771 58%, #2563eb 100%); }
         .logo { display: grid; width: 50px; height: 50px; flex: 0 0 auto; place-items: center; border-radius: 15px; background: linear-gradient(135deg, #2563eb, #60a5fa); box-shadow: 0 4px 12px rgba(37,99,235,.45); }
+        .logo.own { width: auto; min-width: 58px; height: 58px; padding: 6px 10px; border-radius: 12px; background: #fff; box-shadow: none; }
         .ttl { min-width: 0; flex: 1; }
         .eyebrow { margin: 0 0 3px; color: #93c5fd; font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
         h1 { margin: 0; font-size: 22px; line-height: 1.2; overflow-wrap: anywhere; }
@@ -251,5 +254,5 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
     </head><body>${pdfBody(title, cols, rows, options)}</body></html>`);
   report.document.close();
   report.focus();
-  window.setTimeout(() => report.print(), 400);
+  printWhenImagesReady(report);
 }
