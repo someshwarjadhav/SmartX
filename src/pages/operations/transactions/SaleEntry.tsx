@@ -260,7 +260,6 @@ const SaleEntry: React.FC = () => {
         .catch(() => undefined);
       void show();
     } catch (e) {
-      console.error("[SaleEntry] save failed:", e);
       toast(msg(e, "The entry could not be saved."), "warn");
     } finally {
       saveLock.current = false;
@@ -272,7 +271,6 @@ const SaleEntry: React.FC = () => {
     const row = toDelete;
     if (!row || !applied || deleting) return;
     setDeleting(true);
-    console.log("[SaleEntry] delete clicked: id", row.id, "item", row.item);
     try {
       await deleteSale(row, applied);
       setRows((all) => all.filter((r) => r.key !== row.key));
@@ -282,7 +280,6 @@ const SaleEntry: React.FC = () => {
         .then(setStock)
         .catch(() => undefined);
     } catch (e) {
-      console.error("[SaleEntry] delete failed (all attempts):", e);
       toast(msg(e, "The entry could not be deleted."), "warn");
     } finally {
       setDeleting(false);

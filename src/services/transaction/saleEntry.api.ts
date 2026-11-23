@@ -1,22 +1,20 @@
-import { clearRequestMemo, gatewayText } from "../http/client";
+import { clearRequestMemo } from "../http/client";
 import { getSession } from "../session";
-import { ApiError } from "../http/errors";
+import { ApiError, EmptyReplyError } from "../http/errors";
 import { GLOBALS } from "../../lib/portal/global";
-import { dpuWrite } from "../http/dpu";
-import { BASE_URL } from "../config";
-import { encryptPayload, encryptXorPayload } from "../../lib/portal/crypto";
+import { dpuSave, dpuWrite } from "../http/dpu";
+import { encryptXorPayload } from "../../lib/portal/crypto";
 import { apiDate } from "../utils/date";
 import { isObj, norm, type Obj } from "../utils/loose";
 import { checkReply } from "../master/farmerMaster.api";
 import { readPath } from "../account/voucher.http";
+import { DPU } from "../http/dpuEndpoints";
 
 export const VENDOR_PATH = "/dairy/dairy/VenderMasterDN/";
 export const ITEM_PATH = "/dairy/dairy/getItemMaster";
 export const STOCK_PATH = "/dairy/dairy/itemstock";
 export const SALES_PATH = "/dairy/dairy/salespurchase";
 
-// Cattle feed entries always belong to branch 5001 (static, same as the old
-// portal). It is used as BranchId when saving and for the stock lookup.
 export const CATTLE_FEED_BRANCH = "5001";
 
 export type SaleCategory = "S" | "P";
@@ -66,10 +64,6 @@ export interface SaleRow {
 }
 
 const q = encodeURIComponent;
-
-/** Every Cattle Feed log line starts with [SaleEntry] -- filter the Console by that. */
-export const log = (...a: unknown[]): void =>
-  console.log("[SaleEntry]", ...a);
 
 export const plantIdOf = (): string => String(GLOBALS.plantid || "1").trim();
 
@@ -138,8 +132,7 @@ async function read(what: string, path: string): Promise<unknown> {
   return reply;
 }
 
-// ItemId -> item name, filled when the item list loads. The list API repeats an
-// entry once per item name (same autorownum), so the real name is looked up here.
+
 const itemNames = new Map<string, string>();
 
 export async function getItems(plantId: string): Promise<ItemOption[]> {
@@ -197,18 +190,19 @@ function stockFromReply(reply: unknown, itemId: string): string {
     (label
       ? rows.find(
           (r) =>
-            pick(r, ["itemname", "item", "name", "description"]).toLowerCase() ===
-            label,
+            pick(r, [
+              "itemname",
+              "item",
+              "name",
+              "description",
+            ]).toLowerCase() === label,
         )
       : undefined) ??
     (rows.length === 1 && !pick(rows[0]!, ["itemid", "itemcode"])
       ? rows[0]
       : undefined);
-  if (!mine) {
-    log("stock: no row for item", itemId, "rows:", rows);
-    return "";
-  }
-  const stock = pick(mine, [
+  if (!mine) return "";
+  return pick(mine, [
     "curstock",
     "currentstock",
     "stock",
@@ -222,14 +216,8 @@ function stockFromReply(reply: unknown, itemId: string): string {
     "qtyinhand",
     "qty",
   ]);
-  if (!stock) log("stock: row found but no stock field in", mine);
-  return stock;
 }
 
-// The first version sent from = to = the sale date, which only returns the
-// movement of that single day (that is why it showed -1 after a sale of 1).
-// Real stock needs a wider "from" date, so a few likely parameter sets are
-// tried until one gives a positive stock; the winner is remembered.
 let stockWinner = "";
 
 export async function getStock(
@@ -280,55 +268,42 @@ export async function getStock(
     try {
       const reply = await read("stock", c.path);
       const value = stockFromReply(reply, itemId);
-      log("stock try", c.key, "->", value === "" ? "(empty)" : value, c.path);
       if (value !== "" && !firstValue) firstValue = value;
       if (parseFloat(value) > 0) {
-        if (stockWinner !== c.key) log("stock: using", c.key);
         stockWinner = c.key;
         return value;
       }
-    } catch (e) {
-      log("stock try FAILED", c.key, c.path, e);
+    } catch {
+      /* try the next parameter set */
     }
   }
   if (stockWinner) stockWinner = ""; // it no longer gives a positive value
-  log("stock: no positive stock found; showing", firstValue || "(nothing)");
   return firstValue;
 }
 
-// ---------------------------------------------------------------------------
-// DPU is used for list/delete. Save continues through the legacy SmartX gateway
-// because /api/Login/salespurchase returns 500 for the encrypted save request.
-//
-// DPU POST https://dpu.shivinfotech.co.in/api/Login/salespurchase
-//   Authorization: Bearer <token>      Content-Type: application/json
-//   body: { "payload": XOR+base64( { "json": "<JSON text of the array>", "id": "<action>" } ) }
-//
-// action id: 2 = list, 3 = delete. Save uses the SmartX gateway form contract.
-// ---------------------------------------------------------------------------
-const DPU_SALES = "/Login/salespurchase";
+export const SALE_GET_PATH = DPU.getSalesPurchase;
+export const SALE_SAVE_PATH = DPU.salePurchaseSave;
+export const SALE_DELETE_PATH = DPU.deleteSalesPurchase;
 
-const xorBody = (key: "payload" | "Payload", v: unknown): string =>
-  JSON.stringify({ [key]: encryptXorPayload(v) });
-
-const aesBody = (v: unknown): string =>
-  JSON.stringify({ Payload: encryptPayload(v) });
-
-async function dpuSales(body: string): Promise<unknown> {
+const authHeaders = (): Record<string, string> => {
   const token = getSession()?.token;
-  return dpuWrite(
-    DPU_SALES,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body,
-    },
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+};
+
+/** The request body: { payload: XOR+base64(value) }. */
+const sealed = (value: unknown): string =>
+  JSON.stringify({ payload: encryptXorPayload(value) });
+
+/** POST an encrypted body and return the decrypted reply. */
+const dpuSales = (path: string, value: unknown): Promise<unknown> =>
+  dpuWrite(
+    path,
+    { method: "POST", headers: authHeaders(), body: sealed(value) },
     1,
   );
-}
 
 export interface SaleQuery {
   vlcid: string;
@@ -336,16 +311,6 @@ export interface SaleQuery {
   flag: SaleCategory;
   plantId: string;
 }
-
-const listJson = (p: SaleQuery) =>
-  JSON.stringify({
-    StationId: stationOf(p.vlcid),
-    PlantId: p.plantId,
-    SalesFlag: wireFlag(p.flag),
-    EntryDate: apiDate(p.date),
-    FromDate: apiDate(p.date),
-    ToDate: apiDate(p.date),
-  });
 
 function toRow(r: Obj, i: number): SaleRow {
   const id = pick(r, [
@@ -373,10 +338,6 @@ function toRow(r: Obj, i: number): SaleRow {
   };
 }
 
-// One saved entry comes back once PER ITEM NAME from the list API (same
-// autorownum, same ItemId, only "itemname" differs), so a single save looked
-// like 5 saved records. Keep one row per autorownum and take the item name
-// from the item master using the row's ItemId.
 function uniqueRows(list: SaleRow[]): SaleRow[] {
   const seen = new Set<string>();
   const out: SaleRow[] = [];
@@ -392,88 +353,57 @@ function uniqueRows(list: SaleRow[]): SaleRow[] {
   return out;
 }
 
-// The old portal sends the list query as an ARRAY with the full entry shape
-// (blank values) -- see its Network > Payload for salespurchase&id=2. The first
-// version of this page sent a plain object instead, which the server rejects
-// with "500 ... view 'Error' not found". Try the old shape first, then the
-// object shapes, and remember whichever one the server accepts.
-const oldStyleJson = (p: SaleQuery) =>
-  JSON.stringify([
-    {
-      farmerId: "",
-      farmerMasterCode: "",
-      EntryDate: apiDate(p.date),
-      ItemId: "",
-      Qty: "",
-      Rate: "",
-      Amount: "",
-      PaidAmount: "",
-      SalesFlag: wireFlag(p.flag),
-      BranchId: "",
-      AppTransID: "0",
-      lastsyncdate: "",
-      StationId: stationOf(p.vlcid),
-      PlantId: p.plantId,
-    },
-  ]);
+// ---------------------------------------------------------------------------
+// LIST (GetSalesPurchase) -- body shape given by the backend:
+//   { "Type": "Plant", "PlantId": "1", "EntryDate": "2026-11-22", "SalesFlag": "SA" }
+// The layout the server accepts is remembered.
+// ---------------------------------------------------------------------------
+const plantQuery = (p: SaleQuery) => ({
+  Type: "Plant",
+  PlantId: p.plantId,
+  EntryDate: apiDate(p.date),
+  SalesFlag: wireFlag(p.flag),
+});
 
-const LIST_SHAPES: Array<{ name: string; build: (p: SaleQuery) => string }> = [
-  { name: "old-array", build: oldStyleJson },
-  { name: "object", build: listJson },
-  { name: "object-array", build: (p) => `[${listJson(p)}]` },
-];
+const LIST_LAYOUTS: Array<{ name: string; build: (p: SaleQuery) => unknown }> =
+  [
+    { name: "xor-plant", build: (p) => plantQuery(p) },
+    { name: "xor-plant-array", build: (p) => [plantQuery(p)] },
+  ];
+
 let goodShape = "";
 
 export async function getSales(p: SaleQuery): Promise<SaleRow[]> {
-  const shapes = [
-    ...LIST_SHAPES.filter((x) => x.name === goodShape),
-    ...LIST_SHAPES.filter((x) => x.name !== goodShape),
+  const layouts = [
+    ...LIST_LAYOUTS.filter((x) => x.name === goodShape),
+    ...LIST_LAYOUTS.filter((x) => x.name !== goodShape),
   ];
   let firstError: unknown = null;
   let onlyServerErrors = true;
-  // 1) DPU, encrypted body { json, id: "2" }. Rows found -> done. An empty or
-  //    failed answer falls through to the old layouts below (a read is safe).
-  if (goodShape === "" || goodShape === "dpu") {
+  for (const layout of layouts) {
     try {
-      const reply = await dpuSales(
-        xorBody("payload", { json: oldStyleJson(p), id: "2" }),
-      );
+      const reply = await dpuSales(SALE_GET_PATH, layout.build(p));
       assertOk(reply, "list");
-      const all = rowsOf(reply).map(toRow);
-      if (all.length) {
-        goodShape = "dpu";
-        const rows = uniqueRows(all);
-        log(`list ok (dpu): ${all.length} rows from server, ${rows.length} after removing repeats`);
+      const rows = uniqueRows(rowsOf(reply).map(toRow));
+      if (rows.length || goodShape === layout.name) {
+        goodShape = layout.name;
         return rows;
       }
-      log("list (dpu): no rows, checking the old layouts too. reply:", reply);
+      if (layout === layouts[layouts.length - 1]) return rows;
     } catch (e) {
-      console.warn("[SaleEntry] list \"dpu\" failed, trying the old layouts:", e);
-      if (e instanceof ApiError && e.kind === "auth") throw e;
-    }
-    goodShape = "";
-  }
-  for (const shape of shapes) {
-    try {
-      const reply = await read(
-        "list",
-        `${SALES_PATH}?json=${q(shape.build(p))}&id=2`,
-      );
-      goodShape = shape.name;
-      const all = rowsOf(reply).map(toRow);
-      const rows = uniqueRows(all);
-      log(`list ok (${shape.name}): ${all.length} rows from server, ${rows.length} after removing repeats`);
-      return rows;
-    } catch (e) {
-      console.warn(`[SaleEntry] list "${shape.name}" failed:`, e);
+      // An empty reply body means "no entries for this day".
+      if (e instanceof EmptyReplyError) {
+        goodShape = layout.name;
+        return [];
+      }
       firstError ??= e;
       if (!(e instanceof ApiError && e.kind === "server"))
         onlyServerErrors = false;
       if (e instanceof ApiError && e.kind === "auth") throw e;
     }
   }
-  // The server answers 500 when it has nothing to list for the day (the old
-  // portal shows "0 of 0" in that case) -- show an empty table, not an error.
+  // The server answers with an error when it has nothing to list for the day:
+  // show an empty table, not an error.
   if (onlyServerErrors) return [];
   throw firstError;
 }
@@ -495,27 +425,16 @@ const two = (n: number) => money(n).toFixed(2);
 const idValue = (v: string): string | number =>
   /^\d+$/.test(v) ? Number(v) : v;
 
-// The SmartX gateway save form carries json and id as form fields.
-const SAVE_ID = "5";
-
-const asUrlEncoded = (json: string) => {
-  const form = new URLSearchParams();
-  form.append("json", json);
-  form.append("id", SAVE_ID);
+// The record exactly as mam sent it on WhatsApp (key order, text/number types included):
+// farmerId + farmerMasterCode are NUMBERS, every other value is TEXT, Qty has no forced
+// decimals ("6"), Rate and Amount have 2 decimals ("6.00", "36.00").
+export function saleRecord(s: SaleInput) {
   return {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: form.toString(),
-  };
-};
-
-export async function saveSale(s: SaleInput): Promise<string> {
-  const fields = {
     farmerId: idValue(s.farmerId),
     farmerMasterCode: idValue(s.farmerId),
     EntryDate: apiDate(s.date),
     ItemId: String(s.itemId),
-    Qty: two(s.qty),
+    Qty: String(money(s.qty)),
     Rate: two(s.rate),
     Amount: two(s.qty * s.rate),
     PaidAmount: String(s.paid),
@@ -526,139 +445,90 @@ export async function saveSale(s: SaleInput): Promise<string> {
     StationId: stationOf(s.vlcid),
     PlantId: s.plantId,
   };
-  const json = JSON.stringify([fields]);
-  const root = BASE_URL || "https://smartx.shivinfotech.co.in";
-  const base = /^https?:/i.test(root) ? root : `${window.location.origin}${root}`;
-  const endpoint = `${base}/gateway/Interceptor?path=${SALES_PATH}`;
-  const init = asUrlEncoded(json);
-  const token = getSession()?.token;
-  const requestInfo = {
-    url: endpoint,
-    method: "POST",
-    contentType: "application/x-www-form-urlencoded",
-    actionId: SAVE_ID,
-    payloadEncoding: "form-urlencoded",
-    recordCount: 1,
-    recordFields: Object.keys(fields),
-  };
-
-  // IMPORTANT: a save is sent exactly ONCE. It must never be retried or sent in
-  // a second format automatically -- the server may already have stored the
-  // entry even when the reply is slow or an error, so every retry created a
-  // duplicate record (one click -> several rows).
-  const startedAt = Date.now();
-  log("save: request started (one send)", requestInfo);
-  let text: string;
-  try {
-    text = await gatewayText(
-      endpoint,
-      {
-        ...init,
-        headers: {
-          ...init.headers,
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      },
-      0,
-      true,
-    );
-    log("save: response received", {
-      elapsedMs: Date.now() - startedAt,
-      response: text.slice(0, 500),
-    });
-  } catch (e) {
-    console.error("[SaleEntry] save: request failed", {
-      ...requestInfo,
-      elapsedMs: Date.now() - startedAt,
-      errorKind: e instanceof ApiError ? e.kind : "unknown",
-      error: e instanceof Error ? e.message : String(e),
-    });
-    if (e instanceof ApiError && e.kind === "network") {
-      console.error(
-        "[SaleEntry] save: browser could not read the gateway response. Check DevTools Network for the request status and any CORS error.",
-      );
-    }
-    throw e;
-  }
-
-  clearRequestMemo();
-  return (
-    checkReply(text, "The entry could not be saved.", true) || "Record saved"
-  );
 }
 
-// Delete one Cattle Feed entry through DPU.
-// Same call as the old portal's deleteData (json + id=3), but POST (DPU answers
-// DELETE with 405, Allow: POST) and with json + id inside the ENCRYPTED body,
-// nothing in the URL. Variants are tried in order; the one the server accepts
-// is remembered. Everything is logged: filter the Console by [SaleEntry].
+let saveWinner = "";
+
+export async function saveSale(s: SaleInput): Promise<string> {
+  const fields = saleRecord(s);
+  // Same record with every value as text, used only if the server says a number/text type is wrong.
+  const allText = Object.fromEntries(
+    Object.entries(fields).map(([k, v]) => [k, String(v)]),
+  );
+
+  // IMPORTANT: a save is sent ONCE. A second layout is tried ONLY when the server clearly
+  // refuses the request FORMAT (400 / 415 / 422 / "could not be converted" ...), which means
+  // nothing was stored. A 500, a timeout or a network error is never retried, because the
+  // server may already have stored the entry (that is what created duplicate rows before).
+  const layouts: Array<{ name: string; value: unknown }> = [
+    { name: "xor-array", value: [fields] },
+    { name: "xor-object", value: fields },
+    { name: "xor-array-all-text", value: [allText] },
+  ];
+  const ordered = [
+    ...layouts.filter((l) => l.name === saveWinner),
+    ...layouts.filter((l) => l.name !== saveWinner),
+  ];
+  const FORMAT_REFUSED =
+    /error (400|415|422)\b|could not be converted|json value|base-?64|payload|is required|unsupported media|not a valid|unexpected character|deserializ/i;
+
+  let message = "";
+  let lastError: unknown = null;
+  for (const l of ordered) {
+    try {
+      message = await dpuSave(
+        SALE_SAVE_PATH,
+        sealed(l.value),
+        "POST",
+        authHeaders(),
+      );
+      saveWinner = l.name;
+      lastError = null;
+      break;
+    } catch (e) {
+      const why = e instanceof Error ? e.message : String(e);
+      lastError = e;
+      const formatRefused =
+        e instanceof ApiError &&
+        e.kind === "server" &&
+        FORMAT_REFUSED.test(why);
+      if (!formatRefused) throw e;
+    }
+  }
+  if (lastError) throw lastError;
+  clearRequestMemo();
+  return message || "Record saved";
+}
+
+// Delete one Cattle Feed entry: POST /Login/DeleteSalesPurchase with the row inside the
+// encrypted payload. Layouts are tried in order and the accepted one is remembered.
 let deleteWinner = "";
 
 export async function deleteSale(row: SaleRow, p: SaleQuery): Promise<string> {
-  const iso = apiDate(p.date);
-  const rec = {
-    ...row.raw,
-    Id: row.id,
-    autorownum: row.id,
-    StationId: stationOf(p.vlcid),
-    SalesFlag: wireFlag(p.flag),
-    EntryDate: iso,
-    farmerMasterCode: pick(row.raw, ["farmerid"]) || row.farmerId,
-    AppTransID: "0",
-    lastsyncdate: iso,
-    BranchId: CATTLE_FEED_BRANCH,
-    PlantId: p.plantId,
-  };
-
-  type Attempt = { name: string; body: () => string };
-  const attempts: Attempt[] = [
-    {
-      name: "xor {json:text[rec], id:3}",
-      body: () =>
-        xorBody("payload", { json: JSON.stringify([rec]), id: "3" }),
-    },
-    {
-      name: "xor {json:[rec], id:3}",
-      body: () => xorBody("payload", { json: [rec], id: "3" }),
-    },
-    {
-      name: "Xor {json:text[rec], id:3}",
-      body: () =>
-        xorBody("Payload", { json: JSON.stringify([rec]), id: "3" }),
-    },
-    {
-      name: "xor {data:text[rec], id:3}",
-      body: () =>
-        xorBody("payload", { data: JSON.stringify([rec]), id: "3" }),
-    },
-    { name: "xor [rec]", body: () => xorBody("payload", [rec]) },
-    { name: "xor rec", body: () => xorBody("payload", rec) },
-    {
-      name: "aes {json:text[rec], id:3}",
-      body: () => aesBody({ json: JSON.stringify([rec]), id: "3" }),
-    },
-    { name: "aes [rec]", body: () => aesBody([rec]) },
+  void p;
+  // Shape given by mam (WhatsApp):  { "AutoRowNum": 123 }  (a number)
+  const num = /^\d+$/.test(row.id) ? Number(row.id) : row.id;
+  const one = { AutoRowNum: num };
+  const attempts: Array<{ name: string; value: unknown }> = [
+    { name: "xor-object", value: one },
+    { name: "xor-array", value: [one] },
   ];
   const ordered = [
     ...attempts.filter((a) => a.name === deleteWinner),
     ...attempts.filter((a) => a.name !== deleteWinner),
   ];
 
-  log("delete: row", row.id, "-> POST", DPU_SALES, "(encrypted body). record:", rec);
   let text = "";
   let lastError: unknown = null;
   for (const a of ordered) {
     try {
-      log(`delete attempt "${a.name}"`);
-      const reply = await dpuSales(a.body());
+      const reply = await dpuSales(SALE_DELETE_PATH, a.value);
       text = typeof reply === "string" ? reply : JSON.stringify(reply);
-      log(`delete attempt "${a.name}" reply:`, text);
       checkReply(text, "The entry could not be deleted.", true);
       deleteWinner = a.name;
       lastError = null;
       break;
     } catch (e) {
-      log(`delete attempt "${a.name}" FAILED:`, e instanceof Error ? e.message : e);
       lastError = e;
       if (e instanceof ApiError && e.kind === "auth") throw e;
     }
