@@ -2,7 +2,7 @@ import type * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-import { Download, FileSpreadsheet, FileText, Phone, RotateCcw, Search } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Phone, Printer, RotateCcw, Search } from 'lucide-react';
 import { useChartColors } from '../../context/portal/ThemeContext';
 import { Card, CardHeader } from '../../components/operations/ui/Card';
 import { Button } from '../../components/operations/ui/Button';
@@ -119,10 +119,10 @@ const Farmers: React.FC = () => {
     { header: 'Centre', value: (f) => (f.vlccid ? vlccOption(f.vlccid) : '') }, { header: 'Milk types', value: (f) => f.milks.map((m) => KIND_META[m].label).join(', ') },
     { header: 'Last 7 days of range (L)', value: (f) => f.week }, { header: 'Litres (range)', value: (f) => f.period }, { header: 'Avg Fat', value: (f) => f.avgFat }, { header: 'Avg SNF', value: (f) => f.avgSnf }, { header: 'Amount', value: (f) => f.amount },
   ];
-  const run = (kind: 'csv' | 'xls' | 'pdf') => {
+  const run = (kind: 'csv' | 'xls' | 'pdf' | 'print') => {
     const fn = kind === 'csv' ? exportCSV : kind === 'xls' ? exportExcel : exportPDF;
     fn(`farmers-${applied?.from}-to-${applied?.to}`, exportCols, rows);
-    toast(kind === 'pdf' ? 'Print dialog opened — choose Save as PDF to download' : `${kind.toUpperCase()} file downloaded`);
+    toast(kind === 'print' ? 'Print dialog opened' : kind === 'pdf' ? 'Print dialog opened — choose Save as PDF to download' : `${kind.toUpperCase()} file downloaded`);
   };
 
   return (
@@ -155,7 +155,8 @@ const Farmers: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <Button variant="soft" className="min-w-32" icon={<FileSpreadsheet size={15} />} onClick={() => run('xls')} disabled={!ready || rows.length === 0}>Excel</Button>
             <Button variant="soft" className="min-w-32" icon={<Download size={15} />} onClick={() => run('csv')} disabled={!ready || rows.length === 0}>CSV</Button>
-            <Button variant="soft" className="min-w-32" icon={<FileText size={15} />} onClick={() => run('pdf')} disabled={!ready || rows.length === 0}>Print / PDF</Button>
+            <Button variant="danger" className="min-w-32" icon={<FileText size={15} />} onClick={() => run('pdf')} disabled={!ready || rows.length === 0}>PDF Export</Button>
+            <Button variant="print" className="min-w-32" icon={<Printer size={15} />} onClick={() => run('print')} disabled={!ready || rows.length === 0}>Print</Button>
           </div>
         </div>
         {masterNote && <p className="px-5 pt-3 text-xs text-mute sm:px-6">{masterNote}</p>}

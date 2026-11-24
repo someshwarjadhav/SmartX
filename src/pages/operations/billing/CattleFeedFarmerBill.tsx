@@ -124,7 +124,7 @@ const CattleFeedFarmerBill: React.FC = () => {
         ],
         landscape: true,
       });
-      toast("Print dialog opened — choose Save as PDF to download");
+      toast(kind === "print" ? "Print dialog opened" : "Print dialog opened — choose Save as PDF to download");
     }
   };
 
@@ -156,7 +156,7 @@ const CattleFeedFarmerBill: React.FC = () => {
             count={total}
             pager={{ page: current, size: pageSize, onSize: (n) => { setPageSize(n); setPage(1); } }}
             disabled={!ready}
-            kinds={["xls", "pdf", "csv"]}
+            kinds={["xls", "pdf", "print", "csv"]}
             onExport={run}
           />
 

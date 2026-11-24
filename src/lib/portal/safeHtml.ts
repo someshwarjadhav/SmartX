@@ -1,3 +1,4 @@
+import { brandImgHtml, getBrandLogo, isCenteredBrand } from "../brandLogo";
 const DROP_TAGS = new Set([
   "script", "style", "link", "meta", "base", "iframe", "frame", "frameset", "object",
   "embed", "applet", "form", "input", "button", "textarea", "select", "option",
@@ -86,10 +87,15 @@ export function printBills(title: string, bills: string[]) {
     frame.remove();
     return;
   }
+  // logo of the login (only when it has one); the Nutrymist login gets it centred
+  const brand = getBrandLogo();
+  const brandBar = brand
+    ? `<div style="display:flex;justify-content:${isCenteredBrand() ? "center" : "flex-start"};margin:0 0 8px">${brandImgHtml(brand, 48, 190)}</div>`
+    : "";
   doc.open();
   doc.write(
     `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${PRINT_CSS}</style></head><body>` +
-      bills.map((b) => `<div class="bill">${b}</div>`).join("") +
+      bills.map((b) => `<div class="bill">${brandBar}${b}</div>`).join("") +
       `</body></html>`,
   );
   doc.close();
@@ -98,7 +104,27 @@ export function printBills(title: string, bills: string[]) {
     frame.contentWindow?.print();
     window.setTimeout(() => frame.remove(), 1500);
   };
-  window.setTimeout(go, 250);
+  // wait (at most 2.5 s) until the logo has loaded, so it is on the printed page
+  const pending = Array.from(doc.images).filter((i) => !i.complete);
+  if (!pending.length) window.setTimeout(go, 250);
+  else {
+    let left = pending.length;
+    let fired = false;
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      window.setTimeout(go, 150);
+    };
+    const one = () => {
+      left -= 1;
+      if (left <= 0) fire();
+    };
+    pending.forEach((i) => {
+      i.addEventListener("load", one);
+      i.addEventListener("error", one);
+    });
+    window.setTimeout(fire, 2500);
+  }
 }
 
 /** Excel opens an HTML table saved as .xls, so the bills are downloaded as they look on screen. */

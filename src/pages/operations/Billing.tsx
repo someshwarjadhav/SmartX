@@ -115,7 +115,7 @@ const Billing: React.FC = () => {
       <Modal open={!!slip} onClose={() => setSlip(null)} title="Payslip" subtitle={slip ? cycle.label : ''}
         footer={slip && <>
           <Button variant="ghost" onClick={() => setPaid((p) => { const n = new Set(p); n.has(pk(slip)) ? n.delete(pk(slip)) : n.add(pk(slip)); return n; })}>{paid.has(pk(slip)) ? 'Mark as due' : 'Mark as paid'}</Button>
-          <Button icon={<Printer size={15} />} onClick={() => exportPDF(`Payslip ${slip.name} ${cycle.start}`, [{ header: 'Item', value: (r: [string, string]) => r[0] }, { header: 'Amount', value: (r: [string, string]) => r[1] }], [...KINDS.filter((k) => slip.liters[k] > 0).map((k): [string, string] => [`${KIND_META[k].label} ${nf(slip.liters[k], 1)} L`, '']), ['Amount payable', inr(slip.gross, 2)]])}>Print</Button>
+          <Button variant="print" icon={<Printer size={15} />} onClick={() => exportPDF(`Payslip ${slip.name} ${cycle.start}`, [{ header: 'Item', value: (r: [string, string]) => r[0] }, { header: 'Amount', value: (r: [string, string]) => r[1] }], [...KINDS.filter((k) => slip.liters[k] > 0).map((k): [string, string] => [`${KIND_META[k].label} ${nf(slip.liters[k], 1)} L`, '']), ['Amount payable', inr(slip.gross, 2)]])}>Print</Button>
         </>}>
         {slip && (
           <div className="space-y-4">

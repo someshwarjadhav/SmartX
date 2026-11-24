@@ -50,6 +50,7 @@ import {
   type BillPrintInfo,
 } from "../../../lib/portal/farmerBillPrint";
 import { getSession } from "../../../services/session";
+import { getProfileFromSession } from "../../../services/profile/profile.api";
 import { fetchDpuFarmerMaster } from "../../../services/farmer/farmer.api";
 
 const dmy = (s: string) => s.split("-").reverse().join("-");
@@ -366,10 +367,25 @@ const FarmerBill: React.FC = () => {
     const name = `farmer-bill-${applied.from}-to-${applied.to}`;
     if (kind === "print" || kind === "download") {
       const label = vlcLabel(applied.vlc);
+      // label = "Name | centre code"; the name may start with the code ("NMD101 - Thingalur")
+      const parts = label.split(" | ");
+      const villageCode = (parts[1] || applied.vlc).trim();
+      const villageName = (parts[0] || label)
+        .replace(/^\s*[A-Za-z]{2,5}\d+\s*[-–:]\s*/, "")
+        .trim();
+      let contact = { mobile: "", Address: "", GST: "" };
+      try {
+        contact = getProfileFromSession();
+      } catch {
+        /* no profile saved */
+      }
       const info: BillPrintInfo = {
         dairy: getSession()?.mccName || "SmartX Dairy",
-        villageId: applied.vlc,
-        villageName: label.split(" | ")[0] || label,
+        villageId: villageCode,
+        villageName: villageName || label,
+        address: contact.Address,
+        phone: contact.mobile,
+        gst: contact.GST,
         from: dmy(applied.from),
         to: dmy(applied.to),
       };

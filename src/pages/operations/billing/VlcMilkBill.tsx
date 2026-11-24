@@ -12,7 +12,7 @@ import {
   ReportBar,
   ReportPage,
   Reveal,
-  type ExportKind,
+  type BarKind,
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { useCentreOptions } from "../../../hooks/useCentres";
@@ -189,7 +189,7 @@ const VlcMilkBill: React.FC = () => {
   const start = (page - 1) * pageSize;
   const shown = tableMode ? [] : visibleBills.slice(start, start + pageSize);
 
-  const run = (kind: ExportKind) => {
+  const run = (kind: BarKind) => {
     if (!applied || visible.length === 0) return;
     const name = `vlc-milk-bill-${applied.from}-${applied.to}`;
     if (tableMode) {
@@ -261,8 +261,8 @@ const VlcMilkBill: React.FC = () => {
             count={hasData ? visible.length : 0}
             hideCount={loading}
             disabled={!hasData}
-            kinds={["pdf", "xls"]}
-            labels={{ pdf: "Print Bill", xls: "Excel Export" }}
+            kinds={["print", "xls"]}
+            labels={{ print: "Print Bill", xls: "Excel Export" }}
             onExport={run}
             left={
               <div className="flex flex-wrap items-center gap-3">

@@ -36,7 +36,7 @@ export function reportActions({ build, count, unit = 'rows', toast, versionExcel
       ? { key: 'excel' as const, id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary' as const, run: go('Exported {n} as Excel', exportPlainExcel, versionExcel) }
       : { key: 'excel' as const, id: 'excel', label: 'Excel Export', icon: FileSpreadsheet, variant: 'primary' as const, run: go('Exported {n} as Excel', exportExcel) },
     { key: 'pdf', id: 'pdf', label: 'PDF Export', icon: FileText, variant: 'danger', run: go('Exported {n} as PDF', exportPDF) },
-    { key: 'print', id: 'print', label: 'Print', icon: Printer, variant: 'outline', run: go('Print preview opened for {n}', printTable) },
+    { key: 'print', id: 'print', label: 'Print', icon: Printer, variant: 'print', run: go('Print preview opened for {n}', printTable) },
     { key: 'csv', id: 'csv', label: 'CSV Export', icon: Table2, variant: 'success', run: go('Exported {n} as CSV', exportCSV) },
   ];
   return all.filter((a) => !without.includes(a.key)).map(({ key: _key, ...action }) => action);

@@ -20,7 +20,7 @@ import { PageHeader } from "./ui/PageHeader";
 import { nf } from "../../lib/portal/format";
 import { cn } from "../../lib/portal/cn";
 
-export type ExportKind = "xls" | "pdf" | "csv";
+export type ExportKind = "xls" | "pdf" | "csv" | "print";
 /** Buttons the report bar can show: the three export kinds plus Print / Download (Farmer Bill). */
 export type BarKind = ExportKind | "print" | "download";
 
@@ -174,7 +174,7 @@ export const ReportDataBadge: React.FC<{ state: ReportSourceState }> = ({
 
 const LABEL: Record<BarKind, string> = {
   xls: "Excel",
-  pdf: "PDF / Print",
+  pdf: "PDF Export",
   csv: "CSV",
   print: "Print",
   download: "Download",
@@ -235,7 +235,7 @@ export function ReportBar<K extends BarKind = ExportKind>({ count, hideCount, di
           <Button
             type="button"
             size="sm"
-            variant={k === "pdf" ? "danger" : k === "csv" ? "outline" : "primary"}
+            variant={k === "pdf" ? "danger" : k === "print" ? "print" : k === "csv" ? "outline" : "primary"}
             icon={ICON[k]}
             onClick={() => exportOnce(k)}
             disabled={disabled || busy.has(k)}

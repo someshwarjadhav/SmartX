@@ -132,7 +132,7 @@ const PortalReportPage: React.FC<Props> = ({ title, subtitle, endpoint, slug, no
   const run = (kind: ExportKind) => {
     if (!applied) return;
     const name = `${slug}-report-${applied.from}-to-${applied.to}`;
-    if (kind === 'pdf') {
+    if (kind === 'pdf' || kind === 'print') {
       exportPDF(name, exportCols, rows, {
         subtitle: `${title} · ${fmtDate(applied.from)} to ${fmtDate(applied.to)}`,
         meta: [
@@ -144,7 +144,7 @@ const PortalReportPage: React.FC<Props> = ({ title, subtitle, endpoint, slug, no
         ],
         note: note ?? 'Report rows are loaded from the SmartX portal using the selected filters.',
       });
-      toast('Print dialog opened — choose Save as PDF to download');
+      toast(kind === 'print' ? 'Print dialog opened' : 'Print dialog opened — choose Save as PDF to download');
     } else if (kind === 'csv') {
       exportCSV(name, exportCols, rows);
       toast('CSV file downloaded');
@@ -200,7 +200,7 @@ const PortalReportPage: React.FC<Props> = ({ title, subtitle, endpoint, slug, no
             count={rows.length}
             hideCount={loading || err || !hasApplied}
             disabled={loading || err || rows.length === 0}
-            kinds={['xls', 'pdf', 'csv']}
+            kinds={['xls', 'pdf', 'print', 'csv']}
             onExport={run}
             left={<div className="w-56 max-w-full"><Input icon={<Search size={16} />} placeholder="Search any column" value={needle} onChange={(e) => setNeedle(e.target.value)} /></div>}
             source={hasApplied ? <ReportDataBadge state={{ fetching: q.fetching, stale: q.stale, updatedAt: q.updatedAt, failed: q.failed, total: q.total, error: q.error, hasData: q.rows.length > 0 }} /> : undefined}

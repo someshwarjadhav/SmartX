@@ -265,7 +265,7 @@ const BankPaymentSummary: React.FC = () => {
         ],
         landscape: true,
       });
-      toast("Print dialog opened — choose Save as PDF to download");
+      toast(kind === "print" ? "Print dialog opened" : "Print dialog opened — choose Save as PDF to download");
     }
   };
 
@@ -343,7 +343,7 @@ const BankPaymentSummary: React.FC = () => {
               },
             }}
             disabled={!ready}
-            kinds={["xls", "pdf", "csv"]}
+            kinds={["xls", "pdf", "print", "csv"]}
             onExport={run}
           />
 
