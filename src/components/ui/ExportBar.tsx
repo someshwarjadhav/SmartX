@@ -7,7 +7,7 @@ export interface ExportAction {
   id: string;
   label: string;
   icon: LucideIcon;
-  variant: 'primary' | 'danger' | 'success' | 'outline';
+  variant: 'primary' | 'danger' | 'success' | 'outline' | 'print';
   run: () => void | Promise<void>;
 }
 

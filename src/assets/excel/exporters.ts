@@ -1,6 +1,6 @@
 import { toCsv } from '../../lib/csv';
 import { excelFileName, exactExcelFileName } from './fileName';
-import { brandImgHtml, getBrandLogo, loadLogoPixels } from '../../lib/brandLogo';
+import { brandImgHtml, getBrandLogo, isCenteredBrand, loadLogoPixels } from '../../lib/brandLogo';
 
 /** 'id' = a whole number written as it is (farmer id, branch id ...): a real number, no thousands comma */
 export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money' | 'num2' | 'general' | 'id';
@@ -349,6 +349,14 @@ function buildSheet(XLSX: XlsxApi, source: ExportTable, titleBlock: boolean) {
       (cell as unknown as { s?: unknown }).s = { font: { bold: true } };
     }
   }
+  // Nutrymist login: the title / filter / generated lines are centred over the sheet (needs xlsx-js-style; otherwise left as before)
+  if (titleBlock && isCenteredBrand()) {
+    [0, 1, 2].forEach((r) => {
+      const addr = XLSX.utils.encode_cell({ r, c: 0 });
+      const cell = ws[addr];
+      if (cell) (cell as unknown as { s?: unknown }).s = { font: { bold: r === 0, sz: r === 0 ? 14 : 10 }, alignment: { horizontal: 'center' } };
+    });
+  }
   return ws;
 }
 
@@ -472,10 +480,13 @@ export async function exportPDF(t: ExportTable): Promise<void> {
   const h = doc.internal.pageSize.getHeight();
   const M = 36;
 
-  // own logo of the dairy (Numax / NutryMist): LEFT side, the title moves to its right
+  // own logo of the dairy (Numax / NutryMist): LEFT side; the title moves to its right (Nutrymist login: title block centred on the page)
+  const centred = isCenteredBrand();
   const logoK = logo ? Math.min(130 / logo.w, 48 / logo.h) : 0;
   const logoW = logo ? logo.w * logoK : 0;
   const tx = logo ? M + logoW + 14 : M;
+  const tAt = (centred ? w / 2 : tx) as number;
+  const tOpt = centred ? ({ align: 'center' } as const) : undefined;
   const head = (): void => {
     doc.setFillColor(...p.brand);
     doc.rect(0, 0, w, 8, 'F');
@@ -483,12 +494,12 @@ export async function exportPDF(t: ExportTable): Promise<void> {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.setTextColor(...p.text);
-    doc.text(t.title, tx, 40);
+    doc.text(t.title, tAt, 40, tOpt);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9.5);
     doc.setTextColor(...p.mute);
-    if (t.subtitle) doc.text(t.subtitle, tx, 56);
-    doc.text(`SmartX  |  Generated ${stamp()}`, tx, t.subtitle ? 70 : 56);
+    if (t.subtitle) doc.text(t.subtitle, tAt, 56, tOpt);
+    doc.text(`SmartX  |  Generated ${stamp()}`, tAt, t.subtitle ? 70 : 56, tOpt);
     doc.setDrawColor(...p.brand);
     doc.setLineWidth(1.2);
     doc.line(M, t.subtitle ? 78 : 64, w - M, t.subtitle ? 78 : 64);
@@ -672,7 +683,9 @@ export function printTable(t: ExportTable): void {
   const landscape = t.columns.length > 6;
   printHTML(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.title)}</title><style>${printCss(p, landscape, t.columns.length > 10)}</style></head><body>
     <div class="bar"></div>
-    <div class="top"><div style="display:flex;align-items:center;gap:14px">${brandImgHtml(getBrandLogo(), 44)}<div><h1>${esc(t.title)}</h1><p class="meta">${t.subtitle ? `${esc(t.subtitle)}` : ''}</p></div></div><div style="text-align:right"><div class="brand">SmartX</div><p class="meta">Generated ${esc(stamp())}</p></div></div>
+    ${isCenteredBrand()
+      ? `<div class="top" style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center"><div>${brandImgHtml(getBrandLogo(), 44)}</div><div style="text-align:center"><h1>${esc(t.title)}</h1><p class="meta">${t.subtitle ? `${esc(t.subtitle)}` : ''}</p></div><div style="text-align:right"><div class="brand">SmartX</div><p class="meta">Generated ${esc(stamp())}</p></div></div>`
+      : `<div class="top"><div style="display:flex;align-items:center;gap:14px">${brandImgHtml(getBrandLogo(), 44)}<div><h1>${esc(t.title)}</h1><p class="meta">${t.subtitle ? `${esc(t.subtitle)}` : ''}</p></div></div><div style="text-align:right"><div class="brand">SmartX</div><p class="meta">Generated ${esc(stamp())}</p></div></div>`}
     <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>
     <div class="foot"><span>SmartX</span><span>${t.rows.length} rows</span></div></body></html>`);
 }

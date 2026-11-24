@@ -2,7 +2,7 @@ import type * as React from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 
-type Variant = 'primary' | 'soft' | 'outline' | 'ghost' | 'danger' | 'success';
+type Variant = 'primary' | 'soft' | 'outline' | 'ghost' | 'danger' | 'success' | 'print';
 type Size = 'sm' | 'md' | 'lg';
 
 interface Props extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -19,6 +19,7 @@ const VARIANTS: Record<Variant, string> = {
   ghost: 'text-mute hover:bg-soft hover:text-ink',
   danger: 'bg-danger text-white shadow-card hover:brightness-110 active:brightness-95',
   success: 'bg-ok text-white shadow-card hover:brightness-110 active:brightness-95',
+  print: 'border border-line bg-panel text-ink hover:border-brand/60',
 };
 
 const SIZES: Record<Size, string> = {

@@ -641,7 +641,7 @@ const CashPaymentSummary: React.FC = () => {
               count={visible.length}
               hideCount={loading || !!error}
               disabled={loading || !!error || visible.length === 0}
-              kinds={["xls", "pdf", "csv"]}
+              kinds={["xls", "pdf", "print", "csv"]}
               onExport={run}
               left={
                 <div className="w-56 max-w-full">

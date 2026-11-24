@@ -1,7 +1,7 @@
 import { toCsv } from '../../lib/csv';
 import { excelFileName } from './fileName';
 import { loadXlsx, oneExcelAtATime } from './exporters';
-import { brandImgHtml, getBrandLogo, printWhenImagesReady } from '../../lib/brandLogo';
+import { brandImgHtml, getBrandLogo, isCenteredBrand, printWhenImagesReady } from '../../lib/brandLogo';
 
 export interface ExportCol<T = unknown> {
   header: string;
@@ -184,10 +184,8 @@ function pdfBody<T>(title: string, cols: ExportCol<T>[], rows: T[], o: PdfOption
   const brand = getBrandLogo();
 
   return `
-    <header class="top">
-      ${brand ? `<div class="logo own">${brandImgHtml(brand, 46)}</div>` : `<div class="logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2.5c3.4 4.3 6 7.4 6 10.9A6 6 0 0 1 6 13.4C6 9.9 8.6 6.8 12 2.5Z" fill="#fff"/><path d="M9.9 11.4l4.2 4.2M14.1 11.4l-4.2 4.2" stroke="#2563eb" stroke-width="1.9" fill="none" stroke-linecap="round"/></svg>
-      </div>`}
+    <header class="top${isCenteredBrand() ? ' center' : ''}">
+      ${brand ? `<div class="logo own">${brandImgHtml(brand, 64, 200)}</div>` : `<div class="logo-sp"></div>`}
       <div class="ttl">
         <p class="eyebrow">${brand ? htmlEsc(brand.name.toUpperCase()) : 'SMARTX · DAIRY PORTAL'}</p>
         <h1>${htmlEsc(title)}</h1>
@@ -215,15 +213,20 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
         :root { color-scheme: light; --deep:#0b1a3d; --brand:#2563eb; --light:#60a5fa; --line:#cddbf3; --soft:#f1f5fe; --mute:#5b6b8f; }
         * { box-sizing: border-box; }
         body { margin: 0; padding: 28px; color: var(--deep); background: #fff; font: 12px/1.45 Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .top { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 18px 22px; color: #fff; border-radius: 16px; border-bottom: 5px solid var(--brand); background: linear-gradient(120deg, #0b1a3d 0%, #1b3771 58%, #2563eb 100%); }
+        .top { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 18px 22px; color: var(--deep); border-radius: 16px; border: 1px solid #bcd0f7; border-bottom: 4px solid var(--brand); background: linear-gradient(120deg, #eaf1ff 0%, #dbe8ff 60%, #cfe0ff 100%); }
         .logo { display: grid; width: 50px; height: 50px; flex: 0 0 auto; place-items: center; border-radius: 15px; background: linear-gradient(135deg, #2563eb, #60a5fa); box-shadow: 0 4px 12px rgba(37,99,235,.45); }
-        .logo.own { width: auto; min-width: 58px; height: 58px; padding: 6px 10px; border-radius: 12px; background: #fff; box-shadow: none; }
+        .logo.own { width: auto; min-width: 0; height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
         .ttl { min-width: 0; flex: 1; }
-        .eyebrow { margin: 0 0 3px; color: #93c5fd; font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
+        .top img.brandlogo { mix-blend-mode: multiply; }
+        .eyebrow { margin: 0 0 3px; color: var(--brand); font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
         h1 { margin: 0; font-size: 22px; line-height: 1.2; overflow-wrap: anywhere; }
-        .top .sub { margin: 4px 0 0; color: #cfdcff; font-size: 12px; }
-        .stamp { display: grid; gap: 1px; text-align: right; font-size: 10px; color: #b4c4e8; white-space: nowrap; }
-        .stamp b { color: #fff; font-size: 11.5px; }
+        .top .sub { margin: 4px 0 0; color: var(--mute); font-size: 12px; }
+        .top.center { display: grid; grid-template-columns: 1fr auto 1fr; }
+        .top.center .ttl { text-align: center; }
+        .top.center .logo { justify-self: start; }
+        .top.center .stamp { justify-self: end; }
+        .stamp { display: grid; gap: 1px; text-align: right; font-size: 10px; color: var(--mute); white-space: nowrap; }
+        .stamp b { color: var(--deep); font-size: 11.5px; }
         .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
         .chip { padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); font-size: 11px; }
         .chip b { margin-right: 6px; color: var(--brand); font-weight: 700; }
@@ -236,8 +239,8 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
         table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 11px; }
         thead { display: table-header-group; }
         th { padding: 9px 9px; color: #fff; background: var(--brand); text-align: left; font-weight: 700; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.18); }
-        th.grp { background: var(--deep); text-align: center; font-size: 11.5px; letter-spacing: .02em; }
-        tr.sub th { background: #1d4fbf; }
+        th.grp { background: #1d4fbf; text-align: center; font-size: 11.5px; letter-spacing: .02em; }
+        tr.sub th { background: #3b82f6; }
         th.r, td.r { text-align: right; font-variant-numeric: tabular-nums; }
         td.c { text-align: center; }
         td { padding: 7px 9px; border-top: 1px solid var(--line); border-right: 1px solid #e3ebfa; vertical-align: top; }
@@ -249,7 +252,7 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
         @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 12mm 10mm 14mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px sans-serif; color: #5b6b8f; } }
         @media print { body { padding: 0; } .tw { overflow: visible; } tr { break-inside: avoid; } .top, .cards, .chips { break-inside: avoid; } }
         @media (max-width: 480px) { h1 { font-size: 18px; } .logo { width: 42px; height: 42px; } .cards { grid-template-columns: 1fr 1fr; } }
-        @media (max-width: 700px) { body { padding: 14px; } .top { flex-wrap: wrap; } .stamp { text-align: left; } table { font-size: 9px; } }
+        @media (max-width: 700px) { body { padding: 14px; } .top { flex-wrap: wrap; } .top.center { display: flex; } .top.center .ttl { text-align: left; } .stamp { text-align: left; } table { font-size: 9px; } }
       </style>
     </head><body>${pdfBody(title, cols, rows, options)}</body></html>`);
   report.document.close();

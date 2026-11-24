@@ -17,6 +17,10 @@ export interface BillPrintInfo {
   /** e.g. 01-10-2026 */
   from: string;
   to: string;
+  /** contact details of the dairy (from the login profile) - shown under the dairy name */
+  address?: string;
+  phone?: string;
+  gst?: string;
 }
 
 const KEYS: Array<keyof BillShift> = ["wt", "fat", "snf", "rate", "amt"];
@@ -33,6 +37,10 @@ const esc = (v: string | number) =>
 
 const farmerLabel = (b: FarmerBillData) => `${b.id} ${b.name}`.trim();
 const period = (i: BillPrintInfo) => `${i.from} To ${i.to}`;
+const contactLine = (i: BillPrintInfo) =>
+  [i.phone ? `Ph: ${i.phone}` : "", i.gst ? `GST: ${i.gst}` : ""]
+    .filter(Boolean)
+    .join("  |  ");
 
 function billHtml(
   b: FarmerBillData,
@@ -54,12 +62,14 @@ function billHtml(
     )
     .join("");
   return `
-  <section class="bill" ${last ? 'style="break-after:auto;page-break-after:auto"' : ""}>
+  <section class="bill center" ${last ? 'style="break-after:auto;page-break-after:auto"' : ""}>
     <header class="top">
-      ${brand ? `<div class="logo own">${brandImgHtml(brand, 44)}</div>` : `<div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2.5c3.4 4.3 6 7.4 6 10.9A6 6 0 0 1 6 13.4C6 9.9 8.6 6.8 12 2.5Z" fill="#fff"/><path d="M9.9 11.4l4.2 4.2M14.1 11.4l-4.2 4.2" stroke="#2563eb" stroke-width="1.9" fill="none" stroke-linecap="round"/></svg></div>`}
+      ${brand ? `<div class="logo own">${brandImgHtml(brand, 84, 240)}</div>` : `<div class="logo-sp"></div>`}
       <div class="ttl">
         <p class="eyebrow">${brand ? esc(brand.name.toUpperCase()) : "SMARTX · DAIRY PORTAL"}</p>
         <h1>${esc(i.dairy)}</h1>
+        ${i.address ? `<p class="contact">${esc(i.address)}</p>` : ""}
+        ${contactLine(i) ? `<p class="contact">${esc(contactLine(i))}</p>` : ""}
         <p class="sub">Farmer Bill · ${esc(b.range || period(i))}</p>
       </div>
       <div class="stamp"><span>Generated</span><b>${esc(generated)}</b></div>
@@ -93,22 +103,28 @@ const BILL_CSS = `
     * { box-sizing: border-box; }
     body { margin: 0; padding: 24px; color: var(--deep); background: #fff; font: 12px/1.45 Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .bill { break-after: page; page-break-after: always; padding-bottom: 6px; }
-    .top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; padding: 16px 22px; color: #fff; border-radius: 16px; border-bottom: 5px solid var(--brand); background: linear-gradient(120deg, #0b1a3d 0%, #1b3771 58%, #2563eb 100%); }
+    .top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; padding: 16px 22px; color: var(--deep); border-radius: 16px; border: 1px solid #bcd0f7; border-bottom: 4px solid var(--brand); background: linear-gradient(120deg, #eaf1ff 0%, #dbe8ff 60%, #cfe0ff 100%); }
     .logo { display: grid; width: 48px; height: 48px; flex: 0 0 auto; place-items: center; border-radius: 15px; background: linear-gradient(135deg, #2563eb, #60a5fa); box-shadow: 0 4px 12px rgba(37,99,235,.45); }
-    .logo.own { width: auto; min-width: 56px; height: 56px; padding: 6px 10px; border-radius: 12px; background: #fff; box-shadow: none; }
+    .logo.own { width: auto; min-width: 0; height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
     .ttl { min-width: 0; flex: 1; }
-    .eyebrow { margin: 0 0 3px; color: #93c5fd; font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
+    .top img.brandlogo { mix-blend-mode: multiply; }
+    .bill.center .top { display: grid; grid-template-columns: 1fr auto 1fr; }
+    .bill.center .ttl { text-align: center; }
+    .bill.center .logo { justify-self: start; }
+    .bill.center .stamp { justify-self: end; }
+    .eyebrow { margin: 0 0 3px; color: var(--brand); font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
     h1 { margin: 0; font-size: 22px; line-height: 1.2; }
-    .top .sub { margin: 4px 0 0; color: #cfdcff; font-size: 12px; }
-    .stamp { display: grid; gap: 1px; text-align: right; font-size: 10px; color: #b4c4e8; white-space: nowrap; }
-    .stamp b { color: #fff; font-size: 11.5px; }
+    .top .sub { margin: 4px 0 0; color: var(--mute); font-size: 12px; }
+    .top .contact { margin: 3px 0 0; color: var(--deep); font-size: 12px; font-weight: 600; }
+    .stamp { display: grid; gap: 1px; text-align: right; font-size: 10px; color: var(--mute); white-space: nowrap; }
+    .stamp b { color: var(--deep); font-size: 11.5px; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .chip { padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); font-size: 11px; }
     .chip b { margin-right: 6px; color: var(--brand); font-weight: 700; }
     table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 11px; }
     th { padding: 8px 9px; color: #fff; background: var(--brand); text-align: center; font-weight: 700; border-right: 1px solid rgba(255,255,255,.18); }
-    th.grp { background: var(--deep); font-size: 11.5px; letter-spacing: .02em; }
-    tr.sub th { background: #1d4fbf; }
+    th.grp { background: #1d4fbf; font-size: 11.5px; letter-spacing: .02em; }
+    tr.sub th { background: #3b82f6; }
     td { padding: 6px 9px; border-top: 1px solid var(--line); border-right: 1px solid #e3ebfa; text-align: center; }
     td.r, th.r { font-variant-numeric: tabular-nums; }
     tbody tr:nth-child(even) td { background: var(--soft); }
@@ -132,12 +148,12 @@ const PAGE_CSS = `
     .toolbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: -24px -24px 18px; padding: 10px 24px; background: #fff; border-bottom: 1px solid var(--line); box-shadow: 0 2px 10px rgba(11,26,61,.08); }
     .toolbar .what { min-width: 0; color: var(--mute); font-size: 12px; }
     .toolbar .what b { display: block; color: var(--deep); font-size: 14px; }
-    .toolbar button { cursor: pointer; padding: 9px 20px; border: 0; border-radius: 10px; background: var(--brand); color: #fff; font: 700 13px Inter, "Segoe UI", sans-serif; box-shadow: 0 4px 12px rgba(37,99,235,.35); }
-    .toolbar button:hover { background: #1d4fbf; }
+    .toolbar button { cursor: pointer; padding: 9px 20px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--deep); font: 700 13px Inter, "Segoe UI", sans-serif; }
+    .toolbar button:hover { border-color: var(--brand); }
     .scroll { overflow-x: auto; }
     .scroll table { min-width: 760px; }
     @media screen { .bill { max-width: 1100px; margin: 0 auto 22px; padding: 18px; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 6px 22px rgba(11,26,61,.08); } body { background: #eef3fc; } }
-    @media (max-width: 700px) { body { padding: 12px; } .toolbar { margin: -12px -12px 14px; padding: 10px 12px; } .top { flex-wrap: wrap; } .stamp { text-align: left; } }
+    @media (max-width: 700px) { body { padding: 12px; } .toolbar { margin: -12px -12px 14px; padding: 10px 12px; } .top { flex-wrap: wrap; } .stamp { text-align: left; } .bill.center .top { display: flex; } .bill.center .ttl { text-align: left; } }
     @media print { .toolbar { display: none !important; } .scroll { overflow: visible; } .scroll table { min-width: 0; } }
 `;
 
@@ -208,12 +224,25 @@ export async function downloadFarmerBills(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
     doc.text(info.dairy, W / 2, 40, { align: "center" });
+    let hy = 40;
+    doc.setFontSize(10.5);
+    doc.setFont("helvetica", "normal");
+    if (info.address) {
+      hy += 15;
+      doc.text(info.address, W / 2, hy, { align: "center" });
+    }
+    if (contactLine(info)) {
+      hy += 14;
+      doc.text(contactLine(info), W / 2, hy, { align: "center" });
+    }
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    doc.text("Farmer Bill", W / 2, 60, { align: "center" });
+    hy += 20;
+    doc.text("Farmer Bill", W / 2, hy, { align: "center" });
     if (logo) {
       // own logo of the dairy, top left, in a box 150 x 44 pt (keeps its shape)
-      const k = Math.min(150 / logo.w, 44 / logo.h);
-      doc.addImage(logo.data, logo.format, M, 18, logo.w * k, logo.h * k);
+      const k = Math.min(210 / logo.w, 62 / logo.h);
+      doc.addImage(logo.data, logo.format, M, 14, logo.w * k, logo.h * k);
     }
 
     doc.setFontSize(10);
@@ -233,17 +262,17 @@ export async function downloadFarmerBills(
       doc.setFont("helvetica", "normal");
       doc.text(value, start + lw, y);
     };
-    put("Village Id:", info.villageId, M, 82);
-    put("Village Name:", info.villageName, W - M, 82, true);
-    put("Farmer Name:", farmerLabel(b), M, 96);
-    put("Bill Period:", b.range || period(info), W - M, 96, true);
+    put("Village Id:", info.villageId, M, hy + 22);
+    put("Village Name:", info.villageName, W - M, hy + 22, true);
+    put("Farmer Name:", farmerLabel(b), M, hy + 36);
+    put("Bill Period:", b.range || period(info), W - M, hy + 36, true);
 
     const num = (i: number) => ({
       halign: "center" as const,
       cellWidth: i < 2 ? 54 : ("auto" as const),
     });
     autoTable(doc, {
-      startY: 104,
+      startY: hy + 44,
       margin: { left: M, right: M },
       theme: "grid",
       head: [
