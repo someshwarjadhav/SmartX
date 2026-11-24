@@ -508,7 +508,7 @@ const FIELD_LABEL: Record<keyof Quality6, string> = {
   mixSnf: "Mixed SNF",
 };
 
-
+/** Number box that lets the user type freely (e.g. "-", "-0.") and commits on every valid keystroke. */
 const NumBox: React.FC<{
   value: number;
   onCommit: (n: number) => void;
@@ -688,7 +688,7 @@ const CalibrationCard: React.FC<{ ids: string[] }> = ({ ids }) => {
     setPassApply(false);
   };
 
-  // Same as the original "Show" button: values are only read when asked for.
+  
   const show = async () => {
     if (!center) {
       toast("Select a center first", "warn");
@@ -787,14 +787,19 @@ const CalibrationCard: React.FC<{ ids: string[] }> = ({ ids }) => {
       return;
     }
 
-    try {
-      await updateEkoPassword(cred, passApply);
+    if (!passApply) {
+      
       toast("Eko calibration saved successfully!");
-    } catch (e) {
-      toast(
-        `Calibration saved, but the password was not updated: ${message(e, "please try again")}`,
-        "warn",
-      );
+    } else {
+      try {
+        await updateEkoPassword(cred, true);
+        toast("Eko calibration saved successfully!");
+      } catch (e) {
+        toast(
+          `Calibration saved, but the password was not updated: ${message(e, "please try again")}`,
+          "warn",
+        );
+      }
     }
     setReview(false);
     resetEntry();

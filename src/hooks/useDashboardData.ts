@@ -3,6 +3,7 @@ import type { ShiftName } from "../lib/shift";
 import type { CentreRow, SupplierRow } from "../types";
 import type { Summary } from "../data/dairy";
 import { useMilkFarmerEntries } from "./useMilkReportData";
+import { ALL_CENTRES } from "./useTrendData";
 import { shortDate, toISO } from "../lib/format";
 
 export interface TodayCentre {
@@ -85,7 +86,11 @@ const series = (
   return days;
 };
 
-export function useDashboardData(date: string, shift: ShiftName) {
+export function useDashboardData(
+  date: string,
+  shift: ShiftName,
+  centre: string = ALL_CENTRES,
+) {
   const prevDate = plusDays(date, -1);
   const current = useMilkFarmerEntries({
     from: date,
@@ -100,6 +105,10 @@ export function useDashboardData(date: string, shift: ShiftName) {
     milk: "both",
   });
   return useMemo(() => {
+    const pick = <T extends { stationId: string }>(rows: T[]) =>
+      centre === ALL_CENTRES ? rows : rows.filter((r) => r.stationId === centre);
+    const curRows = pick(current.rows);
+    const prevRows = pick(previous.rows);
     const normalize = (rows: typeof current.rows) =>
       rows.map((r) => ({
         date: r.date,
@@ -115,9 +124,9 @@ export function useDashboardData(date: string, shift: ShiftName) {
         centre: r.centre,
         rate: r.rate,
       }));
-    const allShifts = normalize(current.rows);
+    const allShifts = normalize(curRows);
     const c = allShifts.filter((r) => r.shift === shift),
-      p = normalize(previous.rows).filter((r) => r.shift === shift),
+      p = normalize(prevRows).filter((r) => r.shift === shift),
       daily = series(c, date, date),
       prior = series(p, prevDate, prevDate),
       bothShifts = series(allShifts, date, date);
@@ -225,7 +234,7 @@ export function useDashboardData(date: string, shift: ShiftName) {
       })
       .sort((a, b) => b.litres - a.litres)
       .slice(0, 10);
-    const shiftRows = current.rows.filter((r) => r.shift === shift);
+    const shiftRows = curRows.filter((r) => r.shift === shift);
     const recentRows = [...shiftRows]
       .sort((a, b) =>
         `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`),
@@ -302,5 +311,6 @@ export function useDashboardData(date: string, shift: ShiftName) {
     date,
     shift,
     prevDate,
+    centre,
   ]);
 }
