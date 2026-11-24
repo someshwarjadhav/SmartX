@@ -50,7 +50,6 @@ import {
   type BillPrintInfo,
 } from "../../../lib/portal/farmerBillPrint";
 import { getSession } from "../../../services/session";
-import { getProfileFromSession } from "../../../services/profile/profile.api";
 import { fetchDpuFarmerMaster } from "../../../services/farmer/farmer.api";
 
 const dmy = (s: string) => s.split("-").reverse().join("-");
@@ -367,31 +366,16 @@ const FarmerBill: React.FC = () => {
     const name = `farmer-bill-${applied.from}-to-${applied.to}`;
     if (kind === "print" || kind === "download") {
       const label = vlcLabel(applied.vlc);
-      // label = "Name | centre code"; the name may start with the code ("NMD101 - Thingalur")
-      const parts = label.split(" | ");
-      const villageCode = (parts[1] || applied.vlc).trim();
-      const villageName = (parts[0] || label)
-        .replace(/^\s*[A-Za-z]{2,5}\d+\s*[-–:]\s*/, "")
-        .trim();
-      let contact = { mobile: "", Address: "", GST: "" };
-      try {
-        contact = getProfileFromSession();
-      } catch {
-        /* no profile saved */
-      }
       const info: BillPrintInfo = {
         dairy: getSession()?.mccName || "SmartX Dairy",
-        villageId: villageCode,
-        villageName: villageName || label,
-        address: contact.Address,
-        phone: contact.mobile,
-        gst: contact.GST,
+        villageId: applied.vlc,
+        villageName: label.split(" | ")[0] || label,
         from: dmy(applied.from),
         to: dmy(applied.to),
       };
       if (kind === "print") {
-        if (printFarmerBills(bills, info, name)) toast("Bill opened in a new tab — click Print Bill there");
-        else toast("Allow pop-ups to open the bill", "warn");
+        if (printFarmerBills(bills, info, name)) toast("Print dialog opened");
+        else toast("Allow pop-ups to print the bill", "warn");
       } else {
         downloadFarmerBills(bills, info, name)
           .then(() => toast("Farmer bill PDF downloaded"))
