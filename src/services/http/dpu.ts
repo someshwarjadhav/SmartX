@@ -21,8 +21,7 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 
 const B64 = /^[A-Za-z0-9+/_-]{16,}={0,2}$/;
 const AES_PACKED = /^[A-Za-z0-9+/=]{8,}:[A-Za-z0-9+/=]{16,}$/;
-// A reply inside Data/Message can be tiny: an empty list "[]" is only "CAk=" (4 chars). Allowed for nested values only,
-// and the result is used only if it opens into JSON, so plain texts such as "Saved" are left alone.
+
 const B64_SHORT = /^[A-Za-z0-9+/_-]{2,}={0,2}$/;
 
 const looksJson = (t: string) => /^[[{]/.test(t.trim());
@@ -190,9 +189,9 @@ async function dpuSend(
 export const dpuGet = (
   path: string,
   priority: Priority = 1,
-  /** shorter timeout than the default (a slow request then frees its slot early) */
+  
   timeoutMs?: number,
-  /** true = always go to the network (browser HTTP cache is bypassed), so the same URL is really called again */
+
   fresh = false,
 ): Promise<unknown> =>
   dpuSend(
@@ -235,7 +234,8 @@ export async function dpuWrite(
       text.trim() &&
       !text.trim().startsWith("<")
     ) {
-      return text.trim();
+      
+      return openDpuReply(text.trim(), 0, true);
     }
     throw e;
   }
@@ -291,7 +291,7 @@ export async function dpuSave(
       throw new ApiError(reply.trim(), "server");
     return reply.trim();
   }
-  if (typeof reply === "number") return String(reply); // e.g. updateMilkEntry answers with just the new rate
+  if (typeof reply === "number") return String(reply); 
   if (!isObj(reply)) return "";
   const inner = reply.data ?? reply.Data;
   const message = String(

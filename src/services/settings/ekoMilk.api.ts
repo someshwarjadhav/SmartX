@@ -1,12 +1,19 @@
-import { BASE_URL, REQUEST_TIMEOUT_MS, STIPL_BASE } from "../config";
+import { REQUEST_TIMEOUT_MS, STIPL_BASE } from "../config";
 import { dpuGet } from "../http/dpu";
 import { DPU } from "../http/dpuEndpoints";
 import { getSession } from "../session";
 import { ApiError } from "../http/errors";
 import { norm } from "../utils/loose";
-import { encryptPayload } from "../../lib/portal/crypto";
-
-const HOST = BASE_URL || "https://smartx.shivinfotech.co.in";
+import {
+  dpuSaveAttempts,
+  dpuWrite,
+  type SaveAttempt,
+} from "../http/dpu";
+import {
+  encryptPayload,
+  encryptXorPayload,
+  hasEncryptionKey,
+} from "../../lib/portal/crypto";
 
 const STATIC = STIPL_BASE;
 
@@ -112,22 +119,98 @@ function recordsOf(json: unknown): Obj[] {
   return [];
 }
 
-const sealed = (data: Obj): string => {
-  try {
-    return encryptPayload(data);
-  } catch (e) {
-    throw new ApiError(
-      e instanceof Error ? e.message : "The request could not be encrypted.",
-      "parse",
+/**
+ * Request layouts for the /api/Login Eko endpoints.
+ * Confirmed from the server: AES { payload } is accepted, XOR gets "Invalid encrypted payload",
+ * so AES goes FIRST (no wasted requests). XOR stays only as a fallback.
+ */
+const layouts = (path: string, body: Obj): SaveAttempt[] => {
+  const out: SaveAttempt[] = [];
+  if (hasEncryptionKey()) {
+    out.push(
+      { label: "aes-lower", path, body: { payload: encryptPayload(body) } },
+      { label: "aes-upper", path, body: { Payload: encryptPayload(body) } },
     );
   }
+  out.push({ label: "xor-lower", path, body: { payload: encryptXorPayload(body) } });
+  return out;
 };
-const postSealed = (url: string, data: Obj) =>
-  request(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ payload: sealed(data) }),
-  });
+
+const WRONG_LAYOUT = /invalid encrypted|not a valid base-?64/i;
+const lastRead = new Map<string, string>();
+
+
+async function ekoRead<T>(
+  key: string,
+  path: string,
+  body: Obj,
+  parse: (r: unknown) => T,
+): Promise<T> {
+  const all = layouts(path, body);
+  const first = lastRead.get(key);
+  const ordered = first
+    ? [...all].sort((a, b) => Number(b.label === first) - Number(a.label === first))
+    : all;
+  const token = getSession()?.token;
+  let lastMsg = "";
+  for (const a of ordered) {
+    const reply = await dpuWrite(
+      a.path,
+      {
+        method: "POST",
+        body: JSON.stringify(a.body),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      },
+      1,
+    );
+    const msg = isObj(reply) ? str(reply.Message ?? reply.message) : "";
+    if (isObj(reply) && (reply.Success ?? reply.success) === false && WRONG_LAYOUT.test(msg)) {
+      lastMsg = msg;
+      continue;
+    }
+    const out = parse(reply);
+    lastRead.set(key, a.label);
+    return out;
+  }
+  throw new ApiError(lastMsg || "The server could not read the request.", "server");
+}
+const ekoSave = (key: string, path: string, body: Obj) =>
+  dpuSaveAttempts(`eko:${key}`, layouts(path, body));
+
+function rowsFrom(reply: unknown): Obj[] {
+  if (isObj(reply) && (reply.Success ?? reply.success) === false) {
+    const text = [reply.Message ?? reply.message, reply.Details ?? reply.details]
+      .map((x) => str(x))
+      .filter(Boolean)
+      .join(" - ");
+    if (/no\s*(record|data)|not\s*found/i.test(text)) return [];
+    throw new ApiError(text || "The portal did not return the records.", "server");
+  }
+  if (isObj(reply)) {
+    for (const k of ["Details", "details"]) {
+      const inner = reply[k];
+      if (typeof inner === "string" && /^\s*[[{]/.test(inner)) {
+        try {
+          return recordsOf(JSON.parse(inner));
+        } catch {
+        
+        }
+      }
+    }
+  }
+  const rows = recordsOf(reply);
+  if (rows.length) return rows;
+  if (isObj(reply)) {
+    for (const k of ["Details", "details"]) {
+      const inner = reply[k];
+      if (Array.isArray(inner)) return inner.filter(isObj);
+    }
+  }
+  return [];
+}
 
 const n0 = (v: string): number => {
   const n = Number(v);
@@ -285,13 +368,18 @@ const splitStamp = (v: unknown): [string, string] => {
 };
 const dateOnly = (v: unknown) => str(v).split(/\s+/)[0];
 
+export const buildEkoRecordsPayload = (stationId: string) => ({
+  StationId: stationId,
+});
+
 export async function getEkoCorrections(
   stationId: string,
 ): Promise<CorrectionRow[]> {
-  const rows = recordsOf(
-    await request(
-      `${HOST}/home/GetEkoCorrectionRecords?stationid=${encodeURIComponent(stationId)}`,
-    ),
+  const rows = await ekoRead(
+    "GetEkoCorrectionRecords",
+    DPU.getEkoCorrectionRecords,
+    buildEkoRecordsPayload(stationId),
+    rowsFrom,
   );
   return rows.map((r) => {
     const [ad, at] = appliedOf(r);
@@ -321,34 +409,43 @@ export interface CorrectionInput {
   diff: Quality6;
 }
 
+export const buildEkoCorrectionPayload = (c: CorrectionInput) => ({
+  entrydate: c.entryDate,
+  stationid: c.stationId,
+  fatcc: n0(c.diff.cowFat),
+  snfcc: n0(c.diff.cowSnf),
+  fatbc: n0(c.diff.buffFat),
+  snfbc: n0(c.diff.buffSnf),
+  fatmc: n0(c.diff.mixFat),
+  snfmc: n0(c.diff.mixSnf),
+  isactive: 1,
+});
+
 export async function saveEkoCorrection(c: CorrectionInput): Promise<void> {
-  const data = {
-    entrydate: c.entryDate,
-    stationid: c.stationId,
-    fatcc: n0(c.diff.cowFat),
-    snfcc: n0(c.diff.cowSnf),
-    fatbc: n0(c.diff.buffFat),
-    snfbc: n0(c.diff.buffSnf),
-    fatmc: n0(c.diff.mixFat),
-    snfmc: n0(c.diff.mixSnf),
-    isactive: 1,
-  };
-  assertOk(
-    await postSealed(`${HOST}/home/settingscorrection`, data),
-    "The portal did not save the Eko calibration.",
+  const payload = buildEkoCorrectionPayload(c);
+  const reply = await ekoSave(
+    "SettingsCorrection",
+    DPU.settingsCorrection,
+    payload,
   );
+  assertOk(reply, "The portal did not save the Eko calibration.");
 }
+
+export const buildFlagPayload = (
+  stationId: string,
+  recordId: string,
+  flag: string,
+) => ({ stationid: stationId, recordid: recordId, flag });
 
 export async function updateEkoCorrectionFlag(
   stationId: string,
   recordId: string,
   flag: string,
 ): Promise<void> {
-  assertOk(
-    await request(
-      `${HOST}/api/analyzer/UpdateEkoCorrectionFlag?stationid=${encodeURIComponent(stationId)}&recordid=${encodeURIComponent(recordId)}&flag=${encodeURIComponent(flag)}`,
-    ),
-    "The record could not be updated.",
+  await ekoSave(
+    "UpdateEkoCorrectionFlag",
+    DPU.updateEkoCorrectionFlag,
+    buildFlagPayload(stationId, recordId, flag),
   );
 }
 
@@ -397,13 +494,18 @@ const lineOf = (r: Obj, prefix: string): Quality6 => {
   };
 };
 
+export const buildControlRecordsPayload = (stationId: string) => ({
+  StationId: stationId,
+});
+
 export async function getControlSamples(
   stationId: string,
 ): Promise<ControlRow[]> {
-  const rows = recordsOf(
-    await request(
-      `${HOST}/home/GetCorrectorRecords?stationid=${encodeURIComponent(stationId)}`,
-    ),
+  const rows = await ekoRead(
+    "GetCorrectorRecords",
+    DPU.getCorrectorRecords,
+    buildControlRecordsPayload(stationId),
+    rowsFrom,
   );
   return rows.map((r) => {
     const [ad, at] = appliedOf(r);
@@ -440,24 +542,28 @@ export const clrFromFatSnf = (fat: string, snf: string): string => {
   return v > 0 ? v.toFixed(1) : "";
 };
 
+export const buildControlSamplePayload = (c: ControlSampleInput) => ({
+  entrydate: stamp(c.entryDate),
+  stationid: c.stationId,
+  cowfat: nOrBlank(c.cow.fat),
+  cowsnf: nOrBlank(c.cow.snf),
+  cowclr: nOrBlank(c.cow.clr),
+  bufffat: nOrBlank(c.buff.fat),
+  buffsnf: nOrBlank(c.buff.snf),
+  buffclr: nOrBlank(c.buff.clr),
+  mixfat: nOrBlank(c.mix.fat),
+  mixsnf: nOrBlank(c.mix.snf),
+  mixclr: nOrBlank(c.mix.clr),
+});
+
 export async function saveControlSample(c: ControlSampleInput): Promise<void> {
-  const data = {
-    entrydate: stamp(c.entryDate),
-    stationid: c.stationId,
-    cowfat: nOrBlank(c.cow.fat),
-    cowsnf: nOrBlank(c.cow.snf),
-    cowclr: nOrBlank(c.cow.clr),
-    bufffat: nOrBlank(c.buff.fat),
-    buffsnf: nOrBlank(c.buff.snf),
-    buffclr: nOrBlank(c.buff.clr),
-    mixfat: nOrBlank(c.mix.fat),
-    mixsnf: nOrBlank(c.mix.snf),
-    mixclr: nOrBlank(c.mix.clr),
-  };
-  assertOk(
-    await postSealed(`${HOST}/home/correctorsample`, data),
-    "The portal did not save the control sample.",
+  const payload = buildControlSamplePayload(c);
+  const reply = await ekoSave(
+    "CorrectorSample",
+    DPU.correctorSample,
+    payload,
   );
+  assertOk(reply, "The portal did not save the control sample.");
 }
 
 export async function updateCorrectorFlag(
@@ -465,12 +571,10 @@ export async function updateCorrectorFlag(
   recordId: string,
   flag: string,
 ): Promise<void> {
-  assertOk(
-    await request(
-      `${HOST}/api/analyzer/UpdateCorrectorFlag?stationid=${encodeURIComponent(stationId)}&recordid=${encodeURIComponent(recordId)}&flag=${encodeURIComponent(flag)}`,
-      { method: "POST" },
-    ),
-    "The record could not be updated.",
+  await ekoSave(
+    "UpdateCorrectorFlag",
+    DPU.updateCorrectorFlag,
+    buildFlagPayload(stationId, recordId, flag),
   );
 }
 
