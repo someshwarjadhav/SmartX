@@ -466,6 +466,8 @@ type Tab = "calibration" | "tools" | "history";
 type Adj = Record<keyof Quality6, number>;
 
 const STEP = 0.02;
+const ADJ_MIN = -2.5;
+const ADJ_MAX = 2.5;
 const zeroAdj = (): Adj => ({
   cowFat: 0,
   cowSnf: 0,
@@ -475,7 +477,9 @@ const zeroAdj = (): Adj => ({
   mixSnf: 0,
 });
 const r2 = (n: number) => Math.round(n * 100) / 100;
-const clampAdj = (n: number) => r2(n);
+
+const clampAdj = (n: number) => r2(Math.min(ADJ_MAX, Math.max(ADJ_MIN, n)));
+
 const num = (v: string) => {
   const n = Number(v);
   return v === "" || Number.isNaN(n) ? 0 : n;
