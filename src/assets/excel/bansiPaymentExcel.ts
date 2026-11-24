@@ -1,5 +1,6 @@
 import { excelFileName } from './fileName';
 import { isBansiUser as isBansiLogin } from './bansiExcel';
+import { loadXlsx, oneExcelAtATime } from './exporters';
 
 /**
  * Bansi's Payment Summary Excel: same sheet layout as the Bansi "All" collection Excel
@@ -60,8 +61,11 @@ const centreText = (label: string, id: string): string => {
   return label || id;
 };
 
-export async function exportBansiPaymentExcel<T>(input: BansiPayInput<T>): Promise<void> {
-  const XLSX = await import('xlsx');
+export function exportBansiPaymentExcel<T>(input: BansiPayInput<T>): Promise<void> {
+  return oneExcelAtATime(() => writeBansiPaymentExcel(input));
+}
+async function writeBansiPaymentExcel<T>(input: BansiPayInput<T>): Promise<void> {
+  const XLSX = await loadXlsx();
   const { rows, cols, texts = [], weightIndex } = input;
   const tn = texts.length;
   const w = Math.max(0, Math.min(weightIndex, cols.length - 1));

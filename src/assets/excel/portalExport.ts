@@ -1,5 +1,7 @@
 import { toCsv } from '../../lib/csv';
 import { excelFileName } from './fileName';
+import { loadXlsx, oneExcelAtATime } from './exporters';
+import { brandImgHtml, getBrandLogo, printWhenImagesReady } from '../../lib/brandLogo';
 
 export interface ExportCol<T = unknown> {
   header: string;
@@ -40,23 +42,88 @@ const cellValue = (v: string | number): string | number => {
 };
 
 
-export async function exportExcel<T>(name: string, cols: ExportCol<T>[], rows: T[]) {
-  const XLSX = await import('xlsx');
+/**
+ * Total row for a plain list: columns are picked by their heading.
+ *   Sum               Qty / Liter / Kg / Amount / Incentive / Deduction / Payable ... (any other money or quantity column)
+ *   Weighted average  Fat / Snf / Clr / Water (weighted by the Liter / Qty column)
+ *   Amount / Qty      Rate
+ *   No total          ids, codes, mobile, account no, IFSC, dates, shift ... and any column that is not all numbers
+ * Returns undefined when nothing can be totalled (then no Total row is written).
+ */
+const SKIP_TOTAL = /\b(id|code|sr|sno|s\.no|no|number|mobile|phone|contact|account|acc|ifsc|pin|aadhaar|aadhar|rank|priority|year|month|days?|date|time|shift|sample|branch|reg|temp|temperature|reading|ph|density)\b/i;
+const AVG_TOTAL = /^(avg\.?\s*|average\s*)?(fat|snf|clr|water|degree)\b/i;
+const RATE_TOTAL = /\b(rate|price)\b/i;
+const QTY_HEAD = /^(total\s*)?(qty|quantity|liters?|litres?|ltr)\b/i;
+const AMOUNT_HEAD = /^(total\s*)?amount$/i;
+
+function autoTotals(head: string[], body: Array<Array<string | number>>): Array<string | number> | undefined {
+  if (body.length === 0) return undefined;
+  const numeric = head.map((_, i) => body.every((r) => r[i] === '' || r[i] === undefined || typeof r[i] === 'number') && body.some((r) => typeof r[i] === 'number'));
+  const col = (i: number): number[] => body.map((r) => Number(r[i]) || 0);
+  const sum = (i: number): number => col(i).reduce((a, b) => a + b, 0);
+  const round = (n: number): number => Math.round(n * 100) / 100;
+  const qty = head.findIndex((h, i) => numeric[i] && QTY_HEAD.test(h.trim()));
+  const amount = head.findIndex((h, i) => numeric[i] && AMOUNT_HEAD.test(h.trim()));
+  let any = false;
+  const out: Array<string | number> = head.map((h, i) => {
+    const t = h.trim();
+    if (!numeric[i] || SKIP_TOTAL.test(t)) return '';
+    if (AVG_TOTAL.test(t)) {
+      const w = qty >= 0 ? sum(qty) : 0;
+      if (qty < 0 || i === qty) return '';
+      any = true;
+      const v = col(i);
+      const wt = col(qty);
+      return w ? round(v.reduce((a, x, j) => a + x * (wt[j] ?? 0), 0) / w) : 0;
+    }
+    if (RATE_TOTAL.test(t)) {
+      if (qty < 0 || amount < 0) return '';
+      any = true;
+      const d = sum(qty);
+      return d ? round(sum(amount) / d) : 0;
+    }
+    any = true;
+    return round(sum(i));
+  });
+  if (!any) return undefined;
+  const label = out.findIndex((v) => v === '');
+  out[label >= 0 ? label : 0] = 'Total';
+  return out;
+}
+
+export interface ExcelOptions {
+  /** false = no Total row (lists where a total makes no sense, e.g. calibration readings) */
+  total?: boolean;
+}
+
+export function exportExcel<T>(name: string, cols: ExportCol<T>[], rows: T[], options: ExcelOptions = {}): Promise<void> {
+  return oneExcelAtATime(async () => {
+  const XLSX = await loadXlsx();
   const head = cols.map((c) => c.header);
   const body = rows.map((r) => cols.map((c) => cellValue(c.value(r))));
-  // only the column headings and the data rows - no title / generated / footer lines
-  const aoa: Array<Array<string | number>> = [head, ...body];
+  // header row + data rows + one bold Total row (no title / generated / footer lines)
+  const totals = options.total === false ? undefined : autoTotals(head, body);
+  const aoa: Array<Array<string | number>> = [head, ...body, ...(totals ? [totals] : [])];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
+  if (totals) {
+    // bold Total row (needs xlsx-js-style; without it the row is simply not bold)
+    totals.forEach((_, ci) => {
+      const addr = XLSX.utils.encode_cell({ r: aoa.length - 1, c: ci });
+      const cell = ws[addr] ?? (ws[addr] = { t: 's', v: '' });
+      (cell as unknown as { s?: unknown }).s = { font: { bold: true } };
+    });
+  }
   // every column as wide as its longest value / heading, so names and amounts are never cut off
   const textOf = (v: string | number | undefined): string => (typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: 4 }) : String(v ?? ''));
   ws['!cols'] = head.map((h, i) => {
     let longest = String(h).length + 3;
-    for (const r of body) longest = Math.max(longest, textOf(r[i]).length);
+    for (const r of totals ? [...body, totals] : body) longest = Math.max(longest, textOf(r[i]).length);
     return { wch: Math.min(70, Math.max(9, longest + 2)) };
   });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31).replace(/[\\/?*[\]:]/g, ' ') || 'Report');
   XLSX.writeFile(wb, excelFileName(name), { compression: true });
+  });
 }
 
 
@@ -114,14 +181,15 @@ function pdfBody<T>(title: string, cols: ExportCol<T>[], rows: T[], o: PdfOption
   const chips = (o.meta ?? []).filter(([, v]) => v).map(([k, v]) => `<span class="chip"><b>${htmlEsc(k)}</b>${htmlEsc(v)}</span>`).join('');
   const cards = (o.summary ?? []).map((s) => `<div class="card ${s.tone ?? ''}"><p>${htmlEsc(s.label)}</p><strong>${htmlEsc(s.value)}</strong></div>`).join('');
   const generated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  const brand = getBrandLogo();
 
   return `
     <header class="top">
-      <div class="logo" aria-hidden="true">
+      ${brand ? `<div class="logo own">${brandImgHtml(brand, 46)}</div>` : `<div class="logo" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2.5c3.4 4.3 6 7.4 6 10.9A6 6 0 0 1 6 13.4C6 9.9 8.6 6.8 12 2.5Z" fill="#fff"/><path d="M9.9 11.4l4.2 4.2M14.1 11.4l-4.2 4.2" stroke="#2563eb" stroke-width="1.9" fill="none" stroke-linecap="round"/></svg>
-      </div>
+      </div>`}
       <div class="ttl">
-        <p class="eyebrow">SMARTX · DAIRY PORTAL</p>
+        <p class="eyebrow">${brand ? htmlEsc(brand.name.toUpperCase()) : 'SMARTX · DAIRY PORTAL'}</p>
         <h1>${htmlEsc(title)}</h1>
         ${o.subtitle ? `<p class="sub">${htmlEsc(o.subtitle)}</p>` : ''}
       </div>
@@ -149,6 +217,7 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
         body { margin: 0; padding: 28px; color: var(--deep); background: #fff; font: 12px/1.45 Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .top { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 18px 22px; color: #fff; border-radius: 16px; border-bottom: 5px solid var(--brand); background: linear-gradient(120deg, #0b1a3d 0%, #1b3771 58%, #2563eb 100%); }
         .logo { display: grid; width: 50px; height: 50px; flex: 0 0 auto; place-items: center; border-radius: 15px; background: linear-gradient(135deg, #2563eb, #60a5fa); box-shadow: 0 4px 12px rgba(37,99,235,.45); }
+        .logo.own { width: auto; min-width: 58px; height: 58px; padding: 6px 10px; border-radius: 12px; background: #fff; box-shadow: none; }
         .ttl { min-width: 0; flex: 1; }
         .eyebrow { margin: 0 0 3px; color: #93c5fd; font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
         h1 { margin: 0; font-size: 22px; line-height: 1.2; overflow-wrap: anywhere; }
@@ -185,5 +254,5 @@ export function exportPDF<T>(title: string, cols: ExportCol<T>[], rows: T[], opt
     </head><body>${pdfBody(title, cols, rows, options)}</body></html>`);
   report.document.close();
   report.focus();
-  window.setTimeout(() => report.print(), 400);
+  printWhenImagesReady(report);
 }

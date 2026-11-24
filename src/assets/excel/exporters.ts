@@ -1,5 +1,6 @@
 import { toCsv } from '../../lib/csv';
 import { excelFileName, exactExcelFileName } from './fileName';
+import { brandImgHtml, getBrandLogo, loadLogoPixels } from '../../lib/brandLogo';
 
 /** 'id' = a whole number written as it is (farmer id, branch id ...): a real number, no thousands comma */
 export type ColType = 'text' | 'int' | 'dec1' | 'dec2' | 'money' | 'num2' | 'general' | 'id';
@@ -30,6 +31,8 @@ export interface ExportTable {
   filename: string;
   /** true = the file is saved with exactly `filename` (no download date added), e.g. the STIPL Old Excel "farmercollection.xlsx" */
   exactFileName?: boolean;
+  /** true = no Total row in the Excel (only the Athare Farmer Collection sheet, which is plain data). Every other Excel gets a Total row. */
+  noTotals?: boolean;
   title: string;
   subtitle?: string;
   columns: ExportColumn[];
@@ -243,7 +246,9 @@ const XLSX_FORMAT: Record<ColType, string | undefined> = { text: undefined, int:
  *  titleBlock: title / filter / generated lines on top (New style report); false = plain header on row 1 (STIPL old / new Excel)
  *  Total row = real Excel formulas (=SUM, weighted average ...) so the sheet keeps working when someone edits a value.
  */
-function buildSheet(XLSX: XlsxApi, t: ExportTable, titleBlock: boolean) {
+function buildSheet(XLSX: XlsxApi, source: ExportTable, titleBlock: boolean) {
+  // every normal Excel gets a Total row: columns without their own total rule are matched by name (Liter / Qty / Amount = Sum, Fat / Snf = weighted average ...)
+  const t = source.noTotals ? source : withFormulaTotals(source);
   const ncol = t.columns.length;
   const top: Array<Array<string | number>> = [];
   if (titleBlock) top.push([t.title], [t.subtitle ?? ''], [`Generated ${stamp()}`], []);
@@ -262,7 +267,7 @@ function buildSheet(XLSX: XlsxApi, t: ExportTable, titleBlock: boolean) {
   const first = top.length; // 0-based index of the first data row
   const n = t.rows.length;
   const aoa: Array<Array<string | number>> = [...top, ...t.rows];
-  const totals = n > 0 ? totalsOf(t) : undefined;
+  const totals = n > 0 && !t.noTotals ? totalsOf(t) : undefined;
   const totalRow = first + n; // 0-based
   if (totals) aoa.push(totals);
   const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -353,7 +358,8 @@ function buildSheet(XLSX: XlsxApi, t: ExportTable, titleBlock: boolean) {
  */
 export type XlsxApi = typeof import('xlsx');
 const styled = import.meta.glob('../../node_modules/xlsx-js-style/dist/xlsx.min.js');
-export async function loadXlsx(): Promise<XlsxApi> {
+let xlsxLoading: Promise<XlsxApi> | undefined;
+async function fetchXlsx(): Promise<XlsxApi> {
   const load = Object.values(styled)[0];
   if (load) {
     try {
@@ -366,42 +372,83 @@ export async function loadXlsx(): Promise<XlsxApi> {
   }
   return import('xlsx');
 }
+/** The Excel library is loaded only once; every later export reuses it (no waiting for the download of the library). */
+export function loadXlsx(): Promise<XlsxApi> {
+  if (!xlsxLoading) {
+    xlsxLoading = fetchXlsx().catch((e) => {
+      xlsxLoading = undefined; // try again on the next export
+      throw e;
+    });
+  }
+  return xlsxLoading;
+}
+/** Warm-up: called once after login (idle time) so the first Excel click does not wait for the library. */
+export function preloadXlsx(): void {
+  void loadXlsx().catch(() => undefined);
+}
+
+/**
+ * Only ONE Excel export runs at a time: a second click / second call while one is still being made is ignored,
+ * so the same file is never downloaded twice (no multiple Excel files opening).
+ */
+let excelBusy = false;
+export async function oneExcelAtATime(run: () => Promise<void>): Promise<void> {
+  if (excelBusy) return;
+  excelBusy = true;
+  try {
+    // let the browser paint the loading spinner before the (heavy) sheet is built
+    await new Promise<void>((r) => window.setTimeout(r, 0));
+    await run();
+  } finally {
+    window.setTimeout(() => {
+      excelBusy = false;
+    }, 800);
+  }
+}
 
 /** New style Excel: title block, filters line, header, data, total row with formulas. */
-export async function exportExcel(t: ExportTable): Promise<void> {
-  const XLSX = await loadXlsx();
-  // only header row + data + total row (no title / filter / generated lines)
-  const ws = buildSheet(XLSX, t, false);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, t.title.slice(0, 31).replace(/[\\/?*[\]:]/g, ' '));
-  XLSX.writeFile(wb, excelFileName(t.filename), { compression: true });
+export function exportExcel(t: ExportTable): Promise<void> {
+  return oneExcelAtATime(async () => {
+    const XLSX = await loadXlsx();
+    // only header row + data + total row (no title / filter / generated lines)
+    const ws = buildSheet(XLSX, t, false);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, t.title.slice(0, 31).replace(/[\\/?*[\]:]/g, ' '));
+    XLSX.writeFile(wb, excelFileName(t.filename), { compression: true });
+  });
 }
 
 /** STIPL style Excel (old / new export): header on row 1, data below, total row with formulas, sheet "Sheet1". */
-export async function exportPlainExcel(t: ExportTable): Promise<void> {
-  const XLSX = await loadXlsx();
-  const ws = buildSheet(XLSX, t, false);
-  // Old / New Excel are plain data: every number column holds REAL numbers and no cell holds a formula,
-  // so selecting a column in Excel shows its Sum straight away (nothing asks for a formula).
-  const first = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
-  for (let r = 1; r <= first.e.r; r++) {
-    t.columns.forEach((c, ci) => {
-      const cell = ws[XLSX.utils.encode_cell({ r, c: ci })];
-      if (!cell) return;
-      if (cell.f) delete cell.f;
-      // right aligned column (numbers kept as text): only the look changes, the cell stays text. Needs xlsx-js-style, otherwise it is ignored.
-      if (c.align === 'right') (cell as unknown as { s?: unknown }).s = { alignment: { horizontal: 'right' } };
-      const numberColumn = c.type !== undefined && c.type !== 'text';
-      if (numberColumn && cell.t === 's' && /^-?\d+(\.\d+)?$/.test(String(cell.v).replace(/,/g, '').trim())) {
-        cell.t = 'n';
-        cell.v = Number(String(cell.v).replace(/,/g, '').trim());
-        delete cell.w;
-      }
-    });
-  }
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  XLSX.writeFile(wb, t.exactFileName ? exactExcelFileName(t.filename) : excelFileName(t.filename), { compression: true });
+export function exportPlainExcel(t: ExportTable): Promise<void> {
+  return oneExcelAtATime(async () => {
+    const XLSX = await loadXlsx();
+    const ws = buildSheet(XLSX, t, false);
+    // Plain data: every number column holds REAL numbers and no cell holds a formula (the Total row keeps its value, bold),
+    // so selecting a column in Excel shows its Sum straight away (nothing asks for a formula).
+    const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
+    const hasTotal = !t.noTotals && t.rows.length > 0 && range.e.r === t.rows.length + 1;
+    for (let r = 1; r <= range.e.r; r++) {
+      const isTotalRow = hasTotal && r === range.e.r;
+      t.columns.forEach((c, ci) => {
+        const cell = ws[XLSX.utils.encode_cell({ r, c: ci })];
+        if (!cell) return;
+        if (cell.f) delete cell.f;
+        // right aligned column (numbers kept as text): only the look changes, the cell stays text. Needs xlsx-js-style, otherwise it is ignored.
+        if (c.align === 'right') {
+          (cell as unknown as { s?: unknown }).s = { ...(isTotalRow ? { font: { bold: true } } : {}), alignment: { horizontal: 'right' } };
+        }
+        const numberColumn = c.type !== undefined && c.type !== 'text';
+        if (numberColumn && cell.t === 's' && /^-?\d+(\.\d+)?$/.test(String(cell.v).replace(/,/g, '').trim())) {
+          cell.t = 'n';
+          cell.v = Number(String(cell.v).replace(/,/g, '').trim());
+          delete cell.w;
+        }
+      });
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, t.exactFileName ? exactExcelFileName(t.filename) : excelFileName(t.filename), { compression: true });
+  });
 }
 
 /** kept for older pages: same as the plain STIPL sheet */
@@ -417,6 +464,7 @@ export async function exportPDF(t: ExportTable): Promise<void> {
   const mod = autoTableMod as unknown as { default: unknown; autoTable?: unknown };
   const autoTable = (typeof mod.default === 'function' ? mod.default : (mod.default as { default?: unknown } | undefined)?.default ?? mod.autoTable) as typeof autoTableMod.default;
   const p = reportPalette();
+  const logo = await loadLogoPixels(getBrandLogo());
   const cols = t.columns.length;
   // wide reports (e.g. Variance, 19 columns) get a bigger sheet so the text stays readable
   const doc = new jsPDF({ orientation: cols > 6 ? 'landscape' : 'portrait', unit: 'pt', format: cols > 14 ? 'a3' : 'a4' });
@@ -424,18 +472,23 @@ export async function exportPDF(t: ExportTable): Promise<void> {
   const h = doc.internal.pageSize.getHeight();
   const M = 36;
 
+  // own logo of the dairy (Numax / NutryMist): LEFT side, the title moves to its right
+  const logoK = logo ? Math.min(130 / logo.w, 48 / logo.h) : 0;
+  const logoW = logo ? logo.w * logoK : 0;
+  const tx = logo ? M + logoW + 14 : M;
   const head = (): void => {
     doc.setFillColor(...p.brand);
     doc.rect(0, 0, w, 8, 'F');
+    if (logo) doc.addImage(logo.data, logo.format, M, 14, logoW, logo.h * logoK);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.setTextColor(...p.text);
-    doc.text(t.title, M, 40);
+    doc.text(t.title, tx, 40);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9.5);
     doc.setTextColor(...p.mute);
-    if (t.subtitle) doc.text(t.subtitle, M, 56);
-    doc.text(`SmartX  |  Generated ${stamp()}`, M, t.subtitle ? 70 : 56);
+    if (t.subtitle) doc.text(t.subtitle, tx, 56);
+    doc.text(`SmartX  |  Generated ${stamp()}`, tx, t.subtitle ? 70 : 56);
     doc.setDrawColor(...p.brand);
     doc.setLineWidth(1.2);
     doc.line(M, t.subtitle ? 78 : 64, w - M, t.subtitle ? 78 : 64);
@@ -527,6 +580,10 @@ export async function exportPDF(t: ExportTable): Promise<void> {
       if (d.pageNumber > 1) {
         doc.setFillColor(...p.brand);
         doc.rect(0, 0, w, 6, 'F');
+        if (logo) {
+          const k = Math.min(90 / logo.w, 24 / logo.h);
+          doc.addImage(logo.data, logo.format, M, 10, logo.w * k, logo.h * k);
+        }
       }
     },
   });
@@ -615,7 +672,7 @@ export function printTable(t: ExportTable): void {
   const landscape = t.columns.length > 6;
   printHTML(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(t.title)}</title><style>${printCss(p, landscape, t.columns.length > 10)}</style></head><body>
     <div class="bar"></div>
-    <div class="top"><div><h1>${esc(t.title)}</h1><p class="meta">${t.subtitle ? `${esc(t.subtitle)}` : ''}</p></div><div style="text-align:right"><div class="brand">SmartX</div><p class="meta">Generated ${esc(stamp())}</p></div></div>
+    <div class="top"><div style="display:flex;align-items:center;gap:14px">${brandImgHtml(getBrandLogo(), 44)}<div><h1>${esc(t.title)}</h1><p class="meta">${t.subtitle ? `${esc(t.subtitle)}` : ''}</p></div></div><div style="text-align:right"><div class="brand">SmartX</div><p class="meta">Generated ${esc(stamp())}</p></div></div>
     <table><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>
     <div class="foot"><span>SmartX</span><span>${t.rows.length} rows</span></div></body></html>`);
 }

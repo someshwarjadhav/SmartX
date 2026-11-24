@@ -73,7 +73,7 @@ export default function EkoDataReport({ title, subtitle, icon: Icon, fields, loa
   const exportReport = async () => {
     if (!rows.length) return;
     const cols: ExportCol<EkoRow>[] = columns.map((c) => ({ header: c.label, value: (r) => c.get(r) }));
-    await exportExcel(`${title} - ${vlccOption(loaded)}`, cols, rows);
+    await exportExcel(`${title} - ${vlccOption(loaded)}`, cols, rows, { total: false });
   };
 
   const pages = Math.max(1, Math.ceil(rows.length / size));

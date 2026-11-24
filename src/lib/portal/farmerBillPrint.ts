@@ -1,4 +1,13 @@
-import type { FarmerBillData, BillShift } from '../../services/billing/farmerBill.api';
+import type {
+  FarmerBillData,
+  BillShift,
+} from "../../services/billing/farmerBill.api";
+import {
+  brandImgHtml,
+  getBrandLogo,
+  loadLogoPixels,
+  type BrandLogo,
+} from "../brandLogo";
 
 /** Header block of the printed Farmer Bill (dairy name on top, then village / period). */
 export interface BillPrintInfo {
@@ -10,35 +19,46 @@ export interface BillPrintInfo {
   to: string;
 }
 
-const KEYS: Array<keyof BillShift> = ['wt', 'fat', 'snf', 'rate', 'amt'];
-const HEADS = ['Wt', 'Fat', 'SNF', 'Rate', 'Amt'];
+const KEYS: Array<keyof BillShift> = ["wt", "fat", "snf", "rate", "amt"];
+const HEADS = ["Wt", "Fat", "SNF", "Rate", "Amt"];
 
 const esc = (v: string | number) =>
-  String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
+  String(v).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ] ?? c,
+  );
 
 const farmerLabel = (b: FarmerBillData) => `${b.id} ${b.name}`.trim();
 const period = (i: BillPrintInfo) => `${i.from} To ${i.to}`;
 
-/* ------------------------------------------------------------------ */
-/*  Print (browser print dialog - also lets the user "Save as PDF")    */
-/* ------------------------------------------------------------------ */
-
-function billHtml(b: FarmerBillData, i: BillPrintInfo, last: boolean, generated: string): string {
+function billHtml(
+  b: FarmerBillData,
+  i: BillPrintInfo,
+  last: boolean,
+  generated: string,
+  brand: BrandLogo | null,
+): string {
   const rows = b.lines
     .map(
       (l) =>
-        `<tr class="${l.total ? 'tot' : ''}"><td>${esc(l.label)}</td><td>${esc(l.milk)}</td>${KEYS.map((k) => `<td class="r">${esc(l.m[k])}</td>`).join('')}${KEYS.map((k) => `<td class="r">${esc(l.e[k])}</td>`).join('')}</tr>`,
+        `<tr class="${l.total ? "tot" : ""}"><td>${esc(l.label)}</td><td>${esc(l.milk)}</td>${KEYS.map((k) => `<td class="r">${esc(l.m[k])}</td>`).join("")}${KEYS.map((k) => `<td class="r">${esc(l.e[k])}</td>`).join("")}</tr>`,
     )
-    .join('');
+    .join("");
   const summary = b.summary
-    .map((row) => `<tr>${row.map((p, j) => `<td ${j === row.length - 1 && row.length < 4 ? `colspan="${5 - row.length}"` : ''} class="${/net\s*payment/i.test(p.label) ? 'net' : ''}"><span>${esc(p.label)}</span><b>${esc(p.value)}</b></td>`).join('')}</tr>`)
-    .join('');
+    .map(
+      (row) =>
+        `<tr>${row.map((p, j) => `<td ${j === row.length - 1 && row.length < 4 ? `colspan="${5 - row.length}"` : ""} class="${/net\s*payment/i.test(p.label) ? "net" : ""}"><span>${esc(p.label)}</span><b>${esc(p.value)}</b></td>`).join("")}</tr>`,
+    )
+    .join("");
   return `
-  <section class="bill" ${last ? 'style="break-after:auto;page-break-after:auto"' : ''}>
+  <section class="bill" ${last ? 'style="break-after:auto;page-break-after:auto"' : ""}>
     <header class="top">
-      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2.5c3.4 4.3 6 7.4 6 10.9A6 6 0 0 1 6 13.4C6 9.9 8.6 6.8 12 2.5Z" fill="#fff"/><path d="M9.9 11.4l4.2 4.2M14.1 11.4l-4.2 4.2" stroke="#2563eb" stroke-width="1.9" fill="none" stroke-linecap="round"/></svg></div>
+      ${brand ? `<div class="logo own">${brandImgHtml(brand, 44)}</div>` : `<div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 2.5c3.4 4.3 6 7.4 6 10.9A6 6 0 0 1 6 13.4C6 9.9 8.6 6.8 12 2.5Z" fill="#fff"/><path d="M9.9 11.4l4.2 4.2M14.1 11.4l-4.2 4.2" stroke="#2563eb" stroke-width="1.9" fill="none" stroke-linecap="round"/></svg></div>`}
       <div class="ttl">
-        <p class="eyebrow">SMARTX · DAIRY PORTAL</p>
+        <p class="eyebrow">${brand ? esc(brand.name.toUpperCase()) : "SMARTX · DAIRY PORTAL"}</p>
         <h1>${esc(i.dairy)}</h1>
         <p class="sub">Farmer Bill · ${esc(b.range || period(i))}</p>
       </div>
@@ -50,31 +70,32 @@ function billHtml(b: FarmerBillData, i: BillPrintInfo, last: boolean, generated:
       <span class="chip"><b>Farmer Name</b>${esc(farmerLabel(b))}</span>
       <span class="chip"><b>Bill Period</b>${esc(b.range || period(i))}</span>
     </div>
-    <table class="main">
+    <div class="scroll"><table class="main">
       <thead>
         <tr><th rowspan="2">Date</th><th rowspan="2">Milk</th><th colspan="5" class="grp">Morning</th><th colspan="5" class="grp">Evening</th></tr>
-        <tr class="sub">${HEADS.map((h) => `<th class="r">${h}</th>`).join('')}${HEADS.map((h) => `<th class="r">${h}</th>`).join('')}</tr>
+        <tr class="sub">${HEADS.map((h) => `<th class="r">${h}</th>`).join("")}${HEADS.map((h) => `<th class="r">${h}</th>`).join("")}</tr>
       </thead>
       <tbody>${rows}</tbody>
-    </table>
-    <table class="sum"><tbody>${summary}</tbody></table>
+    </table></div>
+    <div class="scroll"><table class="sum"><tbody>${summary}</tbody></table></div>
     <div class="sign"><span>Center Incharge Signature :</span><span>Producer Signature :</span></div>
-    <footer><span>SmartX · Data from the SmartX portal</span></footer>
+    <footer><span>${brand ? esc(i.dairy) : "SmartX · Data from the SmartX portal"}</span></footer>
   </section>`;
 }
 
-export function printFarmerBills(bills: FarmerBillData[], info: BillPrintInfo, title = 'Farmer Bill'): boolean {
-  const w = window.open('', '_blank', 'width=1100,height=760');
-  if (!w) return false;
-  const generated = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title>
-  <style>
+/**
+ * Print Bill: the bill opens in a NEW TAB as a normal page (the same content that Show Record shows).
+ * Nothing is printed by itself - the print dialog opens only when the person clicks "Print Bill" on that page.
+ */
+const BILL_CSS = `
+
     :root { color-scheme: light; --deep:#0b1a3d; --brand:#2563eb; --line:#cddbf3; --soft:#f1f5fe; --mute:#5b6b8f; }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 24px; color: var(--deep); background: #fff; font: 12px/1.45 Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .bill { break-after: page; page-break-after: always; padding-bottom: 6px; }
     .top { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; padding: 16px 22px; color: #fff; border-radius: 16px; border-bottom: 5px solid var(--brand); background: linear-gradient(120deg, #0b1a3d 0%, #1b3771 58%, #2563eb 100%); }
     .logo { display: grid; width: 48px; height: 48px; flex: 0 0 auto; place-items: center; border-radius: 15px; background: linear-gradient(135deg, #2563eb, #60a5fa); box-shadow: 0 4px 12px rgba(37,99,235,.45); }
+    .logo.own { width: auto; min-width: 56px; height: 56px; padding: 6px 10px; border-radius: 12px; background: #fff; box-shadow: none; }
     .ttl { min-width: 0; flex: 1; }
     .eyebrow { margin: 0 0 3px; color: #93c5fd; font-size: 9.5px; font-weight: 800; letter-spacing: .16em; }
     h1 { margin: 0; font-size: 22px; line-height: 1.2; }
@@ -105,10 +126,45 @@ export function printFarmerBills(bills: FarmerBillData[], info: BillPrintInfo, t
     footer { display: flex; justify-content: space-between; margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--mute); font-size: 10px; }
     @page { size: A4 landscape; margin: 10mm; }
     @media print { body { padding: 0; } tr { break-inside: avoid; } .top, .chips { break-inside: avoid; } }
-  </style></head><body>${bills.map((b, n) => billHtml(b, info, n === bills.length - 1, generated)).join('')}</body></html>`);
+`;
+
+const PAGE_CSS = `
+    .toolbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: -24px -24px 18px; padding: 10px 24px; background: #fff; border-bottom: 1px solid var(--line); box-shadow: 0 2px 10px rgba(11,26,61,.08); }
+    .toolbar .what { min-width: 0; color: var(--mute); font-size: 12px; }
+    .toolbar .what b { display: block; color: var(--deep); font-size: 14px; }
+    .toolbar button { cursor: pointer; padding: 9px 20px; border: 0; border-radius: 10px; background: var(--brand); color: #fff; font: 700 13px Inter, "Segoe UI", sans-serif; box-shadow: 0 4px 12px rgba(37,99,235,.35); }
+    .toolbar button:hover { background: #1d4fbf; }
+    .scroll { overflow-x: auto; }
+    .scroll table { min-width: 760px; }
+    @media screen { .bill { max-width: 1100px; margin: 0 auto 22px; padding: 18px; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 6px 22px rgba(11,26,61,.08); } body { background: #eef3fc; } }
+    @media (max-width: 700px) { body { padding: 12px; } .toolbar { margin: -12px -12px 14px; padding: 10px 12px; } .top { flex-wrap: wrap; } .stamp { text-align: left; } }
+    @media print { .toolbar { display: none !important; } .scroll { overflow: visible; } .scroll table { min-width: 0; } }
+`;
+
+export function printFarmerBills(
+  bills: FarmerBillData[],
+  info: BillPrintInfo,
+  title = "Farmer Bill",
+): boolean {
+  const w = window.open("", "_blank");
+  if (!w) return false;
+  const brand = getBrandLogo();
+  const generated = new Date().toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const count = `${bills.length} farmer bill${bills.length === 1 ? "" : "s"}`;
+  w.document
+    .write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title>
+  <style>
+${BILL_CSS}${PAGE_CSS}  </style></head><body>
+  <div class="toolbar">
+    <div class="what"><b>${esc(info.dairy)} · Farmer Bill</b>${esc(info.villageName)} · ${esc(period(info))} · ${esc(count)}</div>
+    <button type="button" onclick="window.print()">Print Bill</button>
+  </div>
+  ${bills.map((b, n) => billHtml(b, info, n === bills.length - 1, generated, brand)).join("")}</body></html>`);
   w.document.close();
   w.focus();
-  window.setTimeout(() => w.print(), 400);
   return true;
 }
 
@@ -116,84 +172,160 @@ export function printFarmerBills(bills: FarmerBillData[], info: BillPrintInfo, t
 /*  Download (real PDF file, one farmer bill per page)                 */
 /* ------------------------------------------------------------------ */
 
-export async function downloadFarmerBills(bills: FarmerBillData[], info: BillPrintInfo, filename: string): Promise<void> {
-  const [{ jsPDF }, autoTableMod] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
-  const mod = autoTableMod as unknown as { default: unknown; autoTable?: unknown };
-  const autoTable = (typeof mod.default === 'function' ? mod.default : ((mod.default as { default?: unknown } | undefined)?.default ?? mod.autoTable)) as typeof autoTableMod.default;
+export async function downloadFarmerBills(
+  bills: FarmerBillData[],
+  info: BillPrintInfo,
+  filename: string,
+): Promise<void> {
+  const [{ jsPDF }, autoTableMod] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  const mod = autoTableMod as unknown as {
+    default: unknown;
+    autoTable?: unknown;
+  };
+  const autoTable = (
+    typeof mod.default === "function"
+      ? mod.default
+      : ((mod.default as { default?: unknown } | undefined)?.default ??
+        mod.autoTable)
+  ) as typeof autoTableMod.default;
 
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const logo = await loadLogoPixels(getBrandLogo());
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 28;
-  const line = { lineColor: [0, 0, 0] as [number, number, number], lineWidth: 0.6 };
+  const line = {
+    lineColor: [0, 0, 0] as [number, number, number],
+    lineWidth: 0.6,
+  };
 
   bills.forEach((b, n) => {
     if (n > 0) doc.addPage();
     doc.setTextColor(0);
-    doc.setFont('helvetica', 'bold');
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.text(info.dairy, W / 2, 40, { align: 'center' });
+    doc.text(info.dairy, W / 2, 40, { align: "center" });
     doc.setFontSize(12);
-    doc.text('Farmer Bill', W / 2, 60, { align: 'center' });
+    doc.text("Farmer Bill", W / 2, 60, { align: "center" });
+    if (logo) {
+      // own logo of the dairy, top left, in a box 150 x 44 pt (keeps its shape)
+      const k = Math.min(150 / logo.w, 44 / logo.h);
+      doc.addImage(logo.data, logo.format, M, 18, logo.w * k, logo.h * k);
+    }
 
     doc.setFontSize(10);
-    const put = (label: string, value: string, x: number, y: number, right = false) => {
+    const put = (
+      label: string,
+      value: string,
+      x: number,
+      y: number,
+      right = false,
+    ) => {
       const lw = doc.getTextWidth(`${label} `);
-      doc.setFont('helvetica', 'bold');
-      const vw = (doc.setFont('helvetica', 'normal'), doc.getTextWidth(value));
+      doc.setFont("helvetica", "bold");
+      const vw = (doc.setFont("helvetica", "normal"), doc.getTextWidth(value));
       const start = right ? x - lw - vw : x;
-      doc.setFont('helvetica', 'bold');
+      doc.setFont("helvetica", "bold");
       doc.text(`${label} `, start, y);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont("helvetica", "normal");
       doc.text(value, start + lw, y);
     };
-    put('Village Id:', info.villageId, M, 82);
-    put('Village Name:', info.villageName, W - M, 82, true);
-    put('Farmer Name:', farmerLabel(b), M, 96);
-    put('Bill Period:', b.range || period(info), W - M, 96, true);
+    put("Village Id:", info.villageId, M, 82);
+    put("Village Name:", info.villageName, W - M, 82, true);
+    put("Farmer Name:", farmerLabel(b), M, 96);
+    put("Bill Period:", b.range || period(info), W - M, 96, true);
 
-    const num = (i: number) => ({ halign: 'center' as const, cellWidth: i < 2 ? 54 : 'auto' as const });
+    const num = (i: number) => ({
+      halign: "center" as const,
+      cellWidth: i < 2 ? 54 : ("auto" as const),
+    });
     autoTable(doc, {
       startY: 104,
       margin: { left: M, right: M },
-      theme: 'grid',
+      theme: "grid",
       head: [
         [
-          { content: 'Date', rowSpan: 2, styles: { valign: 'middle' } },
-          { content: 'Milk', rowSpan: 2, styles: { valign: 'middle' } },
-          { content: 'Morning', colSpan: 5 },
-          { content: 'Evening', colSpan: 5 },
+          { content: "Date", rowSpan: 2, styles: { valign: "middle" } },
+          { content: "Milk", rowSpan: 2, styles: { valign: "middle" } },
+          { content: "Morning", colSpan: 5 },
+          { content: "Evening", colSpan: 5 },
         ],
         [...HEADS, ...HEADS],
       ],
-      body: b.lines.map((l) => [l.label, l.milk, ...KEYS.map((k) => l.m[k]), ...KEYS.map((k) => l.e[k])]),
-      styles: { fontSize: 9, cellPadding: 3, halign: 'center', textColor: 0, ...line },
-      headStyles: { fillColor: [242, 242, 242], textColor: 0, fontStyle: 'bold', halign: 'center', ...line },
-      columnStyles: Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i, num(i)])),
+      body: b.lines.map((l) => [
+        l.label,
+        l.milk,
+        ...KEYS.map((k) => l.m[k]),
+        ...KEYS.map((k) => l.e[k]),
+      ]),
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        halign: "center",
+        textColor: 0,
+        ...line,
+      },
+      headStyles: {
+        fillColor: [242, 242, 242],
+        textColor: 0,
+        fontStyle: "bold",
+        halign: "center",
+        ...line,
+      },
+      columnStyles: Object.fromEntries(
+        Array.from({ length: 12 }, (_, i) => [i, num(i)]),
+      ),
       didParseCell: (d) => {
-        if (d.section === 'body' && b.lines[d.row.index]?.total) d.cell.styles.fontStyle = 'bold';
+        if (d.section === "body" && b.lines[d.row.index]?.total)
+          d.cell.styles.fontStyle = "bold";
       },
     });
 
-    const afterTable = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+    const afterTable = (doc as unknown as { lastAutoTable: { finalY: number } })
+      .lastAutoTable.finalY;
     autoTable(doc, {
       startY: afterTable,
       margin: { left: M, right: M },
-      theme: 'grid',
-      body: b.summary.map((row) => row.map((p) => ({ content: `${p.label}: ${p.value}`, styles: /net\s*payment/i.test(p.label) ? { fillColor: [242, 242, 242] as [number, number, number] } : {} }))),
-      styles: { fontSize: 9.5, cellPadding: 5, halign: 'center', fontStyle: 'bold', textColor: 0, ...line },
+      theme: "grid",
+      body: b.summary.map((row) =>
+        row.map((p) => ({
+          content: `${p.label}: ${p.value}`,
+          styles: /net\s*payment/i.test(p.label)
+            ? { fillColor: [242, 242, 242] as [number, number, number] }
+            : {},
+        })),
+      ),
+      styles: {
+        fontSize: 9.5,
+        cellPadding: 5,
+        halign: "center",
+        fontStyle: "bold",
+        textColor: 0,
+        ...line,
+      },
     });
 
-    const y = Math.min(H - 30, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 56);
-    doc.setFont('helvetica', 'normal');
+    const y = Math.min(
+      H - 30,
+      (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
+        .finalY + 56,
+    );
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     doc.setLineDashPattern([2, 2], 0);
     doc.setDrawColor(0);
     doc.line(M, y, W / 2 - 20, y);
     doc.line(W / 2 + 20, y, W - M, y);
     doc.setLineDashPattern([], 0);
-    doc.text('Center Incharge Signature :', (M + W / 2 - 20) / 2, y + 13, { align: 'center' });
-    doc.text('Producer Signature :', (W / 2 + 20 + W - M) / 2, y + 13, { align: 'center' });
+    doc.text("Center Incharge Signature :", (M + W / 2 - 20) / 2, y + 13, {
+      align: "center",
+    });
+    doc.text("Producer Signature :", (W / 2 + 20 + W - M) / 2, y + 13, {
+      align: "center",
+    });
   });
 
   doc.save(`${filename}.pdf`);

@@ -374,8 +374,8 @@ const FarmerBill: React.FC = () => {
         to: dmy(applied.to),
       };
       if (kind === "print") {
-        if (printFarmerBills(bills, info, name)) toast("Print dialog opened");
-        else toast("Allow pop-ups to print the bill", "warn");
+        if (printFarmerBills(bills, info, name)) toast("Bill opened in a new tab — click Print Bill there");
+        else toast("Allow pop-ups to open the bill", "warn");
       } else {
         downloadFarmerBills(bills, info, name)
           .then(() => toast("Farmer bill PDF downloaded"))

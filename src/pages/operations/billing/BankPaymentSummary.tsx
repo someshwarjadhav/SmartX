@@ -31,10 +31,8 @@ import {
   exportPDF,
   type ExportCol,
 } from "../../../assets/excel/portalExport";
-import {
-  exportBansiPaymentExcel,
-  isBansiUser,
-} from "../../../assets/excel/bansiPaymentExcel";
+import { exportBansiPaymentExcel } from "../../../assets/excel/bansiPaymentExcel";
+import { excelLayout } from "../../../assets/excel/bansiExcel";
 import {
   getPaymentSummary,
   PAY_TYPES,
@@ -177,7 +175,8 @@ const BankPaymentSummary: React.FC = () => {
       exportCSV(name, cols, rows);
       toast("CSV file downloaded");
     } else if (kind === "xls") {
-      if (isBansiUser()) {
+      // Excel version: 3 = Bansi sheet, 2 (Athare has no own payment sheet) and 1 = normal Excel (with the Total row)
+      if (excelLayout() === "bansi") {
         // Bansi login: same sheet layout as the Bansi "All" collection Excel (VSP Name rows, centre totals, Total :)
         exportBansiPaymentExcel<PayRow>({
           rows,

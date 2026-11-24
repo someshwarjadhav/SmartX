@@ -61,4 +61,8 @@ export const DPU = {
   getCorrectorRecords: '/Login/GetCorrectorRecords', 
   updateCorrectorFlag: '/Login/UpdateCorrectorFlag', 
   updateEkoCorrectionFlag: '/Login/UpdateEkoCorrectionFlag', 
+
+  getSalesPurchase: '/Login/GetSalesPurchase',
+salePurchaseSave: '/Login/SalePurchaseSave',
+deleteSalesPurchase: '/Login/DeleteSalesPurchase',
 } as const;

@@ -287,7 +287,8 @@ export async function dpuSave(
     throw e;
   }
   if (typeof reply === "string") {
-    if (/^(error|fail|exception)/i.test(reply.trim()))
+    if (/^(error|fail|exception)/i.test(reply.trim()) ||
+        /already\s+exists|duplicate|already\s+registered/i.test(reply.trim()))
       throw new ApiError(reply.trim(), "server");
     return reply.trim();
   }
