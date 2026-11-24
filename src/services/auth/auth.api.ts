@@ -112,6 +112,9 @@ function pickStationByVlcc(rows: Obj[]): Record<string, string> {
       ["sessionid", "vlccid", "vlccids", "vlccode", "vlcid"],
     );
     const codes = pickIds([row], ["customstationid"]);
+    // Pair by position ONLY when both lists have the same length. If they differ (e.g. Numax: 31 ids vs 36 codes)
+    // the positions no longer match, so a pair would put the wrong code on a VLC - the real code then comes from the VLC master API.
+    if (codes.length !== ids.length) continue;
     ids.forEach((id, i) => {
       const code = codes[i];
       if (code && code !== id) out[id] = code;

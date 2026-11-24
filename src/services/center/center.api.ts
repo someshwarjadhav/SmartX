@@ -72,6 +72,12 @@ const STATION_KEYS = [
   "station",
 ];
 
+/** "KANAKUTHUR   |   SMS25" -> "SMS25" (the custom station id is the text after the last "|" of Customvillagename) */
+const customFromName = (n: string): string => {
+  const i = n.lastIndexOf("|");
+  return i < 0 ? "" : n.slice(i + 1).trim();
+};
+
 export function parseCenters(json: unknown): Center[] {
   const out: Center[] = [];
   for (const row of rowsFrom(json)) {
@@ -87,7 +93,10 @@ export function parseCenters(json: unknown): Center[] {
       label: name || id,
       routeId: pick(row, ROUTE_ID_KEYS) || undefined,
       routeName: pick(row, ROUTE_NAME_KEYS) || undefined,
-      stationId: pick(row, STATION_KEYS) || undefined,
+      stationId:
+        pick(row, STATION_KEYS) ||
+        customFromName(pick(row, ["customvillagename"])) ||
+        undefined,
       raw: row,
     });
   }

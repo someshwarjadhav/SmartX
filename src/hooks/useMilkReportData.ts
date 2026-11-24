@@ -128,9 +128,11 @@ function useReportCenters(): Center[] {
   const vlccKey = session?.vlccIds.join(",") ?? "";
   const scope = session?.scope ?? "";
   useEffect(() => {
+    // vlccKey (all SessionIDs) FIRST, like the old SmartX. GLOBALS.stationid is the login CustomStationId text,
+    // which the server answers with a single VLC - it must not win.
     const ids = [
-      GLOBALS.stationid,
       vlccKey,
+      GLOBALS.stationid,
       session?.mccLoginId,
       session?.stationId,
     ]
