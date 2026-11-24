@@ -1,44 +1,12 @@
-import { BASE_URL, REQUEST_TIMEOUT_MS } from '../config';
-import { decryptPayload, encryptPayload } from '../../lib/portal/crypto';
-import { getSession } from '../session';
 import { ApiError } from '../http/errors';
+import { listOf } from '../http/client';
 import { norm } from '../utils/loose';
+import { DPU } from '../http/dpuEndpoints';
+import { settingsRead, settingsSave } from './settingsHttp';
 
-const HOST = BASE_URL || 'https://smartx.shivinfotech.co.in';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-
-async function request(url: string, init: RequestInit = {}): Promise<unknown> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { ...init, cache: 'no-store', headers: { Accept: 'application/json, text/plain, */*', ...((init.headers as Record<string, string>) ?? {}) }, signal: controller.signal });
-    if (res.status === 401 || res.status === 403) throw new ApiError('Your session was rejected by the server. Please sign in again.', 'auth');
-    const text = (await res.text()).replace(/[\r\n]+/g, ' ').trim();
-    if (!res.ok) {
-      const body = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
-      throw new ApiError(`The server answered with error ${res.status}${body ? `: ${body}` : '.'}`, 'server');
-    }
-    if (!text) return null;
-    if (text.startsWith('<')) throw new ApiError('The server returned a web page instead of data.', 'parse');
-    try {
-      let json: unknown = JSON.parse(text);
-      if (typeof json === 'string') {
-        try { json = JSON.parse(json); } catch { }
-      }
-      return json;
-    } catch {
-      return text;
-    }
-  } catch (e) {
-    if (e instanceof ApiError) throw e;
-    if (controller.signal.aborted) throw new ApiError(`The server took longer than ${REQUEST_TIMEOUT_MS / 1000} seconds to answer.`, 'timeout');
-    throw new ApiError('Cannot reach the server. Check your connection and try again.', 'network');
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function assertSaved(reply: unknown) {
   if (!isObj(reply)) return;
@@ -74,9 +42,44 @@ function firstRecord(json: unknown): Obj | null {
 }
 
 
-const GET_URL = (stationId: string) => `${HOST}/home/getdpusettings?stationid=${encodeURIComponent(stationId)}`;
-const SAVE_URL = `${HOST}/home/savedpusettings`;
+function stamp(r: Obj): number {
+  const dt = /(\d{4})\D+(\d{1,2})\D+(\d{1,2})(?:\D+(\d{1,2}))?(?:\D+(\d{1,2}))?(?:\D+(\d{1,2}))?/.exec(String(get(r, 'datetime') ?? ''));
+  if (dt) return Date.UTC(+dt[1], +dt[2] - 1, +dt[3], +(dt[4] ?? 0), +(dt[5] ?? 0), +(dt[6] ?? 0));
+  const e = String(get(r, 'EntryDate') ?? '');
+  const us = /(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}):(\d{2}))?/.exec(e);
+  if (us) return Date.UTC(+us[3], +us[1] - 1, +us[2], +(us[4] ?? 0), +(us[5] ?? 0), +(us[6] ?? 0));
+  const t = Date.parse(e);
+  return Number.isNaN(t) ? 0 : t;
+}
 
+
+function latestRecord(rows: Obj[]): Obj | null {
+  let best: Obj | null = null;
+  let bestAt = -Infinity;
+  for (const r of rows) {
+    const at = stamp(r);
+    if (at >= bestAt) { best = r; bestAt = at; }
+  }
+  return best;
+}
+
+
+function readRecord(json: unknown): Obj | null {
+  if (isObj(json)) {
+    if ((json.Success ?? json.success) === false) {
+      const text = [json.Message ?? json.message, json.Details ?? json.details].map((x) => String(x ?? '').trim()).filter(Boolean).join(' - ');
+      if (/no\s*(record|data)|not\s*found/i.test(text)) return null;
+      throw new ApiError(text || 'The portal did not return the DPU settings.', 'server');
+    }
+    if ('AutoWeight' in json || 'MilkType' in json || 'MStartTime' in json) return json;
+  }
+  try {
+    return latestRecord(listOf<Obj>(json).filter(isObj));
+  } catch (e) {
+    if (e instanceof ApiError && e.kind === 'parse') return firstRecord(json);
+    throw e;
+  }
+}
 
 export const DPU_MILK_TYPES: Array<{ value: string; label: string }> = [
   { value: '1', label: 'Cow' },
@@ -127,18 +130,10 @@ const timeOf = (v: unknown): string => {
 const pass = (v: unknown) => String(v ?? '').replace(/\D/g, '').slice(0, 4);
 const amountOf = (v: unknown) => { const t = String(v ?? '').trim(); return t === '' || Number.isNaN(Number(t)) ? '0' : t; };
 
-const authHeader = (): Record<string, string> => { const t = getSession()?.token; return t ? { Authorization: `Bearer ${t}` } : {}; };
-
-
-function unpack(reply: unknown): unknown {
-  if (typeof reply === 'string' && /^[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/.test(reply.trim())) {
-    try { return decryptPayload(reply.trim()); } catch { return reply; }
-  }
-  return reply;
-}
+export const buildDpuFetchPayload = (stationId: string) => ({ StationId: stationId });
 
 export async function getDpuSettings(stationId: string): Promise<DpuSettings> {
-  const rec = firstRecord(unpack(await request(GET_URL(stationId), { headers: authHeader() })));
+  const rec = await settingsRead('GetDPUSettings', DPU.getDpuSettings, buildDpuFetchPayload(stationId), readRecord);
   const out = emptyDpuSettings(stationId);
   if (!rec) return out;
   return {
@@ -151,7 +146,7 @@ export async function getDpuSettings(stationId: string): Promise<DpuSettings> {
     multiCol: toBool(get(rec, 'MultiCol')),
     dpuSeize: toBool(get(rec, 'dpuseize')),
   
-    dpuSync: toBool(get(rec, 'dpuseize')) || String(get(rec, 'DPUPass') ?? '').trim() === '1',
+    dpuSync: String(get(rec, 'DPUPass') ?? '').trim() === '1',
     milkType: milkOf(get(rec, 'MilkType')),
     mStart: timeOf(get(rec, 'MStartTime')),
     mEnd: timeOf(get(rec, 'MEndTime')),
@@ -172,16 +167,19 @@ const nonce = (n = 15) => {
   return Array.from(bytes, (b) => chars[b % chars.length]).join('');
 };
 
-export function buildDpuPayload(s: DpuSettings, entryDate: string): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    StationId: s.stationId,
+
+const boolText = (b: boolean) => (b ? 'True' : 'False');
+
+export function buildDpuPayload(s: DpuSettings, entryDate: string): Record<string, string> {
+  const payload: Record<string, string> = {
+    StationId: String(s.stationId),
     EntryDate: entryDate,
-    AutoWeight: s.autoWeight,
-    AutoFat: s.autoFat,
-    AutoShift: s.autoShift,
-    AutoTear: s.autoTear,
-    RealData: s.realData,
-    MultiCol: s.multiCol,
+    AutoWeight: boolText(s.autoWeight),
+    AutoFat: boolText(s.autoFat),
+    AutoShift: boolText(s.autoShift),
+    AutoTear: boolText(s.autoTear),
+    RealData: boolText(s.realData),
+    MultiCol: boolText(s.multiCol),
     DPUPass: s.dpuSync ? '1' : '0',
     MilkType: s.milkType || '0',
     MStartTime: s.mStart,
@@ -189,30 +187,23 @@ export function buildDpuPayload(s: DpuSettings, entryDate: string): Record<strin
     EStartTime: s.eStart,
     EEndTime: s.eEnd,
     datetime: entryDate,
-    p1: '0',
-    p2: '0',
+    p1: s.operatorPass,
+    p2: s.supervisorPass,
     p3: s.adminPass,
     p4: '0000',
   };
   s.intervals.forEach((row, i) => {
-    payload[`i${i + 1}`] = row.time;
-    payload[`v${i + 1}`] = i === INTERVAL_COUNT - 1 ? Number(row.amount || 0) : (row.amount === '' ? '0' : row.amount);
+    payload[`i${i + 1}`] = row.time ?? '';
+  });
+  s.intervals.forEach((row, i) => {
+    const t = String(row.amount ?? '').trim();
+    payload[`v${i + 1}`] = t === '' || Number.isNaN(Number(t)) ? '0' : t;
   });
   payload.encryptionkey = nonce();
-  payload.dpuseize = flag(s.dpuSeize);
+  payload.dpuseize = String(flag(s.dpuSeize));
   return payload;
 }
 
 export async function saveDpuSettings(s: DpuSettings, entryDate: string): Promise<void> {
-  let payload: string;
-  try {
-    payload = encryptPayload(buildDpuPayload(s, entryDate));
-  } catch (e) {
-    throw new ApiError(e instanceof Error ? e.message : 'The settings could not be encrypted.', 'parse');
-  }
-  assertSaved(await request(SAVE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader() },
-    body: JSON.stringify({ payload }),
-  }));
+  assertSaved(await settingsSave('SaveDPUSettings', DPU.saveDpuSettings, buildDpuPayload(s, entryDate)));
 }

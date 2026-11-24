@@ -208,6 +208,16 @@ const RecordsTable: React.FC<{
         </button>
       );
     }
+    if (/reject/i.test(r.status)) {
+      return (
+        <X
+          size={20}
+          strokeWidth={2.5}
+          className="mx-auto text-red-600"
+          aria-label={r.status}
+        />
+      );
+    }
     return (
       <CheckCheck
         size={20}
@@ -255,12 +265,16 @@ const RecordsTable: React.FC<{
               <th rowSpan={2} className={headCell}>
                 Status
               </th>
-              <th rowSpan={2} className={headCell}>
-                Applied Date
-              </th>
-              <th rowSpan={2} className={headCell}>
-                Applied Time
-              </th>
+              {kind === "eko" && (
+                <>
+                  <th rowSpan={2} className={headCell}>
+                    Applied Date
+                  </th>
+                  <th rowSpan={2} className={headCell}>
+                    Applied Time
+                  </th>
+                </>
+              )}
               <th rowSpan={2} className={`${headCell} text-center`}>
                 Action
               </th>
@@ -340,16 +354,6 @@ const RecordsTable: React.FC<{
                     </td>
                   )}
                   {li === 0 && (
-                    <td rowSpan={3} className={`${cell} whitespace-nowrap`}>
-                      {r.appliedDate}
-                    </td>
-                  )}
-                  {li === 0 && (
-                    <td rowSpan={3} className={`${cell} whitespace-nowrap`}>
-                      {r.appliedTime}
-                    </td>
-                  )}
-                  {li === 0 && (
                     <td rowSpan={3} className={`${cell} text-center`}>
                       {action(r)}
                     </td>
@@ -360,11 +364,11 @@ const RecordsTable: React.FC<{
             {slice.length === 0 && (
               <tr>
                 {loading ? (
-                  <td colSpan={12} className="p-0">
+                  <td colSpan={kind === "control" ? 10 : 12} className="p-0">
                     <MilkLoader label="Loading records…" />
                   </td>
                 ) : (
-                  <td colSpan={12} className={`${cell} py-8 text-center text-mute`}>
+                  <td colSpan={kind === "control" ? 10 : 12} className={`${cell} py-8 text-center text-mute`}>
                     {emptyText}
                   </td>
                 )}
@@ -403,7 +407,7 @@ const RecordsTable: React.FC<{
                   <p className="text-mute">
                     {r.entryDate} · Station {r.stationId}
                   </p>
-                  {(r.appliedDate || r.appliedTime) && (
+                  {kind === "eko" && (r.appliedDate || r.appliedTime) && (
                     <p className="text-mute">
                       Applied {r.appliedDate} {r.appliedTime}
                     </p>
@@ -504,7 +508,7 @@ const FIELD_LABEL: Record<keyof Quality6, string> = {
   mixSnf: "Mixed SNF",
 };
 
-/** Number box that lets the user type freely (e.g. "-", "-0.") and commits on every valid keystroke. */
+
 const NumBox: React.FC<{
   value: number;
   onCommit: (n: number) => void;
@@ -932,7 +936,16 @@ const CalibrationCard: React.FC<{ ids: string[] }> = ({ ids }) => {
                 <Input readOnly value={cred.pcbSerial} />
               </Field>
               <Field label="Current Password">
-                <PassInput readOnly value={cred.currentPass} />
+                <PassInput
+                  value={cred.currentPass}
+                  disabled={!center}
+                  onChange={(v) =>
+                    setCred((c) => ({
+                      ...c,
+                      currentPass: v.replace(/\D/g, "").slice(0, 6),
+                    }))
+                  }
+                />
               </Field>
               <div className="flex items-end gap-2">
                 <div className="min-w-0 flex-1">

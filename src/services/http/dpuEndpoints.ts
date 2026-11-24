@@ -47,6 +47,20 @@ export const DPU = {
   milkBillProcessMA: '/Login/MilkBillProcessMA',
   getMilkBillFreeze: '/Login/GetMilkBillFreeze',
   milkBillPaySummMA: '/Login/MilkBillPaySummMA',
+  // settings (Mobile App Settings + DPU Settings) 
+  saveDairyMenu: '/Login/SaveDairyMenu', 
+  getDairyMenu: '/Login/GetDairyMenu',
+  saveMyDairyUserAccess: '/Login/SaveMyDairyUserAccess',
+  getUserAccess: '/Login/GetUserAccess',
+  saveDpuSettings: '/Login/SaveDPUSettings', 
+  getDpuSettings: '/Login/GetDPUSettings', 
+  // Eko Milk Settings 
+  settingsCorrection: '/Login/SettingsCorrection',
+  getEkoCorrectionRecords: '/Login/GetEkoCorrectionRecords', 
+  correctorSample: '/Login/correctorSample',
+  getCorrectorRecords: '/Login/GetCorrectorRecords', 
+  updateCorrectorFlag: '/Login/UpdateCorrectorFlag', 
+  updateEkoCorrectionFlag: '/Login/UpdateEkoCorrectionFlag', 
 
   getSalesPurchase: '/Login/GetSalesPurchase',
 salePurchaseSave: '/Login/SalePurchaseSave',

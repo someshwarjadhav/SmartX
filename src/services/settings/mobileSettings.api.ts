@@ -1,12 +1,12 @@
 import { BASE_URL, REQUEST_TIMEOUT_MS } from '../config';
 import { ApiError } from '../http/errors';
 import { norm } from '../utils/loose';
+import { DPU } from '../http/dpuEndpoints';
+import { settingsRead, settingsSave } from './settingsHttp';
 
 
 const HOST = BASE_URL || 'https://smartx.shivinfotech.co.in';
 const GATEWAY = `${HOST}/gateway/Interceptor?path=`;
-
-const ANALYZER = `${HOST}/api/analyzer`;
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -220,8 +220,10 @@ const MENU_HIDDEN = ['ShiftLock'];
 
 export type MenuValues = Record<string, boolean>;
 
+export const buildMenuFetchPayload = (villageId: string) => ({ VillageId: villageId, flag: 0, test: 0 });
+
 export async function getMenuSettings(villageId: string): Promise<MenuValues> {
-  const rec = firstRecord(await request(`${ANALYZER}/GetMyDairyMenu?flag=0&villageid=${encodeURIComponent(villageId)}&test=0`));
+  const rec = await settingsRead('GetDairyMenu', DPU.getDairyMenu, buildMenuFetchPayload(villageId), firstRecord);
   const out: MenuValues = {};
   for (const k of [...MENU_ITEMS.map((m) => m.key), ...MENU_HIDDEN]) out[k] = rec ? toBool(get(rec, k)) : false;
   return out;
@@ -237,13 +239,7 @@ export const buildMenuPayload = (villageId: string, entryDate: string, v: MenuVa
 });
 
 export async function saveMenuSettings(villageId: string, entryDate: string, v: MenuValues): Promise<void> {
-  assertSaved(
-    await request(`${ANALYZER}/MyDairyMenu?flag=0`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildMenuPayload(villageId, entryDate, v)),
-    }),
-  );
+  assertSaved(await settingsSave('SaveDairyMenu', DPU.saveDairyMenu, buildMenuPayload(villageId, entryDate, v)));
 }
 
 
@@ -261,8 +257,10 @@ export type AccessValues = Record<number, AccessRights>;
 
 export const emptyAccess = (): AccessValues => Object.fromEntries(ACCESS_FORMS.map((f) => [f.id, { add: false, modify: false, del: false }]));
 
+export const buildAccessFetchPayload = (villageId: string) => ({ VillageId: villageId, flag: 0, status: 0 });
+
 export async function getUserAccess(villageId: string): Promise<AccessValues> {
-  const rows = recordsOf(await request(`${ANALYZER}/GetUserAccess?villageid=${encodeURIComponent(villageId)}&flag=0&status=0`));
+  const rows = await settingsRead('GetUserAccess', DPU.getUserAccess, buildAccessFetchPayload(villageId), recordsOf);
   const out = emptyAccess();
   for (const r of rows) {
     const id = Number(get(r, 'MenuId'));
@@ -285,11 +283,5 @@ export const buildAccessPayload = (villageId: string, v: AccessValues) =>
   }));
 
 export async function saveUserAccess(villageId: string, v: AccessValues): Promise<void> {
-  assertSaved(
-    await request(`${ANALYZER}/MyDairyUserAccess?status=0&flag=0`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildAccessPayload(villageId, v)),
-    }),
-  );
+  assertSaved(await settingsSave('SaveMyDairyUserAccess', DPU.saveMyDairyUserAccess, buildAccessPayload(villageId, v)));
 }
