@@ -1,6 +1,5 @@
 import type { LogoPixels } from "../../lib/brandLogo";
 
-/** Rows kept empty at the top of the sheet for the logo (about 100 px). */
 export const LOGO_ROWS = 5;
 const LOGO_MAX_W = 220;
 const LOGO_MAX_H = 90;

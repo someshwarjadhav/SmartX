@@ -95,6 +95,7 @@ interface FilterProps {
   centreOptions: { value: string; label: string }[];
   onChange: (patch: Partial<CollectionFilters>) => void;
   onSubmit: () => void;
+
   error?: string;
   loading?: boolean;
 }
@@ -107,6 +108,7 @@ const FarmerCollectionFilters: React.FC<FilterProps> = ({
   centreOptions,
   onChange,
   onSubmit,
+
   error,
   loading,
 }) => {
@@ -723,6 +725,8 @@ const FarmerCollection: React.FC = () => {
     milk: apiMilk(applied.kind),
   });
   const [error, setError] = useState<string | undefined>();
+  // message under To Date (e.g. "Dates older than 3 months are not allowed"): Submit stays blocked until a date is picked again
+
   const toast = useToast();
   const fetching = live.fetching;
   const loading = live.loading;
@@ -741,32 +745,40 @@ const FarmerCollection: React.FC = () => {
       ),
     [centres, applied.plant],
   );
+  const centreCodes = useMemo(
+    () => new Map(centres.map((c) => [c.id, c.code?.trim() ?? ""])),
+    [centres],
+  );
   const rows = useMemo(
     () =>
-      live.rows.filter(
-        (r) =>
-          (!applied.plant ||
-            applied.plant === "all" ||
-            plantIds.has(r.stationId)) &&
-          (!applied.centre ||
-            applied.centre === "all" ||
-            r.stationId === applied.centre) &&
-          (applied.kind === "both" || r.kind === applied.kind) &&
-          (applied.shift === "both" || r.shift === applied.shift) &&
-          r.date >= applied.from &&
-          r.date <= applied.to,
-      ),
-    [live.rows, applied, plantIds],
+      live.rows
+        .filter(
+          (r) =>
+            (!applied.plant ||
+              applied.plant === "all" ||
+              plantIds.has(r.stationId)) &&
+            (!applied.centre ||
+              applied.centre === "all" ||
+              r.stationId === applied.centre) &&
+            (applied.kind === "both" || r.kind === applied.kind) &&
+            (applied.shift === "both" || r.shift === applied.shift) &&
+            r.date >= applied.from &&
+            r.date <= applied.to,
+        )
+        // Station Id column (screen + every export): the custom station id when this centre has one, else the original id
+        .map((r) => {
+          const code = centreCodes.get(r.stationId) || r.stationCode || "";
+          return code && code !== r.stationCode
+            ? { ...r, stationCode: code }
+            : r;
+        }),
+    [live.rows, applied, plantIds, centreCodes],
   );
 
   // Excel version 3 (Bansi, from the plant settings API) sees the Farmer Collection in the Excel layout (VSP Name blocks + bold totals)
   const bansiUser = isBansiUser();
   const centreNames = useMemo(
     () => new Map(centres.map((c) => [c.id, titleCase(c.name || c.id)])),
-    [centres],
-  );
-  const centreCodes = useMemo(
-    () => new Map(centres.map((c) => [c.id, c.code ?? ""])),
     [centres],
   );
   const bansiSheet = useMemo(
