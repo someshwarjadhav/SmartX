@@ -128,17 +128,22 @@ const DatePick: React.FC<{
 interface HeaderProps {
   date: string;
   shift: ShiftName;
+  centre: string;
   onDate: (date: string) => void;
   onShift: (shift: ShiftName) => void;
+  onCentre: (centre: string) => void;
 }
 
 const DashboardHeader: React.FC<HeaderProps> = ({
   date,
   shift,
+  centre,
   onDate,
   onShift,
+  onCentre,
 }) => {
   const { user } = useAuth();
+  const centres = useCentreOptions();
   return (
     <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 sm:mb-6">
       <div className="min-w-0">
@@ -152,9 +157,23 @@ const DashboardHeader: React.FC<HeaderProps> = ({
       </div>
       <div
         role="group"
-        aria-label="Report date and shift"
+        aria-label="Report centre, date and shift"
         className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-end sm:gap-3"
       >
+        <div className="col-span-2 min-w-0 sm:col-span-1 sm:w-56">
+          <span className="mb-1 block text-xs font-semibold text-mute">
+            Centre
+          </span>
+          <Select
+            label="Centre"
+            value={centre}
+            onChange={onCentre}
+            options={[
+              { value: ALL_CENTRES, label: "All" },
+              ...centres.map((c) => ({ value: c.id, label: c.label })),
+            ]}
+          />
+        </div>
         <div className="min-w-0 sm:w-48">
           <span className="mb-1 block text-xs font-semibold text-mute">
             Date
@@ -494,12 +513,12 @@ const KpiMosaic: React.FC<KpiProps> = ({ summary, centres, period }) => {
   );
 };
 
-const TrendChart: React.FC = () => {
+const TrendChart: React.FC<{ date: string; centre: string }> = ({
+  date,
+  centre,
+}) => {
   const cc = useChartColors();
   const centres = useCentreOptions();
-  const [centre, setCentre] = useState<string>(ALL_CENTRES);
-
-  const [date, setDate] = useState<string>(() => todayISO());
   const { data, loading } = useTrendData(date, centre);
   const centreLabel =
     centre === ALL_CENTRES
@@ -511,26 +530,6 @@ const TrendChart: React.FC = () => {
       title="Milk collection"
       subtitle={`Litres ${date === todayISO() ? "today" : `on ${fmtDateLong(date)}`} by shift, split by milk type · ${centreLabel}`}
       className="h-full"
-      action={
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <Select
-            label="Centre"
-            value={centre}
-            onChange={setCentre}
-            className="min-w-[220px]"
-            options={[
-              { value: ALL_CENTRES, label: "All" },
-              ...centres.map((c) => ({ value: c.id, label: c.label })),
-            ]}
-          />
-          <DatePick
-            value={date}
-            onChange={setDate}
-            label="Chart date"
-            className="w-full min-w-[150px] sm:w-44"
-          />
-        </div>
-      }
     >
       <div
         className={cn(
@@ -1164,7 +1163,8 @@ const TopSuppliers: React.FC<{ rows: SupplierRow[]; period: string }> = ({
 const Dashboard: React.FC = () => {
   const [date, setDate] = useState<string>(() => todayISO());
   const [shift, setShift] = useState<ShiftName>(() => currentShift());
-  const data = useDashboardData(date, shift);
+  const [centre, setCentre] = useState<string>(ALL_CENTRES);
+  const data = useDashboardData(date, shift, centre);
   const period = periodText(date, shift);
 
   return (
@@ -1172,8 +1172,10 @@ const Dashboard: React.FC = () => {
       <DashboardHeader
         date={date}
         shift={shift}
+        centre={centre}
         onDate={setDate}
         onShift={setShift}
+        onCentre={setCentre}
       />
       {data.error && (
         <div
@@ -1202,7 +1204,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="xl:col-span-8">
-          <TrendChart />
+          <TrendChart date={date} centre={centre} />
         </div>
         <div className="xl:col-span-4">
           <MilkMix mix={data.summary.mixByKind} period={period} />
