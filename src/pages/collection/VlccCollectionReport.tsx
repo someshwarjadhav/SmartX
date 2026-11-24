@@ -259,7 +259,14 @@ const VlccCollectionReport: React.FC = () => {
         <StatCard index={3} tone="danger" label="Total VLC" note="Reporting in this range" icon={Store} value={totals.vlcs} format={(n) => nf(Math.round(n))} />
       </div>
 
-      <VlccFilters value={{ ...draft, plant: scope.plant, vlcId: scope.centre }} plantOptions={scope.plantOptions} options={scope.centreOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={fetching} />
+      <VlccFilters value={{ ...draft, plant: scope.plant, vlcId: scope.centre }} plantOptions={scope.plantOptions} options={scope.centreOptions} onChange={(patch) => {
+        setDraft((d) => ({ ...d, ...patch }));
+        // the report is already loaded for every shift and milk type: changing them only filters it, so no Submit / no loading is needed
+        if (submitted && ('shift' in patch || 'milkType' in patch)) {
+          setApplied((a) => ({ ...a, ...patch }));
+          pager.reset();
+        }
+      }} onSubmit={submit} error={error} loading={fetching} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
       <PartialNotice failed={live.failed} total={live.total} onRetry={live.retry} />

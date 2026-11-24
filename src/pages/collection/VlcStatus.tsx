@@ -185,7 +185,11 @@ const VlcStatus: React.FC = () => {
     <div className="space-y-4 sm:space-y-5">
       <PageHeader title="VLC Status" subtitle="Which centres are online and reporting." />
 
-      <VlcStatusFilters value={{ ...draft, plant: scope.plant }} plantOptions={plantOptions} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} onSubmit={submit} error={error} loading={loading} />
+      <VlcStatusFilters value={{ ...draft, plant: scope.plant }} plantOptions={plantOptions} onChange={(patch) => {
+        setDraft((d) => ({ ...d, ...patch }));
+        // the data is already loaded for both shifts: the shift filter only changes what is shown, so it applies at once
+        if (submitted && 'shift' in patch) setApplied((a) => ({ ...a, shift: patch.shift as Filters['shift'] }));
+      }} onSubmit={submit} error={error} loading={loading} />
 
       {live.error && <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{live.error} <button className="ml-2 underline" onClick={live.retry}>Retry</button></div>}
 

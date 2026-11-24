@@ -28,6 +28,8 @@ import { MSG } from '../../lib/messages';
 import { KIND_OPTIONS, SHIFT_OPTIONS, type Shift } from '../../data/masters';
 import type { MilkKind } from '../../types';
 import { getCdaReport, CDA_ALL_SHIFT_CODE, type CdaRaw, type CdaSide } from '../../services/report/cdaReport.api';
+import { MAX_PARALLEL_REQUESTS } from '../../services/config';
+import { todayIso } from '../../services/http/chunkCache';
 
 /* ---------- Types ---------- */
 
@@ -288,6 +290,43 @@ const defaults = (): Filters => {
   return { plant: '', vlcId: '', fromDate: today, toDate: today, shift: 'both', milk: 'both' };
 };
 
+/* ---------- remembered answers ----------
+ * Every call (one VLC + milk type + shift + dates) is kept for a short time. Changing the milk type or the shift after Submit
+ * therefore only asks the server for what is not loaded yet, and often shows the table at once.
+ * Submit again with the same filters (or Retry) asks the server again. A range that includes today is never remembered.
+ */
+type CdaTask = { vlccId: string; milk: 'C' | 'B' | 'M'; shift: string };
+const RECENT_KEEP_MS = 5 * 60_000;
+const OLD_KEEP_MS = 6 * 60 * 60_000;
+const cdaMemory = new Map<string, { at: number; rows: CdaRaw[] }>();
+const cdaKeepMs = (to: string): number => {
+  if (to >= todayIso()) return 0;
+  const d = new Date();
+  d.setDate(d.getDate() - 3);
+  const recent = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return to >= recent ? RECENT_KEEP_MS : OLD_KEEP_MS;
+};
+const cdaKey = (from: string, to: string, t: CdaTask): string => `${from}|${to}|${t.vlccId}|${t.milk}|${t.shift}`;
+const cdaGet = (from: string, to: string, t: CdaTask): CdaRaw[] | null => {
+  const k = cdaKey(from, to, t);
+  const hit = cdaMemory.get(k);
+  if (!hit) return null;
+  if (Date.now() - hit.at > cdaKeepMs(to)) {
+    cdaMemory.delete(k);
+    return null;
+  }
+  return hit.rows;
+};
+const cdaSet = (from: string, to: string, t: CdaTask, rows: CdaRaw[]): void => {
+  if (cdaKeepMs(to) <= 0) return;
+  cdaMemory.set(cdaKey(from, to, t), { at: Date.now(), rows });
+  while (cdaMemory.size > 400) {
+    const oldest = cdaMemory.keys().next().value;
+    if (oldest === undefined) break;
+    cdaMemory.delete(oldest);
+  }
+};
+
 /** Runs the calls a few at a time, so a long VLC list never opens dozens of requests together. */
 async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void>): Promise<void> {
   let next = 0;
@@ -321,10 +360,8 @@ const CdaReport: React.FC = () => {
   const labelOf = useMemo(() => new Map(centres.map((c) => [c.id, c.label])), [centres]);
   const shownVlc = scope.centre;
 
-  const load = async (f: Filters) => {
+  const load = async (f: Filters, force = false) => {
     const id = ++runId.current;
-    setLoading(true);
-    setRaw([]);
     const milks: Array<'C' | 'B' | 'M'> = f.milk === 'cow' ? ['C'] : f.milk === 'buffalo' ? ['B'] : f.milk === 'mix' ? ['M'] : ['C', 'B', 'M'];
     // "Both" shifts: one call when the server knows an "all shifts" code, otherwise Morning and Evening separately
     const shifts: string[] =
@@ -332,16 +369,38 @@ const CdaReport: React.FC = () => {
       : f.shift === 'Evening' ? ['E']
       : CDA_ALL_SHIFT_CODE ? [CDA_ALL_SHIFT_CODE]
       : ['M', 'E'];
-    const tasks = idsOf(f).flatMap((vlccId) => milks.flatMap((milk) => shifts.map((shift) => ({ vlccId, milk, shift }))));
+    const tasks: CdaTask[] = idsOf(f).flatMap((vlccId) => milks.flatMap((milk) => shifts.map((shift) => ({ vlccId, milk, shift }))));
     const got: CdaRaw[] = [];
+    // calls that are already loaded are reused (not on Retry / Submit again with the same filters)
+    const todo: CdaTask[] = [];
+    for (const t of tasks) {
+      const hit = force ? null : cdaGet(f.fromDate, f.toDate, t);
+      if (hit) got.push(...hit);
+      else todo.push(t);
+    }
+    if (!todo.length) {
+      // everything is already here: show it at once, no loader
+      setRaw(got);
+      setFailed({ failed: 0, total: tasks.length });
+      setError(undefined);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setRaw([]);
     let bad = 0;
     let firstError = '';
-    await pool(tasks, 6, async (t) => {
+    await pool(todo, MAX_PARALLEL_REQUESTS, async (t) => {
       try {
-        got.push(...(await getCdaReport({ from: f.fromDate, to: f.toDate, ...t })));
+        const rows = await getCdaReport({ from: f.fromDate, to: f.toDate, ...t });
+        got.push(...rows);
+        cdaSet(f.fromDate, f.toDate, t, rows);
       } catch (e) {
         // "Both" also asks for mix milk; a centre without mix milk may answer with an error, which is not a problem
-        if (t.milk === 'M' && f.milk === 'both') return;
+        if (t.milk === 'M' && f.milk === 'both') {
+          cdaSet(f.fromDate, f.toDate, t, []);
+          return;
+        }
         bad += 1;
         firstError ||= e instanceof Error ? e.message : 'The CDA report could not be loaded.';
       }
@@ -349,7 +408,7 @@ const CdaReport: React.FC = () => {
     if (id !== runId.current) return; // a newer Show was pressed meanwhile
     setRaw(got);
     setFailed({ failed: bad, total: tasks.length });
-    setError(bad === tasks.length && tasks.length > 0 ? firstError : undefined);
+    setError(bad === todo.length && todo.length > 0 ? firstError : undefined);
     setLoading(false);
   };
 
@@ -423,10 +482,12 @@ const CdaReport: React.FC = () => {
     }
     setError(undefined);
     const next: Filters = { ...draft, plant: scope.plant, vlcId: shownVlc };
+    // Submit again with the same filters = a refresh from the server; new filters reuse what is already loaded
+    const same = submitted && JSON.stringify(applied) === JSON.stringify(next);
     setApplied(next);
     setSubmitted(true);
     pager.reset();
-    void load(next);
+    void load(next, same);
     // bring the results (and the loader) up so nothing has to be scrolled
     window.setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
@@ -507,14 +568,23 @@ const CdaReport: React.FC = () => {
     <div className="space-y-4 sm:space-y-5">
       <PageHeader title="CDA Report"  />
 
-      <CdaFilters value={{ ...draft, plant: scope.plant, vlcId: shownVlc }} plantOptions={scope.plantOptions} vlcOptions={scope.centreOptions} onChange={(patch) => setDraft((d) => ({ ...d, plant: scope.plant, vlcId: shownVlc, ...patch }))} onSubmit={submit} error={submitted ? undefined : error} loading={loading} />
+      <CdaFilters value={{ ...draft, plant: scope.plant, vlcId: shownVlc }} plantOptions={scope.plantOptions} vlcOptions={scope.centreOptions} onChange={(patch) => {
+        setDraft((d) => ({ ...d, plant: scope.plant, vlcId: shownVlc, ...patch }));
+        // after Submit, a new milk type / shift shows at once: loaded calls are reused, only the missing ones are asked
+        if (submitted && ('milk' in patch || 'shift' in patch)) {
+          const next: Filters = { ...applied, ...('milk' in patch ? { milk: patch.milk as Filters['milk'] } : {}), ...('shift' in patch ? { shift: patch.shift as Filters['shift'] } : {}) };
+          setApplied(next);
+          pager.reset();
+          void load(next);
+        }
+      }} onSubmit={submit} error={submitted ? undefined : error} loading={loading} />
 
       {error && submitted && !loading && (
         <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
-          {error} <button type="button" className="ml-2 underline" onClick={() => void load(applied)}>Retry</button>
+          {error} <button type="button" className="ml-2 underline" onClick={() => void load(applied, true)}>Retry</button>
         </div>
       )}
-      <PartialNotice failed={error ? 0 : failed.failed} total={failed.total} onRetry={() => void load(applied)} />
+      <PartialNotice failed={error ? 0 : failed.failed} total={failed.total} onRetry={() => void load(applied, true)} />
 
       <div ref={resultsRef} className="scroll-mt-20">
         <Panel bodyClassName="!p-0">

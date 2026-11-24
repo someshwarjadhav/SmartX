@@ -39,6 +39,8 @@ import { getSession } from '../../services/session';
 import { isCancelled } from '../../services/http/errors';
 import {
   fetchFarmerCollectionReport,
+  peekFarmerCollectionReport,
+  type CollectionReportQuery,
   type CollectionReportRow,
   type ReportMilk,
 } from '../../services/report/farmerCollectionReport.api';
@@ -168,27 +170,49 @@ const FarmerCollectionReport: React.FC = () => {
       ? 'All'
       : (centres.find((c) => c.id === applied.centre)?.label ?? '');
 
-  const load = useCallback(
-    async (f: ReportFilters) => {
-      const id = ++requestId.current;
-      const stationIds = centreIdsFor(centres, f.plant, f.centre);
+  /** the request for one set of filters */
+  const queryOf = useCallback(
+    (f: ReportFilters): CollectionReportQuery => {
       const session = getSession();
-      const mccId =
-        f.plant && f.plant !== 'all' && /^\d+$/.test(f.plant)
-          ? f.plant
-          : (session?.mccId ?? '');
+      return {
+        milk: f.milk,
+        from: f.from,
+        to: f.to,
+        stationIds: centreIdsFor(centres, f.plant, f.centre),
+        allCentres: f.centre === 'all',
+        mccId:
+          f.plant && f.plant !== 'all' && /^\d+$/.test(f.plant)
+            ? f.plant
+            : (session?.mccId ?? ''),
+      };
+    },
+    [centres],
+  );
+
+  /** force = ask the server again (Retry, or Submit again with the same filters); otherwise milk types that are already loaded are reused */
+  const load = useCallback(
+    async (f: ReportFilters, force = false) => {
+      const id = ++requestId.current;
+      const query = queryOf(f);
+      if (!force) {
+        // everything asked for is already loaded: show it at once, no loader
+        const hit = peekFarmerCollectionReport(query);
+        if (hit) {
+          setLoadError(null);
+          setProgress({ done: 0, total: 0 });
+          setRows(hit);
+          setLoading(false);
+          return;
+        }
+      }
       setLoading(true);
       setLoadError(null);
       setRows([]);
       setProgress({ done: 0, total: 0 });
       try {
         const data = await fetchFarmerCollectionReport({
-          milk: f.milk,
-          from: f.from,
-          to: f.to,
-          stationIds,
-          allCentres: f.centre === 'all',
-          mccId,
+          ...query,
+          force,
           onProgress: (done, total) => {
             if (id === requestId.current) setProgress({ done, total });
           },
@@ -202,7 +226,7 @@ const FarmerCollectionReport: React.FC = () => {
         if (id === requestId.current) setLoading(false);
       }
     },
-    [centres],
+    [queryOf],
   );
 
   const submit = () => {
@@ -220,10 +244,12 @@ const FarmerCollectionReport: React.FC = () => {
     }
     setError(undefined);
     const next: ReportFilters = { ...draft, plant: scope.plant, centre: scope.centre };
+    // Submit again with the same filters = a refresh from the server; new filters reuse what is already loaded
+    const same = submitted && JSON.stringify(applied) === JSON.stringify(next);
     setApplied(next);
     setSubmitted(true);
     pager.reset();
-    void load(next); // every Submit asks the server again
+    void load(next, same);
     window.setTimeout(
       () => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
       60,
@@ -327,7 +353,16 @@ const FarmerCollectionReport: React.FC = () => {
             <Segmented<ReportMilk>
               label="Milk Type"
               value={draft.milk}
-              onChange={(milk) => setDraft((d) => ({ ...d, milk }))}
+              onChange={(milk) => {
+                setDraft((d) => ({ ...d, milk }));
+                // after Submit, changing the milk type shows it at once (loaded milk types are reused, only a new one is asked)
+                if (submitted) {
+                  const next: ReportFilters = { ...applied, milk };
+                  setApplied(next);
+                  pager.reset();
+                  void load(next);
+                }
+              }}
               options={MILK_OPTIONS}
               className={SEGMENT}
             />
@@ -357,7 +392,7 @@ const FarmerCollectionReport: React.FC = () => {
       {loadError && (
         <div role="alert" className="rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
           {loadError}{' '}
-          <button className="ml-2 underline" onClick={() => void load(applied)}>
+          <button className="ml-2 underline" onClick={() => void load(applied, true)}>
             Retry
           </button>
         </div>
