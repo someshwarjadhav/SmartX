@@ -474,6 +474,8 @@ const EXPORT_COLS: ExportCol[] = [
 /* ---------- STIPL Excel layouts (Old Excel Export / New Excel Export) ---------- */
 
 const r2 = (n: number): number => Math.round(n * 100) / 100;
+/** Kg Fat / Kg Snf: the portal rounds with toFixed(2) (9.5 L x 5.0 fat = 0.475 -> 0.47); Math.round gave 0.48 */
+const r2Fixed = (n: number): number => Number(n.toFixed(2));
 const KIND_TEXT: Record<string, string> = {
   cow: "Cow",
   buffalo: "Buffalo",
@@ -516,22 +518,23 @@ const SHEET_COLS: Record<string, SheetCol> = {
   time: { header: "Time", value: (r) => r.time },
   rate: { header: "Rate", total: "ratio", num: true, value: (r) => r.rate },
   amount: { header: "Amount", total: "sum", num: true, value: (r) => r.amount },
-  branch: { header: "BranchId", value: (r) => r.branchId ?? "1" },
+  // BranchId = the DPU field `usbflag` (mapped into branchId by farmer.mapper.ts)
+  branch: { header: "BranchId", value: (r) => r.branchId || "1" },
   stationName: {
     header: "Station Name",
-    value: (r) => r.centre || r.village || "",
+    value: (r) => r.centreRaw || r.centre || r.village || "",
   },
   kgFat: {
     header: "Kg Fat",
     total: "sum",
     num: true,
-    value: (r) => r2((r.litres * r.fat) / 100),
+    value: (r) => r2Fixed((r.litres * r.fat) / 100),
   },
   kgSnf: {
     header: "Kg Snf",
     total: "sum",
     num: true,
-    value: (r) => r2((r.litres * r.snf) / 100),
+    value: (r) => r2Fixed((r.litres * r.snf) / 100),
   },
   collDate: { header: "Collection Date", value: (r) => fmtDateDots(r.date) },
   collTime: { header: "Collection Time", value: (r) => time24(r.time) },

@@ -313,6 +313,7 @@ function useRawFarmerRows(
         farmer: title(r.farmerName),
         farmerRaw: r.rawName,
         centre: title(names.get(r.vlccid) || r.village || r.vlccid),
+        centreRaw: names.get(r.vlccid) || r.village || r.vlccid,
         kind,
         litres: r.liter,
         fat: r.fat,

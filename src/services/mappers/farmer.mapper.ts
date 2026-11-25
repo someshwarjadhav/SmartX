@@ -1,6 +1,14 @@
 import type { RawFarmerRow } from '../types/raw';
 import { kindOf, shiftOf, type Kind, type ShiftName } from '../utils/milk';
-import { num, str } from '../utils/parse';
+import { num as plainNum, str } from '../utils/parse';
+
+/**
+ * The DPU sends Liter as text with a thousands comma once it reaches 1,000 ("1,351.90").
+ * Number("1,351.90") is NaN, so the plain parser turned such a Liter into 0.
+ * Commas are removed first; every other value parses exactly as before.
+ */
+const num = (v: unknown): number =>
+  plainNum(typeof v === 'string' ? v.replace(/,/g, '') : v);
 
 export interface FarmerRow {
   key: string;
@@ -58,7 +66,8 @@ export function mapFarmers(rows: RawFarmerRow[]): FarmerRow[] {
       amount: num(r.amount),
       village: str(r.villageagentaddress),
       stationCode: str(r.stationcode),
-      branchId: str(r.branchid),
+      // BranchId column = the DPU field `usbflag` (e.g. "usbflag": "6"); `branchid` is only a fallback when a reply has no usbflag
+      branchId: str(r.usbflag) || str(r.branchid),
     };
   });
 }
