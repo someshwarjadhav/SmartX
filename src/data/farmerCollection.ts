@@ -43,6 +43,8 @@ export interface CollectionEntry {
   /** Station Id as the portal prints it (falls back to stationId) */
   stationCode?: string;
   branchId?: string;
+  /** Centre / station name as the server sends it (original case). Used by the Excel exports. */
+  centreRaw?: string;
 }
 
 export const CENTRE_NAMES: string[] = CENTRES.map((c) => c.name);
