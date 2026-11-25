@@ -142,35 +142,36 @@ const BILL_CSS = `
     .sign { display: flex; justify-content: space-between; gap: 40px; margin-top: 40px; color: var(--mute); font-size: 11px; }
     .sign span { flex: 1; padding-top: 5px; border-top: 1px dashed var(--line); text-align: center; }
     footer { display: flex; justify-content: space-between; margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--mute); font-size: 10px; }
-    @page { size: A4 landscape; margin: 8mm 8mm; }
+    @page { size: A4 portrait; margin: 10mm; }
     @media print {
       body { padding: 0; font-size: 10px; line-height: 1.3; }
+      .bill .scroll { overflow: visible; }
       /* every sheet = one printed page; the farmers on it were chosen in code (see planSheets) */
       .sheet { break-after: page; page-break-after: always; }
       .sheet:last-of-type { break-after: auto; page-break-after: auto; }
-      .bill { zoom: var(--pz, 1); margin: 0; padding: 0 0 6px; border: 0; break-inside: avoid; page-break-inside: avoid; }
+      .bill { zoom: var(--pz, 1); width: 164mm; margin: 0 auto; padding: 0 0 8px; border: 0; break-inside: avoid; page-break-inside: avoid; }
       /* two farmers on one page: the spare space of the page is shared between them (gap in the middle) */
-      .sheet.two { display: flex; flex-direction: column; height: 190mm; }
+      .sheet.two { display: flex; flex-direction: column; height: 272mm; }
       .sheet.two .bill { flex: none; }
-      .cut { display: block; height: 0; margin: auto 0; border-top: 1px dashed #9db4e6; }
+      .cut { display: block; width: 164mm; height: 0; margin: auto; border-top: 1px dashed #9db4e6; }
       /* fixed heights: the code knows exactly how tall a bill is, so it can fit it on the page */
-      .top { height: 64px; margin-bottom: 5px; padding: 2px 14px; border-radius: 8px; border-bottom-width: 3px; overflow: hidden; }
-      .top img.brandlogo { height: 34px !important; max-width: 150px !important; }
+      .top { height: 70px; margin-bottom: 5px; padding: 2px 12px; border-radius: 8px; border-bottom-width: 3px; overflow: hidden; }
+      .top img.brandlogo { height: 40px !important; max-width: 120px !important; }
       .eyebrow { display: none; }
-      h1 { font-size: 15px; line-height: 17px; }
+      h1 { font-size: 16px; line-height: 19px; }
       .top .sub { margin: 1px 0 0; font-size: 10px; line-height: 12px; }
       .top .contact { margin: 0; font-size: 9.5px; line-height: 12px; }
       .stamp { font-size: 8px; }
       .stamp b { font-size: 9px; }
-      .chips { flex-wrap: nowrap; gap: 5px; height: 19px; margin-bottom: 5px; overflow: hidden; }
-      .chip { padding: 1px 8px; font-size: 9.5px; line-height: 15px; white-space: nowrap; }
-      table { font-size: 9.5px; border-radius: 6px; }
-      th, td { height: 13px; padding: 0 5px; line-height: 11px; white-space: nowrap; }
+      .chips { flex-wrap: nowrap; gap: 4px; height: 21px; margin-bottom: 6px; overflow: hidden; }
+      .chip { padding: 1px 6px; font-size: 8.5px; line-height: 17px; white-space: nowrap; }
+      table { font-size: 10px; border-radius: 6px; }
+      th, td { height: 16px; padding: 0 3px; line-height: 14px; white-space: nowrap; }
       table.sum { margin-top: 5px; }
-      table.sum td { height: 17px; padding: 0 8px; line-height: 15px; }
+      table.sum td { height: 20px; padding: 0 6px; line-height: 18px; }
       table.sum td.net b { font-size: 11px; }
       /* more room above the line so the center incharge / producer can really sign */
-      .sign { height: 17px; margin-top: 30px; font-size: 9.5px; line-height: 13px; color: #3b4a6b; }
+      .sign { height: 18px; margin-top: 34px; gap: 28px; font-size: 10px; line-height: 14px; color: #3b4a6b; }
       .sign span { padding-top: 3px; border-top: 1px dashed #5b6b8f; }
       footer { display: none; }
     }
@@ -189,18 +190,18 @@ const PAGE_CSS = `
     @media print { .toolbar { display: none !important; } .scroll { overflow: visible; } .scroll table { min-width: 0; } }
 `;
 
-/* Printed page = A4 landscape, 8 mm margins -> 194 mm tall = about 733 px; a little is kept free. */
-const SHEET_H = 716;
+/* Printed page = A4 portrait, 10 mm margins -> 277 mm tall = about 1047 px; a little is kept free. */
+const SHEET_H = 1010;
 
 /** Height (px) of one bill in the print layout - the sizes are the fixed ones from BILL_CSS. */
 function printHeight(b: FarmerBillData): number {
   return (
-    64 + 5 + // header
-    19 + 5 + // chips
-    (2 + b.lines.length) * 13 + 2 + // main table
-    5 + b.summary.length * 17 + 2 + // summary table
-    30 + 17 + // signature (space to sign + line)
-    6 // space under the bill
+    70 + 5 + // header
+    21 + 6 + // chips
+    (2 + b.lines.length) * 16 + 2 + // main table
+    5 + b.summary.length * 20 + 2 + // summary table
+    34 + 18 + // signature (space to sign + line)
+    8 // space under the bill
   );
 }
 
@@ -307,27 +308,27 @@ export async function downloadFarmerBills(
   ) as typeof autoTableMod.default;
 
   const logo = await loadLogoPixels(getBrandLogo());
-  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
-  const M = 24; // left / right margin
-  const TOP = 20; // top of every page
-  const BOTTOM = H - 18; // nothing is drawn below this line
-  const GAP = 12; // space between two bills on the same page
+  const M = 62; // left / right margin: the bill box is centred and narrower than the page
+  const TOP = 30; // top of every page
+  const BOTTOM = H - 30; // nothing is drawn below this line
+  const GAP = 16; // space between two bills on the same page
   const line = {
     lineColor: [0, 0, 0] as [number, number, number],
     lineWidth: 0.5,
   };
 
-  // sizes are small on purpose: two 7-day farmer bills fit on one A4 landscape page
+  // A4 portrait: two 7-day farmer bills fit on one page with room to spare
   const TABLE_FONT = 8;
-  const TABLE_PAD = 1.3;
+  const TABLE_PAD = 2.3;
   const SUM_FONT = 8.5;
-  const SUM_PAD = 2.4;
+  const SUM_PAD = 3.2;
   const rowH = TABLE_FONT * 1.15 + TABLE_PAD * 2;
   const sumRowH = SUM_FONT * 1.15 + SUM_PAD * 2;
-  const HEADER_H = 44; // dairy name, address / contact, farmer line
-  const SIGN_H = 42;
+  const HEADER_H = 66; // dairy name, address / contact, village + farmer lines
+  const SIGN_H = 50;
 
   /** Part of a bill that can be made smaller (the two tables). */
   const flexOf = (b: FarmerBillData) =>
@@ -368,8 +369,8 @@ export async function downloadFarmerBills(
     doc.setTextColor(0);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text(info.dairy, W / 2, y0 + 12, { align: "center" });
-    let hy = y0 + 12;
+    doc.text(info.dairy, W / 2, y0 + 14, { align: "center" });
+    let hy = y0 + 14;
     doc.setFontSize(8.5);
     doc.setFont("helvetica", "normal");
     const contact = [info.address, contactLine(info)].filter(Boolean).join("   ");
@@ -379,18 +380,20 @@ export async function downloadFarmerBills(
     }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
-    doc.text("Farmer Bill", W - M, y0 + 12, { align: "right" });
+    doc.text("Farmer Bill", W / 2, hy + 12, { align: "center" });
     if (logo) {
       // own logo of the dairy, top left (keeps its shape)
-      const k = Math.min(150 / logo.w, 34 / logo.h);
-      doc.addImage(logo.data, logo.format, M, y0, logo.w * k, logo.h * k);
+      const lk = Math.min(110 / logo.w, 40 / logo.h);
+      doc.addImage(logo.data, logo.format, M, y0, logo.w * lk, logo.h * lk);
     }
 
+    // village / farmer on the left, village name / period on the right (like the old bill format)
     doc.setFontSize(8.5);
-    const iy = y0 + HEADER_H - 8;
-    put("Village:", `${info.villageId} ${info.villageName}`.trim(), M, iy);
-    put("Farmer Name:", farmerLabel(b), W / 2, iy, "center");
-    put("Bill Period:", b.range || period(info), W - M, iy, "right");
+    const iy = y0 + HEADER_H - 14;
+    put("Village Id:", info.villageId, M, iy);
+    put("Farmer Name:", farmerLabel(b), M, iy + 10);
+    put("Village Name:", info.villageName, W - M, iy, "right");
+    put("Bill Period:", b.range || period(info), W - M, iy + 10, "right");
 
     const num = (i: number) => ({
       halign: "center" as const,
