@@ -288,6 +288,8 @@ export function replyKeys(raw: unknown): string[] {
 }
 
 const WINDOW_DAYS = 5;
+const SINGLE_CALL_DAYS = 15;
+const SINGLE_PROBE_MS = 45_000;
 const WINDOW_PARALLEL = 5;
 
 const WINDOW_TIMEOUT_MS = 60_000;
@@ -566,8 +568,24 @@ export async function getPrintTableData(
 ): Promise<unknown> {
   winCache.clear();
 
-  if (dayCount(from, to) > WINDOW_DAYS)
+  const days = dayCount(from, to);
+  if (days > SINGLE_CALL_DAYS)
     return billInWindows(from, to, stationId, onProgress, cancelled);
+
+  if (days > WINDOW_DAYS) {
+    try {
+      const one = await billOnce(from, to, stationId, SINGLE_PROBE_MS);
+      if (hasBillData(one))
+        return await withHeadDeductions(one, from, to, stationId);
+    } catch (e) {
+      if (
+        e instanceof ApiError &&
+        (e.kind === "auth" || e.kind === "cancelled")
+      )
+        throw e;
+    }
+    return billInWindows(from, to, stationId, onProgress, cancelled);
+  }
   try {
     return await withHeadDeductions(
       await billOnce(from, to, stationId),
@@ -576,13 +594,16 @@ export async function getPrintTableData(
       stationId,
     );
   } catch (e) {
-    if (!(e instanceof ApiError) || !TIMEOUT.test(e.message)) throw e;
-    if (from >= to) throw e; // a single day the server cannot answer: an error, not "no record"
+    if (
+      !(e instanceof ApiError) ||
+      !(e.kind === "timeout" || TIMEOUT.test(e.message))
+    )
+      throw e;
+    if (from >= to) throw e; // a single day
     return billInWindows(from, to, stationId, onProgress, cancelled);
   }
 }
 
-/** Freeze the bill. The plain JSON body is sent first; if the server refuses it, the encrypted { Payload } form is tried. */
 export async function postBillFreeze(data: BillFreeze): Promise<string> {
   const attempts: SaveAttempt[] = [
     { label: "json", path: BILL_FREEZE_PATH, body: data },

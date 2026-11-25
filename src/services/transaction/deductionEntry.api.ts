@@ -219,11 +219,15 @@ function parseTypes(reply: unknown): DeductionType[] {
   return out;
 }
 
+let headStationThatWorked = { scope: "", id: "" };
+
 export async function getDeductionTypes(
   vlcid: string,
 ): Promise<DeductionType[]> {
   const s = getSession();
+  const scope = String(s?.scope ?? "");
   const ids = [
+    headStationThatWorked.scope === scope ? headStationThatWorked.id : "",
     vlcid,
     s?.stationId,
     GLOBALS.stationid,
@@ -246,6 +250,7 @@ export async function getDeductionTypes(
       if (bad) throw new ApiError(bad, "server");
       const out = parseTypes(reply);
       if (out.length) {
+        headStationThatWorked = { scope, id };
         return out;
       }
     } catch (e) {
@@ -256,8 +261,6 @@ export async function getDeductionTypes(
   if (!answered && last) throw last; // every try failed: show the real reason
   return [];
 }
-
-/* ------------------------------------------------------------------ farmer list */
 
 export interface ListQuery {
   vlcid: string;
@@ -301,8 +304,6 @@ export async function getDeductions(q: ListQuery): Promise<DeductionRow[]> {
   return shown;
 }
 
-
-
 export interface SaveInput {
   vlcid: string;
   reftype: string;
@@ -311,7 +312,6 @@ export interface SaveInput {
   /** every listed farmer with the deduction typed for him */
   rows: Array<{ row: DeductionRow; deduction: number }>;
 }
-
 
 export function saveLayouts(
   s: SaveInput,
