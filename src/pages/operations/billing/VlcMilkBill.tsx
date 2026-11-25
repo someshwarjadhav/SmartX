@@ -5,7 +5,6 @@ import { Card, CardHeader } from "../../../components/operations/ui/Card";
 import { Button } from "../../../components/operations/ui/Button";
 import { Field, Input, Select } from "../../../components/operations/ui/Fields";
 import { PastDateInput } from "../../../components/operations/ui/PastDateInput";
-import { DataTable, type Column } from "../../../components/operations/ui/DataTable";
 import { MilkLoader } from "../../../components/operations/MilkLoader";
 import {
   CardTitle,
@@ -16,77 +15,28 @@ import {
 } from "../../../components/operations/ReportKit";
 import { ErrorBlock } from "../../../components/operations/Widget";
 import { useCentreOptions } from "../../../hooks/useCentres";
-import { exportExcel, exportPDF, type ExportCol } from "../../../assets/excel/portalExport";
 import { todayISO } from "../../../lib/portal/format";
 import {
-  downloadBillsExcel,
-  printBills,
-  sanitizeBillHtml,
-  splitBills,
-  textOf,
-} from "../../../lib/portal/safeHtml";
-import { getVlcMilkBill } from "../../../services/billing/vlcMilkBill.api";
+  VlcBillCard,
+  vlcBillText,
+} from "../../../components/operations/billing/VlcBillCard";
+import {
+  downloadVlcBills,
+  printVlcBills,
+  type BillPrintInfo,
+} from "../../../lib/portal/vlcBillPrint";
+import { exportVlcBillExcel } from "../../../assets/excel/vlcBillExcel";
+import { getSession } from "../../../services/session";
+import { getProfileFromSession } from "../../../services/profile/profile.api";
+import { getVlcMilkBill, type VlcBill } from "../../../services/billing/vlcMilkBill.api";
 import { ApiError } from "../../../services/http/errors";
-import { norm, type Obj } from "../../../services/utils/loose";
 import { validateDateRange } from "../../../lib/dateRange";
 import { useToast } from "../../../context/ToastContext";
 
 
-interface Row {
-  raw: Obj;
-  key: string;
-}
-interface Col {
-  key: string;
-  header: string;
-  numeric: boolean;
-}
-
 const dmy = (s: string) => s.split("-").reverse().join("-");
-const cell = (v: unknown) =>
-  v === null || v === undefined || typeof v === "object" ? "" : String(v).trim();
-const asNumber = (s: string): number | null => {
-  const clean = s.replace(/,/g, "");
-  return /^-?\d*\.?\d+$/.test(clean) ? parseFloat(clean) : null;
-};
-
-const prettify = (k: string) =>
-  k
-    .replace(/[_\-.]+/g, " ")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b([a-z])([a-z]*)/gi, (_, a: string, b: string) => a.toUpperCase() + b.toLowerCase());
-
-/** Columns are read from the rows, so the page follows whatever fields the API sends. */
-function columnsOf(rows: Row[]): Col[] {
-  const order: string[] = [];
-  const seen = new Set<string>();
-  for (const r of rows.slice(0, 200))
-    for (const k of Object.keys(r.raw)) {
-      const n = norm(k);
-      if (seen.has(n)) continue;
-      seen.add(n);
-      order.push(k);
-    }
-  const cols: Col[] = [];
-  for (const k of order) {
-    const values = rows.map((r) => cell(r.raw[k]));
-    if (values.every((v) => v === "")) continue;
-    const filled = values.filter((v) => v !== "");
-    cols.push({ key: k, header: prettify(k), numeric: filled.every((v) => asNumber(v) !== null) });
-  }
-  return cols;
-}
 
 const PAGE_SIZES = [100, 200, 300];
-
-// The bill is a printed-paper style document, so it stays black on white in light and dark mode.
-const PAPER =
-  "overflow-x-auto rounded-xl border border-line bg-white p-4 text-sm text-slate-900 shadow-sm sm:p-6 " +
-  "[&_table]:w-full [&_table]:border-collapse [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-bold " +
-  "[&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap " +
-  "[&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-bold [&_h3]:font-bold [&_h4]:font-bold [&_p]:my-1 [&_img]:max-w-full";
 
 const VlcMilkBill: React.FC = () => {
   const options = useCentreOptions();
@@ -98,8 +48,7 @@ const VlcMilkBill: React.FC = () => {
     null,
   );
 
-  const [bills, setBills] = useState<string[]>([]);
-  const [rows, setRows] = useState<Row[]>([]);
+  const [bills, setBills] = useState<VlcBill[]>([]);
   const [failed, setFailed] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,12 +77,11 @@ const VlcMilkBill: React.FC = () => {
         todate: f.to,
         stationIds: options.map((o) => o.id),
       });
-      setBills(splitBills(sanitizeBillHtml(res.markup)));
-      setRows(res.rows.map((raw, n) => ({ raw, key: String(n) })));
+      // one bill per centre, built from the cowMilk / buffaloMilk / mixMilk lists of the API
+      setBills(res.bills);
       setFailed(res.failed);
     } catch (e) {
       setBills([]);
-      setRows([]);
       setError(
         e instanceof ApiError ? e.message : "The milk bill could not be loaded.",
       );
@@ -142,65 +90,63 @@ const VlcMilkBill: React.FC = () => {
     }
   };
 
-  const cols = useMemo(() => columnsOf(rows), [rows]);
+  // header of the bill: dairy name + address / phone / GST of the login (same as the Farmer Bill)
+  const dairyInfo = useMemo(() => {
+    const p = getProfileFromSession();
+    return {
+      dairy: getSession()?.mccName || "SmartX Dairy",
+      address: p.Address || undefined,
+      phone: p.mobile || undefined,
+      gst: p.GST || undefined,
+    };
+  }, []);
 
-  const visibleRows = useMemo(() => {
-    const s = needle.trim().toLowerCase();
-    if (!s) return rows;
-    return rows.filter((r) =>
-      cols.map((c) => cell(r.raw[c.key])).join(" ").toLowerCase().includes(s),
-    );
-  }, [rows, needle, cols]);
-
+  // on-screen look = Farmer Bill card (VlcBillCard); Excel and Print have their own formats (vlcBillExcel / vlcBillPrint)
+  const entries = useMemo(
+    () => bills.map((bill) => ({ bill, text: vlcBillText(bill).toLowerCase() })),
+    [bills],
+  );
   const visibleBills = useMemo(() => {
     const s = needle.trim().toLowerCase();
-    return s ? bills.filter((b) => textOf(b).toLowerCase().includes(s)) : bills;
-  }, [bills, needle]);
+    return s ? entries.filter((e) => e.text.includes(s)) : entries;
+  }, [entries, needle]);
 
-  // The API answers with table rows, or (older portal) with a ready-made HTML bill.
-  const tableMode = rows.length > 0;
-  const visible = tableMode ? visibleRows : visibleBills;
-  const total = tableMode ? rows.length : bills.length;
-
-  const columns: Column<Row>[] = useMemo(
-    () =>
-      cols.map((c) => ({
-        key: c.key,
-        header: c.header,
-        align: c.numeric ? ("right" as const) : undefined,
-        sort: (r: Row) => {
-          const t = cell(r.raw[c.key]);
-          const n = c.numeric ? asNumber(t) : null;
-          return n !== null ? n : t;
-        },
-        cell: (r: Row) => cell(r.raw[c.key]) || "—",
-      })),
-    [cols],
-  );
-  const exportCols: ExportCol<Row>[] = useMemo(
-    () => cols.map((c) => ({ header: c.header, value: (r: Row) => cell(r.raw[c.key]) })),
-    [cols],
-  );
+  const visible = visibleBills;
+  const total = bills.length;
 
   const pages = Math.max(1, Math.ceil(visibleBills.length / pageSize));
   useEffect(() => {
     if (page > pages) setPage(pages);
   }, [page, pages]);
   const start = (page - 1) * pageSize;
-  const shown = tableMode ? [] : visibleBills.slice(start, start + pageSize);
+  const shown = visibleBills.slice(start, start + pageSize);
 
   const run = (kind: BarKind) => {
     if (!applied || visible.length === 0) return;
-    const name = `vlc-milk-bill-${applied.from}-${applied.to}`;
-    if (tableMode) {
-      if (kind === "xls") return exportExcel(name, exportCols, visibleRows);
-      return exportPDF("VLC Milk Bill", exportCols, visibleRows, {
-        subtitle: `${dmy(applied.from)} to ${dmy(applied.to)}`,
-        meta: [["From", dmy(applied.from)], ["To", dmy(applied.to)]],
-      });
+    const name = `vlc-milk-bill-${applied.from}-to-${applied.to}`;
+    const list = visibleBills.map((e) => e.bill);
+    if (kind === "xls") {
+      void exportVlcBillExcel(name, list).then(
+        () => toast("XLS file downloaded"),
+        () => toast("The Excel file could not be created", "warn"),
+      );
+      return;
     }
-    if (kind === "xls") return downloadBillsExcel(name, visibleBills);
-    printBills("VLC Milk Bill", visibleBills);
+    const info: BillPrintInfo = {
+      ...dairyInfo,
+      villageId: "",
+      villageName: "",
+      from: dmy(applied.from),
+      to: dmy(applied.to),
+    };
+    if (kind === "download") {
+      downloadVlcBills(list, info, name)
+        .then(() => toast("VLC milk bill PDF downloaded"))
+        .catch(() => toast("The bill PDF could not be created", "warn"));
+      return;
+    }
+    if (printVlcBills(list, info, name)) toast("Print dialog opened");
+    else toast("Allow pop-ups to print the bill", "warn");
   };
 
   const hasData = !!applied && !loading && !error && visible.length > 0;
@@ -261,8 +207,12 @@ const VlcMilkBill: React.FC = () => {
             count={hasData ? visible.length : 0}
             hideCount={loading}
             disabled={!hasData}
-            kinds={["print", "xls"]}
-            labels={{ print: "Print Bill", xls: "Excel Export" }}
+            kinds={["print", "download", "xls"]}
+            labels={{
+              print: "Print Bill",
+              download: "Download PDF",
+              xls: "Excel Export",
+            }}
             onExport={run}
             left={
               <div className="flex flex-wrap items-center gap-3">
@@ -277,7 +227,7 @@ const VlcMilkBill: React.FC = () => {
                     disabled={!applied}
                   />
                 </div>
-                <label className={tableMode ? "hidden" : "flex items-center gap-2 text-sm"}>
+                <label className="flex items-center gap-2 text-sm">
                   <span className="font-bold">Result per page:</span>
                   <div className="w-24">
                     <Select
@@ -313,30 +263,15 @@ const VlcMilkBill: React.FC = () => {
                 ? "No record for these dates."
                 : "Nothing matches your search."}
             </p>
-          ) : tableMode ? (
-            <div>
+          ) : (
+            <div className="space-y-4 p-4 sm:p-5">
               {failed > 0 && (
-                <p className="px-5 pt-4 text-sm text-warn">
+                <p className="text-sm text-warn">
                   {failed} centre(s) could not be loaded, the rest are shown.
                 </p>
               )}
-              <DataTable
-                columns={columns}
-                rows={visibleRows}
-                rowKey={(r) => r.key}
-                pageSize={100}
-                minWidth={Math.max(640, columns.length * 130)}
-              />
-            </div>
-          ) : (
-            <div className="space-y-4 p-4 sm:p-5">
-              {shown.map((html, i) => (
-                <div
-                  key={start + i}
-                  className={PAPER}
-                  // markup was cleaned by sanitizeBillHtml (no scripts, styles, handlers or classes)
-                  dangerouslySetInnerHTML={{ __html: html }}
-                />
+              {shown.map(({ bill }, i) => (
+                <VlcBillCard key={`${bill.stationId}-${start + i}`} bill={bill} />
               ))}
               <div className="flex flex-col items-center justify-between gap-3 border-t border-line pt-4 text-sm text-mute sm:flex-row">
                 <p className="tnum">
