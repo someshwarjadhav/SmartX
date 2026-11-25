@@ -9,7 +9,6 @@ import {
   type BrandLogo,
 } from "../brandLogo";
 
-/** Header block of the printed Farmer Bill (dairy name on top, then village / period). */
 export interface BillPrintInfo {
   dairy: string;
   villageId: string;
