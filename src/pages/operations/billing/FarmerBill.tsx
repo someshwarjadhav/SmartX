@@ -327,7 +327,7 @@ const FarmerBill: React.FC = () => {
   const freeze = async () => {
     if (isMergedBill(rawReply)) {
       toast(
-        "This bill was loaded in shorter parts because the server was slow. Choose a shorter period (about 15 days) to freeze it.",
+        "This bill was loaded in shorter parts because the period is long or the server was slow. Choose a shorter period (up to 15 days) to freeze it.",
         "warn",
       );
       setFreezeOpen(false);
