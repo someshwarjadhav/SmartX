@@ -97,7 +97,7 @@ const BillCard: React.FC<{ bill: FarmerBillData; range: string }> = ({
       </p>
     </div>
 
-    <div className="overflow-x-auto p-3">
+    <div className="mx-auto w-full max-w-[880px] overflow-x-auto p-3">
       <table className="w-full min-w-[680px] border-collapse text-[13px] tnum">
         <thead>
           <tr>
@@ -151,7 +151,7 @@ const BillCard: React.FC<{ bill: FarmerBillData; range: string }> = ({
       </table>
     </div>
 
-    <div className="overflow-x-auto px-3 pb-3">
+    <div className="mx-auto w-full max-w-[880px] overflow-x-auto px-3 pb-3">
       <table className="w-full min-w-[680px] border-collapse text-[13px] tnum">
         <tbody>
           {bill.summary.map((row, i) => (
@@ -188,7 +188,7 @@ const BillCard: React.FC<{ bill: FarmerBillData; range: string }> = ({
       </table>
     </div>
 
-    <div className="grid gap-4 px-4 pb-4 pt-5 text-xs text-mute sm:grid-cols-2">
+    <div className="mx-auto grid w-full max-w-[880px] gap-4 px-4 pb-4 pt-5 text-xs text-mute sm:grid-cols-2">
       <p className="border-t border-dashed border-line pt-1.5 text-center">
         Center Incharge Signature :
       </p>
