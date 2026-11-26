@@ -22,7 +22,11 @@ import {
   restorePlantSettings,
 } from "./settings/plantSettings.api.ts";
 import type { Center } from "./mappers/center.mapper.ts";
-import { getMccRoute, getVillageDetails } from "./master/vlcMaster.api.ts";
+import {
+  getMccRoute,
+  getVillageDetails,
+  type VlcRecord,
+} from "./master/vlcMaster.api.ts";
 
 interface SessionData {
   centers: Center[];
@@ -110,24 +114,44 @@ export const getSavedLoginRecord = (): unknown =>
   vaultLoad<StoredLogin>(LOGIN_KEY)?.record ?? null;
 export const isSessionDataLoaded = () => loaded;
 
-/** VLC id -> custom station id from the VLC master (every route of the MCC). Empty when the API gives nothing. */
-async function loadStationCodes(
-  profile: LoginProfile,
-): Promise<Record<string, string>> {
+/** Every VLC of the MCC (all routes) from the VLC master API. Empty when the API gives nothing. */
+async function loadMasterVillages(profile: LoginProfile): Promise<VlcRecord[]> {
   const mccid = (profile.mccId ?? "").trim();
   const plantid = (profile.plantId ?? "").trim();
-  if (!mccid) return {};
+  if (!mccid) return [];
   const routes = await getMccRoute(mccid, plantid);
   const lists = await Promise.all(
     routes.map((r) => getVillageDetails(mccid, r.routeId).catch(() => [])),
   );
-  const out: Record<string, string> = {};
+  const seen = new Set<string>();
+  const out: VlcRecord[] = [];
   for (const list of lists)
     for (const v of list)
-      if (v.villageId && v.customId && v.customId !== v.villageId)
-        out[v.villageId] = v.customId;
+      if (v.villageId && !seen.has(v.villageId)) {
+        seen.add(v.villageId);
+        out.push(v);
+      }
   return out;
 }
+
+/** VLC id -> custom station id from the VLC master (every route of the MCC). */
+const stationCodesOf = (villages: VlcRecord[]): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const v of villages)
+    if (v.villageId && v.customId && v.customId !== v.villageId)
+      out[v.villageId] = v.customId;
+  return out;
+};
+
+/**
+ * Ids to ask the centre API for: the login SessionID ids PLUS every VLC in the VLC master.
+ * The login ids are fixed at sign-in time, so a VLC created later was never requested
+ * and never reached the centre dropdowns.
+ */
+const idsWithMaster = (profile: LoginProfile, villages: VlcRecord[]): string =>
+  [...new Set([...(profile.vlccIds ?? []), ...villages.map((v) => v.villageId)])]
+    .filter(Boolean)
+    .join(",");
 
 function hydrate(raw: RawData) {
   rawData = raw;
@@ -162,10 +186,15 @@ export function applySession(profile: LoginProfile) {
   });
 }
 
-async function loadCenters(profile: LoginProfile): Promise<unknown> {
+async function loadCenters(
+  profile: LoginProfile,
+  villagesP: Promise<VlcRecord[]>,
+): Promise<unknown> {
+  const villages = await villagesP.catch(() => [] as VlcRecord[]);
   // vlccIds (login SessionID) FIRST: that is what the old SmartX sends, and it returns every VLC.
   // centerStationId is the login CustomStationId text ("7090500,JNS0100,..."): it matches only one VLC, so it must not win.
   const candidates = [
+    idsWithMaster(profile, villages),
     profile.vlccIds?.join(","),
     profile.centerStationId,
     profile.mccId,
@@ -196,13 +225,14 @@ export async function loadSessionData(profile: LoginProfile): Promise<void> {
   errors = {};
   const missing = (what: string) =>
     Promise.reject(new Error(`no ${what} in the login record`));
+  const villagesP = loadMasterVillages(profile);
   const [c, m, r, st] = await Promise.allSettled([
     centerStationId || profile.vlccIds?.length
-      ? loadCenters(profile)
+      ? loadCenters(profile, villagesP)
       : missing("station id"),
     userId ? getMenu(userId) : missing("user id"),
     userId ? getReportAccess(userId) : missing("user id"),
-    loadStationCodes(profile),
+    villagesP.then(stationCodesOf),
   ]);
   const value = (res: PromiseSettledResult<unknown>, name: string) => {
     if (res.status === "fulfilled") return res.value;
@@ -281,7 +311,11 @@ export async function refreshSessionCenters(): Promise<void> {
   } catch {
     return;
   }
+  const villages = await loadMasterVillages(profile).catch(
+    () => [] as VlcRecord[],
+  );
   const ids = [
+    idsWithMaster(profile, villages),
     profile.vlccIds?.join(","),
     profile.centerStationId,
     profile.mccId,
@@ -294,7 +328,7 @@ export async function refreshSessionCenters(): Promise<void> {
       const centers = await getDpuCenter(id);
       const parsed = parseCenters(centers);
       if (!parsed.length) continue;
-      const fresh = await loadStationCodes(profile).catch(() => ({}));
+      const fresh = stationCodesOf(villages);
       if (Object.keys(fresh).length) masterStations = fresh;
       data = { ...data, centers: parsed };
       rawData = {

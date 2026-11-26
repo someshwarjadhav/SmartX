@@ -46,10 +46,13 @@ export interface VlcRecord {
   routeId: string;
   rateId: string;
   dpuId: string;
+  beneficiary: string;
 }
 
 export interface VlcInput {
   villageId: string;
+
+  beneficiary: string;
   customerId: string;
   villageName: string;
   type: string;
@@ -64,6 +67,7 @@ export interface VlcInput {
 
 export const emptyVlc = (nextId = ""): VlcInput => ({
   villageId: nextId,
+  beneficiary: "",
   customerId: "",
   villageName: "",
   type: "Cooperative Society",
@@ -165,7 +169,12 @@ export async function getMaxVlcc(
     (j) => j,
     null,
   );
-  const o = asObj(json);
+  const un = unwrapReply(json);
+  let o = asObj(json);
+  let scalarNext = "";
+  if (typeof un === "number" && Number.isFinite(un)) scalarNext = String(un);
+  else if (typeof un === "string" && /^\d{3,}$/.test(un.trim())) scalarNext = un.trim();
+  if (scalarNext) o = { nextvillageid: scalarNext };
   const out: VlcSlots = {
     startId: slotValue(o, ["startid", "startstationid", "fromid"], ["start"]),
     endId: slotValue(o, ["endid", "endstationid", "toid"], ["end"]),
@@ -208,8 +217,16 @@ export async function getMaxVlcc(
   return Object.values(out).some(Boolean) ? out : null;
 }
 
-const flag = (v: string) =>
-  !["0", "false", "inactive", "n", "no", "closed"].includes(v.toLowerCase());
+export function nextIdFromRows(rows: Array<{ villageId: string }>): string {
+  const ids = rows
+    .map((r) => r.villageId.trim())
+    .filter((v) => /^\d{5,}$/.test(v))
+    .map(Number);
+  return ids.length ? String(Math.max(...ids) + 1) : "";
+}
+
+const INACTIVE = /^(0|false|n|no|closed|(in|de)[\s_-]?active(d)?)$/i;
+const flag = (v: string) => !INACTIVE.test(v.trim());
 
 function mapVillage(r: Obj, i: number, routeId: string): VlcRecord {
   const villageId = pick(r, ["villageid", "vlccid", "vlcid"]);
@@ -225,13 +242,16 @@ function mapVillage(r: Obj, i: number, routeId: string): VlcRecord {
     pick(r, ["villageagentaddress"]) ||
     ses?.vlccNames?.[villageId] ||
     pick(r, ["villagename", "vlcname", "name"]);
+  const rawAgent = pick(r, ["villageagentname", "agentname"]);
+  const agentName = rawAgent && rawAgent !== villageId ? rawAgent : "";
+
   return {
     key: `${villageId || "x"}:${i}`,
     villageId,
     displayId,
     customId: customId && customId !== villageId ? customId : "",
     villageName,
-    agentName: pick(r, ["villageagentname", "agentname", "beneficiaryname"]),
+    agentName,
     contact: pick(r, ["villageagentcontact", "contact", "mobile"]),
     address: pick(r, ["villageagentaddress", "address"]),
     active: status === "" ? true : flag(status),
@@ -241,6 +261,7 @@ function mapVillage(r: Obj, i: number, routeId: string): VlcRecord {
     routeId: pick(r, ["routeid"]) || routeId,
     rateId: pick(r, ["villagerateid", "rateid"]),
     dpuId: pick(r, ["dpuid"]),
+    beneficiary: pick(r, ["beneficiaryname"]),
   };
 }
 
@@ -249,16 +270,26 @@ export async function getVillageDetails(
   routeid: string,
 ): Promise<VlcRecord[]> {
   const forms = [routeid, ` ${routeid}`, "0", ""];
+  let firstError: unknown = null;
   for (const r of forms) {
-    const rows = await orNone<VlcRecord[]>(
-      () => dpuGet(`${P.list}?mccid=${q(mccid)}&routeid=${q(r)}`, 0),
-      (json) => rowsOf(json).map((x, i) => mapVillage(x, i, routeid)),
-      [],
-    ).catch(() => {
-      return [] as VlcRecord[];
-    });
-    if (rows.length) return rows;
+    try {
+      const rows = await orNone<VlcRecord[]>(
+        () => dpuGet(`${P.list}?mccid=${q(mccid)}&routeid=${q(r)}`, 0),
+        (json) => {
+          const un = unwrapReply(json);
+
+          if (typeof un === "string" && un.trim() && !/no\s*record/i.test(un))
+            throw new ApiError(un.trim(), "server");
+          return rowsOf(json).map((x, i) => mapVillage(x, i, routeid));
+        },
+        [],
+      );
+      if (rows.length) return rows;
+    } catch (e) {
+      if (r === routeid && firstError === null) firstError = e;
+    }
   }
+  if (firstError) throw firstError;
   return [];
 }
 
@@ -274,6 +305,20 @@ export async function getVillageById(
   return Object.keys(o).length ? mapVillage(o, 0, "") : null;
 }
 
+export async function findFreeVillageId(
+  start: string,
+  end: string,
+): Promise<string> {
+  const first = Number(start);
+  if (!Number.isFinite(first) || first <= 0) return start;
+  const last = Number(end) > first ? Number(end) : first + 40;
+  for (let id = first, tries = 0; id <= last && tries < 40; id++, tries++) {
+    const found = await getVillageById(String(id)).catch(() => null);
+    if (!found || found.villageId !== String(id)) return String(id);
+  }
+  return "";
+}
+
 const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -287,7 +332,9 @@ export function toPayload(
   const name = f.villageName.trim();
   return {
     villageid: f.villageId.trim(),
-    beneficiaryname: "",
+
+    beneficiaryname:
+      f.beneficiary.trim() || f.customerId.trim() || f.villageId.trim(),
     villagename: name,
     villageagentname: f.agentName.trim(),
     villageagentaddress: name,
@@ -304,7 +351,7 @@ export function toPayload(
     dpuId: "0",
     ekopcbno: f.pcbNo.trim(),
     ekopass: f.currentPass,
-    ekonewpass: f.newPass,
+    ekonewpass: f.newPass || (f.passApply ? "" : "000000"),
     ekopassflag: f.passApply ? "1" : "0",
   };
 }
