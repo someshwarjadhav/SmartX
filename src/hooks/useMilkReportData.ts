@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CollectionEntry, Shift } from "../data/farmerCollection";
 import type { MilkKind } from "../types";
 import { getSession } from "../services/session";
@@ -13,6 +13,12 @@ import {
   fetchDpuFarmerMaster,
   type MasterFarmerOption,
 } from "../services/farmer/farmer.api.ts";
+import {
+  ensureMasterNames,
+  farmerNamesVersion,
+  masterNameOf,
+  subscribeFarmerNames,
+} from "../services/farmer/farmerNames.ts";
 import { getDpuCenter, parseCenters } from "../services/center/center.api.ts";
 import type { Center } from "../services/mappers/center.mapper.ts";
 import { isoFromTrdate } from "../services/utils/date";
@@ -235,6 +241,8 @@ const rowOrder = (r: CollectionEntry): string => {
   return `${r.date}|${r.shift === "Morning" ? 0 : 1}|${KIND_RANK[r.kind] ?? 3}|${id}|${time24(r.time)}`;
 };
 
+/* ---- farmer names: the Farmer Master is the source of truth (see services/farmer/farmerNames.ts) ---- */
+
 function useRawFarmerRows(
   filter: LiveFilter,
   keyPrefix: string,
@@ -281,7 +289,22 @@ function useRawFarmerRows(
     () => new Map(centers.map((c) => [c.id, plantKeyOf(c)])),
     [centers],
   );
+  // Farmer Master names of every centre in the report; a rename in Farmer Master re-renders this hook
+  const namesTick = useSyncExternalStore(
+    subscribeFarmerNames,
+    farmerNamesVersion,
+    farmerNamesVersion,
+  );
+  useEffect(() => {
+    const vlccs = new Set<string>();
+    for (const r of q.rows as RawFarmerRow[]) {
+      const vlcc = String(r.vlccid ?? "").trim();
+      if (vlcc) vlccs.add(vlcc);
+    }
+    if (vlccs.size) void ensureMasterNames([...vlccs]);
+  }, [q.rows]);
   const rows = useMemo(() => {
+    void namesTick;
     const used = new Map<string, number>();
     // the same farmer / centre names repeat on every day and shift: format each distinct name only once
     const titled = new Map<string, string>();
@@ -294,6 +317,10 @@ function useRawFarmerRows(
       return t;
     };
     const list = mapFarmers(q.rows).map((r): CollectionEntry => {
+      // the name in Farmer Master wins over the name stored in the collection row (it is the latest one)
+      const real = masterNameOf(r.vlccid, r.farmerId);
+      if (real && real !== r.rawName)
+        r = { ...r, farmerName: real, rawName: real };
       const date = toISO(r.date);
       const shift = smartShift(r.shift);
       const kind = smartKind(r.milk);
@@ -332,7 +359,7 @@ function useRawFarmerRows(
     const keyed = list.map((r) => [rowOrder(r), r] as const);
     keyed.sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
     return keyed.map((x) => x[1]);
-  }, [q.rows, names, plantOf, session?.mccId]);
+  }, [q.rows, names, plantOf, session?.mccId, namesTick]);
   return { q, rows };
 }
 
@@ -624,7 +651,13 @@ export function centreIdsFor(
 }
 
 const farmerCache = new Map<string, Promise<MasterFarmerOption[]>>();
+// the list is read again after every change in Farmer Master (save / import / delete)
+let farmerCacheVersion = -1;
 const loadFarmers = (id: string): Promise<MasterFarmerOption[]> => {
+  if (farmerCacheVersion !== farmerNamesVersion()) {
+    farmerCache.clear();
+    farmerCacheVersion = farmerNamesVersion();
+  }
   const hit = farmerCache.get(id);
   if (hit) return hit;
   const p = fetchDpuFarmerMaster(id).catch(() => [] as MasterFarmerOption[]);
@@ -647,6 +680,11 @@ export function useFarmerMasterOptions(
   const [list, setList] = useState<MasterFarmerOption[]>([]);
   const [loading, setLoading] = useState(false);
   const key = vlccIds.join(",");
+  const namesTick = useSyncExternalStore(
+    subscribeFarmerNames,
+    farmerNamesVersion,
+    farmerNamesVersion,
+  );
   useEffect(() => {
     let alive = true;
     setList([]);
@@ -664,7 +702,7 @@ export function useFarmerMasterOptions(
     return () => {
       alive = false;
     };
-  }, [key]);
+  }, [key, namesTick]);
   const options = useMemo(() => {
     const multi = vlccIds.length > 1;
     const seen = new Set<string>();

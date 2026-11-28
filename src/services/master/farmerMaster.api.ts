@@ -18,6 +18,10 @@ import { pickLoose } from "../farmer/farmerBook";
 import type { RawLoose } from "../types/raw";
 import type { FarmerInput } from "./farmerMaster.rules.ts";
 import { DPU } from "../http/dpuEndpoints";
+import {
+  invalidateFarmerNames,
+  setMasterName,
+} from "../farmer/farmerNames.ts";
 
 export const FARMER_LIST_PATH = "/Login/FarmerMaster";
 export const FARMER_MAXID_PATH = "/Login/FarmerCollectionDpu";
@@ -394,6 +398,8 @@ export async function postData(
     { label: "xor-array-farmer-int", path: FARMER_SAVE_PATH, body: xor([row]) },
   ]);
   clearRequestMemo();
+  // Farmer Master is the source of truth: collection reports must show the new name
+  setMasterName(f.vlccid, f.farmerId, f.name);
   return message;
 }
 
@@ -419,6 +425,7 @@ export async function postExcel(list: FarmerInput[]): Promise<string> {
     { label: "xor-array-all-text", path, body: xor(allText) },
   ]);
   clearRequestMemo();
+  invalidateFarmerNames();
   return message;
 }
 
@@ -546,5 +553,6 @@ export async function deleteFarmer(
     "DELETE",
   );
   clearRequestMemo();
+  invalidateFarmerNames(vlccid);
   return message;
 }

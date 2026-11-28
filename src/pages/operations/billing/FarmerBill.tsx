@@ -25,6 +25,7 @@ import { todayISO } from "../../../lib/portal/format";
 import { cn } from "../../../lib/portal/cn";
 import {
   billExportRows,
+  completeBills,
   farmerLabel,
   getPrintTableData,
   hasBillData,
@@ -305,7 +306,14 @@ const FarmerBill: React.FC = () => {
       await namesReady;
       await holdLoader(startedAt);
       if (mine !== ticket.current) return;
-      const list = named(parseFarmerBills(raw, extended));
+      // Incentive / Transport / Milk Deposit / Cattle Feed the bill reply did not carry (payment summary, then Standard Deduction rates)
+      const list = await completeBills(
+        named(parseFarmerBills(raw, extended)),
+        from,
+        to,
+        vlc,
+      );
+      if (mine !== ticket.current) return;
       setBills(list);
       setRawReply(raw);
       setApplied({ vlc, from, to });
