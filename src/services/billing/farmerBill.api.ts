@@ -11,6 +11,7 @@ import { apiDate } from "../utils/date";
 import { isObj, pickValue, type Obj } from "../utils/loose";
 import { num } from "../utils/parse";
 import { getCashSummary } from "./cashPaymentSummary.api";
+import { getFarmers as getStandardRates } from "./standardDeduction.api";
 import {
   getDeductionTypes,
   getDeductions,
@@ -939,7 +940,8 @@ function withSummary(bill: FarmerBillData): FarmerBillData {
       p("Total Amount", totalAmount),
     ],
   ];
-  if (bill.extended) {
+
+  if (bill.extended || e.cattleFeed > 0 || e.advance > 0) {
     summary.push(
       [
         p("Current Advance", e.advance),
@@ -978,6 +980,119 @@ export function applyExtras(
     ...bill,
     extras: { ...bill.extras, ...patch },
     extrasFound: true,
+  });
+}
+
+const r2n = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Fills only the figures the bill reply did not carry (still 0) from `patch` and keeps Total Deduction / Net Payment
+ * in step: a server Net Payment that was sent without them is moved by the same amount.
+ */
+export function fillMissingExtras(
+  bill: FarmerBillData,
+  patch: Partial<BillExtras> | undefined,
+): FarmerBillData {
+  if (!patch) return bill;
+  const e = bill.extras;
+  const next: BillExtras = { ...e };
+  let dNet = 0;
+  let dDed = 0;
+  const take = (k: "incentive" | "transport") => {
+    const v = patch[k];
+    if (!(e[k] > 0) && v !== undefined && v > 0) {
+      next[k] = r2n(v);
+      dNet += next[k];
+    }
+  };
+  const takeDed = (k: "deposit" | "advance" | "cattleFeed") => {
+    const v = patch[k];
+    if (!(e[k] > 0) && v !== undefined && v > 0) {
+      next[k] = r2n(v);
+      dDed += next[k];
+      dNet -= next[k];
+    }
+  };
+  take("incentive");
+  take("transport");
+  takeDed("deposit");
+  takeDed("advance");
+  takeDed("cattleFeed");
+  if (!dNet && !dDed) return bill;
+  if (next.totalDeduction !== undefined)
+    next.totalDeduction = r2n(next.totalDeduction + dDed);
+  if (next.net !== undefined) next.net = r2n(next.net + dNet);
+  return withSummary({ ...bill, extras: next, extrasFound: true });
+}
+
+export async function getExtrasFromRates(
+  bills: FarmerBillData[],
+  from: string,
+  to: string,
+  stationId: string,
+): Promise<Map<string, Partial<BillExtras>>> {
+  const out = new Map<string, Partial<BillExtras>>();
+  if (!bills.length) return out;
+  const CATS: Array<[string, "incentive" | "transport" | "deposit"]> = [
+    ["CM", "incentive"],
+    ["TN", "transport"],
+    ["MD", "deposit"],
+  ];
+  const rateRows = await Promise.all(
+    CATS.map(async ([flag]) => {
+      for (const date of [to, from]) {
+        try {
+          const d = await getStandardRates(stationId, flag, date);
+          if (d.saved.length) return d.saved;
+        } catch {
+          /* no rates for this head / date */
+        }
+      }
+      return [];
+    }),
+  );
+  const rate = (v: string) => {
+    const n = Number(String(v).replace(/,/g, "").trim());
+    return Number.isFinite(n) ? n : 0;
+  };
+  CATS.forEach(([, field], i) => {
+    for (const r of rateRows[i]) {
+      const key = idKey(r.farmerId);
+      const bill = bills.find((b) => idKey(b.id) === key);
+      if (!bill) continue;
+      const L = bill.totals.liters;
+      const v =
+        rate(r.cow) * (L.Cow ?? 0) +
+        rate(r.buff) * (L.Buff ?? 0) +
+        rate(r.mix) * (L.Mix ?? 0);
+      if (!(v > 0)) continue;
+      out.set(key, { ...(out.get(key) ?? {}), [field]: r2n(v) });
+    }
+  });
+  return out;
+}
+
+export async function completeBills(
+  bills: FarmerBillData[],
+  from: string,
+  to: string,
+  stationId: string,
+): Promise<FarmerBillData[]> {
+  if (!bills.length) return bills;
+  const [summary, rates] = await Promise.all([
+    getExtrasFromSummary(from, to, stationId).catch(
+      () => new Map<string, Partial<BillExtras>>(),
+    ),
+    getExtrasFromRates(bills, from, to, stationId).catch(
+      () => new Map<string, Partial<BillExtras>>(),
+    ),
+  ]);
+  return bills.map((b) => {
+    const k = idKey(b.id);
+    return fillMissingExtras(
+      fillMissingExtras(b, summary.get(k)),
+      rates.get(k),
+    );
   });
 }
 

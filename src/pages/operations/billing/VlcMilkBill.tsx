@@ -28,11 +28,13 @@ import {
 import { exportVlcBillExcel } from "../../../assets/excel/vlcBillExcel";
 import { getSession } from "../../../services/session";
 import { getProfileFromSession } from "../../../services/profile/profile.api";
-import { getVlcMilkBill, type VlcBill } from "../../../services/billing/vlcMilkBill.api";
+import {
+  getVlcMilkBill,
+  type VlcBill,
+} from "../../../services/billing/vlcMilkBill.api";
 import { ApiError } from "../../../services/http/errors";
 import { validateDateRange } from "../../../lib/dateRange";
 import { useToast } from "../../../context/ToastContext";
-
 
 const dmy = (s: string) => s.split("-").reverse().join("-");
 
@@ -83,7 +85,9 @@ const VlcMilkBill: React.FC = () => {
     } catch (e) {
       setBills([]);
       setError(
-        e instanceof ApiError ? e.message : "The milk bill could not be loaded.",
+        e instanceof ApiError
+          ? e.message
+          : "The milk bill could not be loaded.",
       );
     } finally {
       setLoading(false);
@@ -103,7 +107,8 @@ const VlcMilkBill: React.FC = () => {
 
   // on-screen look = Farmer Bill card (VlcBillCard); Excel and Print have their own formats (vlcBillExcel / vlcBillPrint)
   const entries = useMemo(
-    () => bills.map((bill) => ({ bill, text: vlcBillText(bill).toLowerCase() })),
+    () =>
+      bills.map((bill) => ({ bill, text: vlcBillText(bill).toLowerCase() })),
     [bills],
   );
   const visibleBills = useMemo(() => {
@@ -161,7 +166,7 @@ const VlcMilkBill: React.FC = () => {
           <CardHeader
             title={<CardTitle icon={ReceiptText}>Milk Bill</CardTitle>}
           />
-          <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-4">
+          <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-6 xl:grid-cols-4 ">
             <Field label="From Date">
               <PastDateInput
                 type="date"
@@ -271,13 +276,17 @@ const VlcMilkBill: React.FC = () => {
                 </p>
               )}
               {shown.map(({ bill }, i) => (
-                <VlcBillCard key={`${bill.stationId}-${start + i}`} bill={bill} />
+                <VlcBillCard
+                  key={`${bill.stationId}-${start + i}`}
+                  bill={bill}
+                />
               ))}
               <div className="flex flex-col items-center justify-between gap-3 border-t border-line pt-4 text-sm text-mute sm:flex-row">
                 <p className="tnum">
                   Showing{" "}
                   <b className="text-ink">
-                    {start + 1}–{Math.min(start + pageSize, visibleBills.length)}
+                    {start + 1}–
+                    {Math.min(start + pageSize, visibleBills.length)}
                   </b>{" "}
                   of {visibleBills.length}
                 </p>

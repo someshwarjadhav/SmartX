@@ -15,7 +15,11 @@ import type {
  */
 const KEYS: Array<keyof ShiftData> = ["wt", "fat", "snf", "clr", "rate", "amt"];
 const HEADS = ["Wt", "Fat", "SNF", "CLR", "Rate", "Amt"];
-const SHORT: Record<MilkKind, string> = { cow: "Cow", buffalo: "Buff", mix: "Mix" };
+const SHORT: Record<MilkKind, string> = {
+  cow: "Cow",
+  buffalo: "Buff",
+  mix: "Mix",
+};
 
 const f2 = (x: number) => x.toFixed(2);
 const ZERO: ShiftData = { wt: 0, fat: 0, snf: 0, clr: 0, rate: 0, amt: 0 };
@@ -38,7 +42,13 @@ function linesOf(b: VlcBill): Line[] {
     const name = SHORT[s.kind] ?? s.label;
     for (const d of s.days)
       out.push({ date: d.date, milk: name, m: d.m, e: d.e, total: false });
-    out.push({ date: name, milk: "Total", m: s.mTotal, e: s.eTotal, total: true });
+    out.push({
+      date: name,
+      milk: "Total",
+      m: s.mTotal,
+      e: s.eTotal,
+      total: true,
+    });
   }
   return out;
 }
@@ -58,7 +68,10 @@ function summaryOf(b: VlcBill): Array<Array<{ label: string; value: string }>> {
       { label: "Cow Liter", value: f2(literOf(cow)) },
       { label: "Buff Liter", value: f2(literOf(buf)) },
       { label: "Mix Liter", value: f2(literOf(mix)) },
-      { label: "Total Liter", value: f2(literOf(cow) + literOf(buf) + literOf(mix)) },
+      {
+        label: "Total Liter",
+        value: f2(literOf(cow) + literOf(buf) + literOf(mix)),
+      },
     ],
     [
       { label: "Cow Amt", value: f2(amountOf(cow)) },
@@ -80,14 +93,16 @@ export function vlcBillText(b: VlcBill): string {
     b.from,
     b.to,
     ...linesOf(b).flatMap((l) => [l.date, l.milk]),
-    ...summaryOf(b).flat().flatMap((p) => [p.label, p.value]),
+    ...summaryOf(b)
+      .flat()
+      .flatMap((p) => [p.label, p.value]),
   ].join(" ");
 }
 
 export const VlcBillCard: React.FC<{ bill: VlcBill }> = ({ bill }) => {
   const label = `${bill.stationId} ${bill.stationName || ""}`.trim();
   return (
-    <article className="overflow-hidden rounded-2xl border border-line bg-panel">
+    <article className="overflow-hidden rounded-2xl border border-line bg-panel mx-auto w-full max-w-[920px] overflow-x-auto">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-line px-4 py-3 text-sm">
         <p>
           <span className="font-bold">VLC Name:</span>{" "}
@@ -120,12 +135,18 @@ export const VlcBillCard: React.FC<{ bill: VlcBill }> = ({ bill }) => {
             </tr>
             <tr>
               {HEADS.map((h) => (
-                <th key={`m${h}`} className={cn(HEAD, "font-semibold text-mute")}>
+                <th
+                  key={`m${h}`}
+                  className={cn(HEAD, "font-semibold text-mute")}
+                >
                   {h}
                 </th>
               ))}
               {HEADS.map((h) => (
-                <th key={`e${h}`} className={cn(HEAD, "font-semibold text-mute")}>
+                <th
+                  key={`e${h}`}
+                  className={cn(HEAD, "font-semibold text-mute")}
+                >
                   {h}
                 </th>
               ))}
@@ -171,7 +192,12 @@ export const VlcBillCard: React.FC<{ bill: VlcBill }> = ({ bill }) => {
                       )}
                     >
                       <span className="flex justify-between gap-3">
-                        <span className={cn("text-mute", net && "font-bold text-ink")}>
+                        <span
+                          className={cn(
+                            "text-mute",
+                            net && "font-bold text-ink",
+                          )}
+                        >
                           {p.label}:
                         </span>
                         <b>{p.value}</b>
